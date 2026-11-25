@@ -246,8 +246,9 @@ class ImageGenRepositoryTest {
         assertEquals(12, h.repo.estimateSeconds(SDXS.id, ImageSizePreset.S512))
         // 384 px scales by pixel count (0.5625): 4 x 7.6 + 2.1 + 5.2 = 37.7 -> 38.
         assertEquals(38, h.repo.estimateSeconds(DS.id, ImageSizePreset.S384))
-        // Steps are clamped to the catalog range.
-        assertEquals(h.repo.estimateSeconds(DS.id, ImageSizePreset.S512, 8), h.repo.estimateSeconds(DS.id, ImageSizePreset.S512, 20))
+        // DreamShaper now allows 50 steps; requests above the limit clamp to 50.
+        assertTrue(h.repo.estimateSeconds(DS.id, ImageSizePreset.S512, 20) > h.repo.estimateSeconds(DS.id, ImageSizePreset.S512, 8))
+        assertEquals(h.repo.estimateSeconds(DS.id, ImageSizePreset.S512, 50), h.repo.estimateSeconds(DS.id, ImageSizePreset.S512, 80))
 
         h.repo.generate(ImageGenParams(DS.id, "x", steps = 4))
         advanceUntilIdle()
