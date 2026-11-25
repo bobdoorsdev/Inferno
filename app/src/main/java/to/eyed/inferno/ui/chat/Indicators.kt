@@ -95,7 +95,7 @@ fun AssistantActivityPanel(
     val parsed = remember(reasoning) { AssistantToolRouter.splitNotes(reasoning) }
     val search = searchNotes?.takeIf { it.isNotBlank() } ?: parsed.search
     val think = listOf(parsed.reasoning, parsed.local).filter { it.isNotBlank() }.joinToString("\n\n")
-    val hasThink = think.isNotBlank() || (live && status == null)
+    val hasThink = think.isNotBlank()
     val hasSearch = !search.isNullOrBlank() || status != null
     var expanded by rememberSaveable { mutableStateOf(live) }
     var selected by rememberSaveable { mutableStateOf(if (hasSearch && !hasThink) "search" else "think") }
