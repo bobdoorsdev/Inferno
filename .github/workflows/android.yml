@@ -1,4 +1,4 @@
-name: Android build (tool-aware custom APK)
+name: Android build (context-aware tools)
 
 on:
   push:
