@@ -329,7 +329,6 @@ private fun highlightCode(code: String, language: String?): AnnotatedString {
 }
 
 /**
- * Splits markdown into independently renderable chunks on blank lines, keeping fenced code blocks/**
  * Splits markdown into independently renderable chunks on blank lines, keeping fenced code blocks
  * (even unterminated, mid-stream) and list runs intact so numbering and fences never break across
  * chunks. Pure Kotlin: covered by MarkdownChunkerTest.
