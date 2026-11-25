@@ -75,7 +75,7 @@ private fun MainPage(appVm: AppViewModel, onDismiss: () -> Unit, onOpenManager: 
     val loadInProgress by appVm.loadInProgress.collectAsStateWithLifecycle()
     val downloaded = models.filter { it.isDownloaded }
     val loadedId = engine.modelOrNull?.id
-    val loadingId = (engine as? EngineState.Loading)?.model?.id ?: settings.selectedModelId.takeIf { loadInProgress && engine is EngineState.Idle }
+    val loadingId = (engine as? EngineState.Loading)?.model?.id ?: settings.selectedModelId.takeIf { loadInProgress }
 
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 28.dp)) {
         SheetHeader(S.model, Lucide.X, onLeading = onDismiss)
@@ -99,8 +99,9 @@ private fun MainPage(appVm: AppViewModel, onDismiss: () -> Unit, onOpenManager: 
                     if (i > 0) CardDivider()
                     ModelCard(
                         entry = e,
-                        selected = e.id == loadedId && engine !is EngineState.Loading,
+                        selected = e.id == loadedId && e.id != loadingId,
                         loading = e.id == loadingId,
+                        calibrating = e.id == loadingId && e.id == loadedId,
                         calibration = settings.calibration[e.id],
                         showMenu = false,
                         techSpecs = settings.devModelTechSpecs,
