@@ -240,9 +240,12 @@ class ContextManager(private val engine: PlannerEngine) {
         return (nCtx.toLong() * nLayer * (nEmbdKGqa + nEmbdVGqa) * bytesPerElement).toLong()
     }
 
-    /** reserve = clamp(maxTokens or nCtx/8, 1024, 4096) when thinking is on, else 512. */
-    fun reserveFor(params: GenerationParams, nCtx: Int, thinkingOn: Boolean): Int =
-        if (thinkingOn) (if (params.maxTokens > 0) params.maxTokens else nCtx / 8).coerceIn(1024, 4096) else 512
+    /** Keeps output headroom proportional to small contexts; the reserve must never exceed half the window. */
+    fun reserveFor(params: GenerationParams, nCtx: Int, thinkingOn: Boolean): Int {
+        val limit = minOf(4096, (nCtx / 2).coerceAtLeast(64))
+        return if (thinkingOn) (if (params.maxTokens > 0) params.maxTokens else maxOf(128, nCtx / 8)).coerceIn(64, limit)
+        else minOf(512, (nCtx / 4).coerceAtLeast(64))
+    }
 
     private suspend fun count(messages: List<PromptMessage>, byId: Map<String, PromptImage>): Int =
         engine.countPromptTokens(messages, placeholders(messages, byId, full = false))
@@ -261,7 +264,7 @@ class ContextManager(private val engine: PlannerEngine) {
 
     companion object {
         private const val TAG = "ContextManager"
-        const val MIN_CTX = 2048; const val CTX_STEP = 1024; const val MAX_CTX = 131072
+        const val MIN_CTX = 512; const val CTX_STEP = 512; const val MAX_CTX = 131072
         const val TRIM_TARGET = 0.75f
         // ---- Context policy (COMPACT / STOP) ----
         /** After a compaction the kept turns + a full-size summary + the reserve stay under this share of the window. */
@@ -280,7 +283,7 @@ class ContextManager(private val engine: PlannerEngine) {
             return parts.takeIf { it.isNotEmpty() }?.joinToString("\n\n")
         }
         /** Planner gate: a plan is accepted when its estimate stays below this fraction of the budget. */
-        const val BUDGET_GATE = 0.85
+        const val BUDGET_GATE = 0.92
         /** Share of the budget Auto leaves free above the floor, so the load-time gate check has slack. */
         const val GROW_HEADROOM = 0.025
         const val MAX_PROBES = 6
