@@ -115,6 +115,7 @@ fun ChatRoot(appVm: AppViewModel, chatVm: ChatViewModel, onBeforeSend: () -> Uni
     val usage by chatVm.contextUsage.collectAsStateWithLifecycle()
     val imageBusy by chatVm.imageBusy.collectAsStateWithLifecycle()
     val toolStatus by chatVm.toolStatus.collectAsStateWithLifecycle()
+    val toolSearchNotes by chatVm.toolSearchNotes.collectAsStateWithLifecycle()
     val conversations by chatVm.conversations.collectAsStateWithLifecycle()
     val activeId by chatVm.activeId.collectAsStateWithLifecycle()
     val busyIds by chatVm.busyIds.collectAsStateWithLifecycle()
@@ -307,7 +308,7 @@ fun ChatRoot(appVm: AppViewModel, chatVm: ChatViewModel, onBeforeSend: () -> Uni
                                 // The composer starts with a 32 dp gradient; the last turn rests 8 dp into it, so it never fades yet still scrolls under.
                                 bottomInset = if (composerHeight == 0) 132.dp else with(LocalDensity.current) { composerHeight.toDp() } - 8.dp,
                                 dev = ChatDevFlags(generationStats = settings.devGenerationStats, turnDetails = settings.devTurnDetails, tokenCounter = settings.devTokenCounter, tokenWords = settings.powerUser),
-                                toolStatus = toolStatus,
+                                toolStatus = toolStatus, toolSearchNotes = toolSearchNotes,
                             )
                         }
                         Column(Modifier.align(Alignment.BottomCenter).widthIn(max = ChatContentMaxWidth), horizontalAlignment = Alignment.CenterHorizontally) {
