@@ -87,7 +87,7 @@ fun ModelManagerScreen(appVm: AppViewModel, onBeforeDownload: () -> Unit, onBack
     val (confirm, requestConfirm) = rememberDownloadConfirm(models)
 
     val loadedId = engine.modelOrNull?.id
-    val loadingId = (engine as? EngineState.Loading)?.model?.id ?: settings.selectedModelId.takeIf { loadInProgress && engine is EngineState.Idle }
+    val loadingId = (engine as? EngineState.Loading)?.model?.id ?: settings.selectedModelId.takeIf { loadInProgress }
     val downloadedCount = models.count { it.isDownloaded }
     // Blocked reasons: resident weights + compute + KV at MIN_CTX against the planner gate, recomputed per list change.
     // A normal user gets the plain "May be too large for this phone"; the numbers are for power users and up.
@@ -170,6 +170,7 @@ private fun ManagerRow(
         entry = e,
         selected = e.id == loadedId && loadingId != e.id,
         loading = e.id == loadingId,
+        calibrating = e.id == loadingId && e.id == loadedId,
         blockedReason = blockedReason,
         calibration = settings.calibration[e.id],
         menuExtra = menuExtra,
