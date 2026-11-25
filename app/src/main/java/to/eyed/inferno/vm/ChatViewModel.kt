@@ -662,7 +662,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
         }
     }
 
-    /** Accumulates the turn and publishes GenState at <= 12.5 Hz with a tok/s figure refreshed at 2 Hz. */
+    /** Accumulates the turn and publishes GenState at <= 20 Hz with a tok/s figure refreshed at 2 Hz. */
     private inner class Streamer(private val id: String) {
         val text = StringBuilder()
         val reasoning = StringBuilder()
