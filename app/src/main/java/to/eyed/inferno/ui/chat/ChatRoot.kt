@@ -95,6 +95,7 @@ import to.eyed.inferno.ui.theme.fastSpatialSpec
 import to.eyed.inferno.ui.theme.rememberHaptics
 import to.eyed.inferno.vm.AppViewModel
 import to.eyed.inferno.vm.ChatViewModel
+import to.eyed.inferno.vm.ImageGenViewModel
 import to.eyed.inferno.vm.GenState
 import to.eyed.inferno.vm.Screen
 import to.eyed.inferno.vm.isBusy
@@ -106,7 +107,7 @@ import to.eyed.inferno.vm.isBusy
  * purely visual lives here in rememberSaveable; everything else is read from the ViewModels.
  */
 @Composable
-fun ChatRoot(appVm: AppViewModel, chatVm: ChatViewModel, onBeforeSend: () -> Unit, onDrawerOpenChanged: (Boolean) -> Unit = {}) {
+fun ChatRoot(appVm: AppViewModel, chatVm: ChatViewModel, imageVm: ImageGenViewModel, onBeforeSend: () -> Unit, onDrawerOpenChanged: (Boolean) -> Unit = {}) {
     val engine by appVm.engine.collectAsStateWithLifecycle()
     val settings by appVm.settings.collectAsStateWithLifecycle()
     val liveThreads by appVm.activeThreadsFlow.collectAsStateWithLifecycle()
@@ -343,7 +344,8 @@ fun ChatRoot(appVm: AppViewModel, chatVm: ChatViewModel, onBeforeSend: () -> Uni
                                         attachments = pending, onRemoveAttachment = chatVm::removeAttachment,
                                         canAttachImages = canAttachImages, cameraAvailable = cameraAvailable, noVisionReason = noVisionReason,
                                         onPickPhotos = pickPhotos, onCapturePhoto = capturePhoto,
-                                        onPickFile = { filePicker.launch(arrayOf("text/*", "application/json", "application/xml", "application/javascript", "application/octet-stream")) },
+                                        onPickFile = { filePicker.launch(arrayOf("*/*")) },
+                                        onGenerateImage = { imageVm.setPrompt(draft); appVm.navigate(Screen.CREATE) },
                                         calibrating = loadInProgress && engine is EngineState.Ready, onNoVision = appVm::notice,
                                         gen = gen, engine = engine, disabledReason = disabledReason, imageBusy = imageBusy,
                                         onSend = send, onStop = chatVm::cancel,
