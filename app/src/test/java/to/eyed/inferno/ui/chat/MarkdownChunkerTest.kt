@@ -71,6 +71,37 @@ class MarkdownChunkerTest {
     }
 
     @Test
+    fun \`open fence is split out for live syntax highlighted rendering\`() {
+        val fence = 96.toChar().toString().repeat(3)
+        val source = "intro\n\n" + fence + "html\n<div>hello</div>"
+        val (prefix, code) = MarkdownChunker.splitOpenFence(source)
+        assertEquals("intro", prefix)
+        assertEquals("html", code?.language)
+        assertEquals("<div>hello</div>", code?.code)
+    }
+
+    @Test
+    fun \`closed fence remains in markdown chunks\`() {
+        val fence = 96.toChar().toString().repeat(3)
+        val source = "intro\n\n" + fence + "html\n<div/>\n" + fence
+        val (prefix, code) = MarkdownChunker.splitOpenFence(source)
+        assertEquals(source, prefix)
+        assertEquals(null, code)
+    }
+
+    @Test
+    fun \`math delimiters and common latex identifiers render as unicode\`() {
+        assertEquals("Result: (1)/(2) + α²", MarkdownMath.format("""Result: $\frac{1}{2} + \alpha^2$"""))
+    }
+
+    @Test
+    fun \`math formatter leaves fenced code untouched\`() {
+        val fence = 96.toChar().toString().repeat(3)
+        val source = fence + "tex\n$\\alpha$\n" + fence
+        assertEquals(source, MarkdownMath.format(source))
+    }
+
+    @Test
     fun `duration formatting`() {
         assertEquals("8.1 s", formatDuration(8_100))
         assertEquals("1 min 8 s", formatDuration(68_000))
