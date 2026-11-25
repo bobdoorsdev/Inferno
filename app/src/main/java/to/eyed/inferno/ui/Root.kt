@@ -96,7 +96,7 @@ fun InfernoRoot(container: AppContainer, appVm: AppViewModel, chatVm: ChatViewMo
     // The chat drawer reports when it is out so the global chips do not float over it.
     var drawerOpen by remember { mutableStateOf(false) }
 
-    CompositionLocalProvider(LocalAnimations provides settings.streamingAnimations, LocalHaptics provides settings.haptics) {
+    CompositionLocalProvider(LocalAnimations provides true, LocalHaptics provides settings.haptics) {
         val haptics = rememberHaptics()
 
         // Notifications permission, the single rule: asked once before the first download or send, never again.
