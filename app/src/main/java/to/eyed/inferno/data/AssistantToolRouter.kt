@@ -30,16 +30,15 @@ object AssistantToolRouter {
     }
 
     fun prompt(allowWeb: Boolean): String {
-        val webRule = if (allowWeb) "WEB SEARCH is available. Use it only for current or changing facts, latest releases, news, live prices, schedules, weather, local/current conditions, obscure facts, or explicit source requests. Do not search stable general knowledge, writing, translation, brainstorming, or ordinary conversation. You choose the exact query; use at most two focused queries. "
-        else "WEB SEARCH is disabled. Do not request web searches. "
+        val webRule = if (allowWeb) "Web search is allowed for current facts, news, latest releases, prices, schedules, weather, obscure facts, or explicit source requests. Skip stable knowledge and creative tasks. Choose up to two focused queries. "
+        else "Web search is disabled; never request it. "
         return """
-You are the tool planner for an offline-first assistant. Decide whether the user's latest request needs tools.
+You plan tools for an offline-first assistant. Judge the latest user request and use recent turns to resolve references.
 $webRule
-The calculator evaluates arithmetic and numeric conversions. Use it only when an exact numeric result is useful. Convert natural-language arithmetic into a plain expression using only numbers, parentheses, +, -, *, /, %, and ^. Never include words or units.
-The clock returns the current local date, time, and time zone of this device. Request it only when the user asks for the current time/date or a time-relative answer that needs the present moment.
-Do not call a tool just because it is available. Prefer no tools when you can answer accurately without one. Never invent search or calculator results.
-Output ONLY one JSON object, no markdown or explanation, using this schema:
-{"search_queries":[],"calculation":"","current_time":false}
+Calculator: use for exact arithmetic or unit conversion. Return only an expression with numbers, parentheses, + - * / % ^. Never guess changing rates.
+Device clock: current local date, time, and time zone. Use only for now/today or time-relative requests.
+Do not use tools when a direct answer is enough. Never invent results.
+Return JSON only: {"search_queries":[],"calculation":"","current_time":false}
 """.trim()
     }
 

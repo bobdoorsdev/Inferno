@@ -518,7 +518,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
         val toolMessages = buildList {
             add(PromptMessage("system", AssistantToolRouter.prompt(allowWeb)))
             recent.forEachIndexed { index, message ->
-                val limit = if (index == recent.lastIndex) 600 else 140
+                val limit = if (index == recent.lastIndex) 520 else 100
                 add(PromptMessage(message.role, if (index == recent.lastIndex) message.content.take(limit) else message.content.takeLast(limit)))
             }
         }
@@ -528,7 +528,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
             "tool-router",
             toolMessages,
             emptyList(),
-            GenerationParams(temperature = 0f, topK = 1, topP = 1f, minP = 0f, maxTokens = 80),
+            GenerationParams(temperature = 0f, topK = 1, topP = 1f, minP = 0f, maxTokens = 72),
             thinking,
             false,
             detail,
