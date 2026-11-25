@@ -132,7 +132,7 @@ fun LoadingMark(size: Dp, active: Boolean, modifier: Modifier = Modifier) {
     )
     Box(modifier.size(size).clearAndSetSemantics {}, contentAlignment = Alignment.Center) {
         Canvas(Modifier.fillMaxSize()) {
-            val stroke = size.minDimension * 0.075f
+            val stroke = this.size.minDimension * 0.075f
             drawArc(Ink.SurfaceHigh, 0f, 360f, false, style = Stroke(stroke, cap = StrokeCap.Round))
             drawArc(Ink.I500, -78f, 78f, false, style = Stroke(stroke, cap = StrokeCap.Round))
             drawArc(Ink.White, if (active) rotation else -32f, 118f, false, style = Stroke(stroke, cap = StrokeCap.Round))
