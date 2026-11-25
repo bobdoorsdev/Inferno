@@ -106,6 +106,7 @@ fun InputBar(
     onPickPhotos: () -> Unit,
     onCapturePhoto: () -> Unit,
     onPickFile: () -> Unit,
+    onGenerateImage: () -> Unit,
     onNoVision: (String) -> Unit,
     calibrating: Boolean = false,
     gen: GenState,
@@ -165,7 +166,7 @@ fun InputBar(
                         },
                 )
                 Row(Modifier.padding(start = 8.dp, end = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    AttachButton(canAttachImages, cameraAvailable, noVisionReason, idle, onPickPhotos, onCapturePhoto, onPickFile, onNoVision)
+                    AttachButton(canAttachImages, cameraAvailable, noVisionReason, idle, onPickPhotos, onCapturePhoto, onPickFile, onGenerateImage, onNoVision)
                     Spacer(Modifier.width(2.dp))
                     Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
                         if (thinkingAvailable) ThinkChip(thinkingOn, onToggleThinking)
@@ -234,7 +235,7 @@ private fun ThumbStrip(attachments: List<Attachment>, onRemove: (Int) -> Unit) {
 @Composable
 private fun AttachButton(
     canAttachImages: Boolean, cameraAvailable: Boolean, noVisionReason: String?, idle: Boolean,
-    onPickPhotos: () -> Unit, onCapturePhoto: () -> Unit, onPickFile: () -> Unit, onNoVision: (String) -> Unit,
+    onPickPhotos: () -> Unit, onCapturePhoto: () -> Unit, onPickFile: () -> Unit, onGenerateImage: () -> Unit, onNoVision: (String) -> Unit,
 ) {
     var open by remember { mutableStateOf(false) }
     val haptics = rememberHaptics()
@@ -242,6 +243,7 @@ private fun AttachButton(
         GhostIconButton(Lucide.Plus, S.attach, onClick = { haptics.tap(); open = true }, size = 38.dp, iconSize = 21.dp, tint = Ink.I100, enabled = !idle)
         GlassMenu(expanded = open, onDismiss = { open = false }, minWidth = 196.dp) {
             AttachmentMenuItem(Lucide.FileText, "Choose file", enabled = !idle) { open = false; onPickFile() }
+            AttachmentMenuItem(Lucide.Image, S.createImage, enabled = !idle) { open = false; onGenerateImage() }
             AttachmentMenuItem(Lucide.Images, S.photos, enabled = canAttachImages && !idle) {
                 open = false
                 if (canAttachImages) onPickPhotos() else onNoVision(noVisionReason ?: S.noVision)
