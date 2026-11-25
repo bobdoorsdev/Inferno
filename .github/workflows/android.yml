@@ -1,4 +1,4 @@
-name: Android build (small-context tools)
+name: Android build (tool cancellation fix)
 
 on:
   push:
