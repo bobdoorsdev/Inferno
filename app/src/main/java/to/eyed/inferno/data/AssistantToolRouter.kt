@@ -179,6 +179,18 @@ Return JSON only: {"search_queries":[],"image_queries":[],"calculation":"","curr
         return AssistantToolNotes(reasoning, search, local)
     }
 
+    /** Cheap gate so the tool-planning inference is only paid for when the user likely needs current or visual information. */
+    fun shouldConsiderWeb(text: String): Boolean {
+        val value = text.trim()
+        if (value.isBlank()) return false
+        if (fallbackSearchQuery(value) != null || fallbackImageQuery(value) != null) return true
+        val informational = Regex(
+            """\b(who is|who are|what is|what are|where is|where are|when did|when was|when is|how much|how many|how old|does .{1,80} support|is .{1,80} still|which .{1,80} is better|recommend|recommendation|alternatives|alternative)\b""",
+            RegexOption.IGNORE_CASE,
+        )
+        return informational.containsMatchIn(value)
+    }
+
     /** Hard fallback: obvious time-sensitive requests still search when a small local planner omits a query. */
     fun fallbackSearchQuery(text: String): String? {
         val value = text.trim()
