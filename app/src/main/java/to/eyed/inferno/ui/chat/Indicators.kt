@@ -94,7 +94,7 @@ fun AssistantActivityPanel(
 ) {
     val parsed = remember(reasoning) { AssistantToolRouter.splitNotes(reasoning) }
     val search = searchNotes?.takeIf { it.isNotBlank() } ?: parsed.search
-    val think = listOf(parsed.reasoning, parsed.local).filter { it.isNotBlank() }.joinToString("\n\n")
+    val think = listOfNotNull(parsed.reasoning.takeIf { it.isNotBlank() }, parsed.local?.takeIf { it.isNotBlank() }).joinToString("\n\n")
     val hasThink = think.isNotBlank()
     val hasSearch = !search.isNullOrBlank() || status != null
     var expanded by rememberSaveable { mutableStateOf(live) }
@@ -114,6 +114,7 @@ fun AssistantActivityPanel(
         thinkingMs >= 1_000 -> S.thoughtFor(formatDuration(thinkingMs))
         else -> S.reasoning
     }
+    val tabFade = defaultEffectsSpec<Float>()
     Column(
         modifier.fillMaxWidth()
             .surfaceLow(RoundedCornerShape(Radii.row))
@@ -154,7 +155,7 @@ fun AssistantActivityPanel(
         ) {
             AnimatedContent(
                 targetState = activeSearch,
-                transitionSpec = { fadeIn(defaultEffectsSpec()) togetherWith fadeOut(defaultEffectsSpec()) },
+                transitionSpec = { fadeIn(tabFade) togetherWith fadeOut(tabFade) },
                 label = "activityTabContent",
             ) { showSearch ->
                 val content = if (showSearch) search.orEmpty() else think
