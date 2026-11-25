@@ -100,7 +100,7 @@ class ContextManagerPlanTest {
     @Test fun nothingFitsGivesAReasonWithResidentBytesOnly() = runBlocking {
         val plan = ContextManager(AnalyticEngine()).plan(EngineTestFixtures.local(), SettingsState(), EngineTestFixtures.cpu({ 1500 * MB }))
         assertNotNull(plan.reason)
-        // 1400 resident + 24 MB KV @2k + 300 compute + 512 margin ~ 2.2 GB; the 300 MB mapped weights are not counted.
+        // 1400 resident + ~6 MB KV @512 + 300 compute + 512 margin ~ 2.2 GB; mapped weights are not counted.
         assertTrue(plan.reason!!, Regex("Needs about 2\\.[12] GB free, 1\\.5 GB available").matches(plan.reason!!))
         assertEquals(ContextManager.MIN_CTX, plan.config.nCtx)
     }
