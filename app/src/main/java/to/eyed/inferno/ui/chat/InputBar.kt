@@ -3,7 +3,6 @@ package to.eyed.inferno.ui.chat
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -31,9 +30,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -69,6 +66,7 @@ import com.composables.icons.lucide.Brain
 import com.composables.icons.lucide.Camera
 import com.composables.icons.lucide.Image
 import com.composables.icons.lucide.Images
+import com.composables.icons.lucide.FileText
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Plus
 import com.composables.icons.lucide.Square
@@ -106,7 +104,9 @@ fun InputBar(
     noVisionReason: String?,
     onPickPhotos: () -> Unit,
     onCapturePhoto: () -> Unit,
+    onPickFile: () -> Unit,
     onNoVision: (String) -> Unit,
+    calibrating: Boolean = false,
     gen: GenState,
     engine: EngineState,
     /** Non-null disables the card and becomes the placeholder ("Choose a model to start"). */
@@ -164,7 +164,7 @@ fun InputBar(
                         },
                 )
                 Row(Modifier.padding(start = 8.dp, end = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    AttachButton(canAttachImages, cameraAvailable, noVisionReason, idle, onPickPhotos, onCapturePhoto, onNoVision)
+                    AttachButton(canAttachImages, cameraAvailable, noVisionReason, idle, onPickPhotos, onCapturePhoto, onPickFile, onNoVision)
                     Spacer(Modifier.width(2.dp))
                     Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
                         if (thinkingAvailable) ThinkChip(thinkingOn, onToggleThinking)
@@ -172,7 +172,7 @@ fun InputBar(
                     Spacer(Modifier.width(2.dp))
                     SendButton(
                         hasContent = hasContent, streaming = streaming, loading = loading, queued = gen is GenState.Queued,
-                        enabled = !idle && !imageBusy, prefill = gen as? GenState.Prefill,
+                        enabled = !idle && !imageBusy, prefill = gen as? GenState.Prefill, calibrating = calibrating,
                         onSend = onSend, onStop = onStop,
                     )
                 }
@@ -229,28 +229,51 @@ private fun ThumbStrip(attachments: List<Attachment>, onRemove: (Int) -> Unit) {
     }
 }
 
-/** Plus with the anchored Camera / Photos menu; without vision an Image glyph explains why on tap. */
+/** The plus remains visible even when a model cannot accept images; unavailable image actions are disabled. */
 @Composable
 private fun AttachButton(
     canAttachImages: Boolean, cameraAvailable: Boolean, noVisionReason: String?, idle: Boolean,
-    onPickPhotos: () -> Unit, onCapturePhoto: () -> Unit, onNoVision: (String) -> Unit,
+    onPickPhotos: () -> Unit, onCapturePhoto: () -> Unit, onPickFile: () -> Unit, onNoVision: (String) -> Unit,
 ) {
     var open by remember { mutableStateOf(false) }
     val haptics = rememberHaptics()
     Box {
-        if (canAttachImages) {
-            GhostIconButton(Lucide.Plus, S.attachMenu, onClick = { haptics.tap(); open = true }, size = 38.dp, iconSize = 21.dp, tint = Ink.I100)
-            GlassMenu(expanded = open, onDismiss = { open = false }, minWidth = 168.dp) {
-                MenuActionRow(Lucide.Images, S.photos) { open = false; onPickPhotos() }
-                if (cameraAvailable) MenuActionRow(Lucide.Camera, S.camera) { open = false; onCapturePhoto() }
+        GhostIconButton(Lucide.Plus, S.attach, onClick = { haptics.tap(); open = true }, size = 38.dp, iconSize = 21.dp, tint = Ink.I100, enabled = !idle)
+        GlassMenu(expanded = open, onDismiss = { open = false }, minWidth = 196.dp) {
+            AttachmentMenuItem(Lucide.FileText, "Choose file", enabled = !idle) { open = false; onPickFile() }
+            AttachmentMenuItem(Lucide.Images, S.photos, enabled = canAttachImages && !idle) {
+                open = false
+                if (canAttachImages) onPickPhotos() else onNoVision(noVisionReason ?: S.noVision)
             }
-        } else {
-            GhostIconButton(
-                Lucide.Image, S.attach, enabled = !idle,
-                onClick = { onNoVision(noVisionReason ?: S.noVision) },
-                size = 38.dp, iconSize = 19.dp, tint = Ink.I500,
-            )
+            if (cameraAvailable) AttachmentMenuItem(Lucide.Camera, S.camera, enabled = canAttachImages && !idle) {
+                open = false
+                if (canAttachImages) onCapturePhoto() else onNoVision(noVisionReason ?: S.noVision)
+            }
+            if (!canAttachImages) {
+                Text(noVisionReason ?: S.noVision, style = Typography.bodySmall, color = Ink.I500,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp))
+            }
         }
+    }
+}
+
+@Composable
+private fun AttachmentMenuItem(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable(
+            interactionSource = remember { MutableInteractionSource() }, indication = null,
+            enabled = enabled, role = Role.Button, onClick = onClick,
+        ).padding(horizontal = 14.dp, vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Icon(icon, null, Modifier.size(17.dp), tint = if (enabled) Ink.I100 else Ink.I500)
+        Text(label, style = Typography.bodyMedium, color = if (enabled) Ink.I100 else Ink.I500)
     }
 }
 
@@ -278,77 +301,28 @@ private fun ThinkChip(on: Boolean, onToggle: (Boolean) -> Unit) {
 }
 
 /**
- * Send / Stop: white circle when active, ArrowUp <-> Square icon morph, press scale 0.94. While the
- * model loads it shows a LoadingIndicator and a tap queues the turn. During prefill the circle shrinks
- * inside a 2 dp determinate ring - the single prefill progress affordance.
+ * Send / Stop. Calibration and prefill are quiet, neutral states; loading never gets an attention-grabbing spinner.
  */
 @Composable
 private fun SendButton(
     hasContent: Boolean, streaming: Boolean, loading: Boolean, queued: Boolean, enabled: Boolean,
-    prefill: GenState.Prefill?, onSend: () -> Unit, onStop: () -> Unit,
+    prefill: GenState.Prefill?, calibrating: Boolean, onSend: () -> Unit, onStop: () -> Unit,
 ) {
     val active = enabled && (hasContent || streaming || queued)
+    val subdued = loading || calibrating || prefill != null || !active
     val interaction = remember { MutableInteractionSource() }
-    val bg by animateColorAsState(if (active) Ink.White else Ink.SurfaceHigh, fastEffectsSpec(), label = "sendBg")
+    val bg by animateColorAsState(if (subdued) Ink.SurfaceHigh else Ink.White, fastEffectsSpec(), label = "sendBg")
     val restScale by animateFloatAsState(if (active) 1f else 0.94f, fastSpatialSpec(), label = "sendScale")
-    val ringVisible = prefill != null
-    val inner by animateDpAsState(if (ringVisible) 30.dp else 38.dp, fastSpatialSpec(), label = "sendInner")
-    val progress = prefillProgress(prefill)
-    Box(Modifier.size(38.dp), contentAlignment = Alignment.Center) {
-        if (ringVisible) {
-            if (progress != null) CircularProgressIndicator(progress = { progress }, modifier = Modifier.size(38.dp), color = Ink.White, strokeWidth = 2.dp, trackColor = whiteA(0.15f), gapSize = 0.dp)
-            else CircularProgressIndicator(modifier = Modifier.size(38.dp), color = Ink.White, strokeWidth = 2.dp, trackColor = whiteA(0.15f))
-        }
-        Box(
-            Modifier
-                .graphicsLayer { scaleX = restScale; scaleY = restScale }
-                .pressScale(interaction, 0.94f)
-                .size(inner)
-                .clip(CircleShape)
-                .background(bg)
-                .clickable(interactionSource = interaction, indication = null, enabled = active, role = Role.Button) {
-                    if (streaming || queued) onStop() else onSend()
-                },
-            contentAlignment = Alignment.Center,
-        ) {
-            val fade = fastEffectsSpec<Float>()
-            val spatial = fastSpatialSpec<Float>()
-            AnimatedContent(
-                targetState = when { streaming || queued -> 1; loading -> 2; else -> 0 },
-                transitionSpec = {
-                    (fadeIn(fade) + scaleIn(spatial, initialScale = 0.6f)) togetherWith (fadeOut(fade) + scaleOut(fade, targetScale = 0.6f))
-                },
-                label = "sendIcon",
-            ) { state ->
-                when (state) {
-                    1 -> Icon(Lucide.Square, S.stop, Modifier.size(16.dp), tint = if (active) Ink.Pitch else Ink.I500)
-                    2 -> LoadingIndicator(Modifier.size(20.dp), color = if (active) Ink.Pitch else Ink.I300)
-                    else -> Icon(Lucide.ArrowUp, S.send, Modifier.size(18.dp), tint = if (active) Ink.Pitch else Ink.I500)
-                }
-            }
-        }
+    Box(
+        Modifier.size(38.dp).graphicsLayer { scaleX = restScale; scaleY = restScale }
+            .pressScale(interaction, 0.94f).clip(CircleShape).background(bg)
+            .clickable(interactionSource = interaction, indication = null, enabled = active, role = Role.Button) {
+                if (streaming || queued) onStop() else onSend()
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        if (streaming || queued) Icon(Lucide.Square, S.stop, Modifier.size(16.dp), tint = if (subdued) Ink.I500 else Ink.Pitch)
+        else Icon(Lucide.ArrowUp, S.send, Modifier.size(18.dp), tint = if (subdued) Ink.I500 else Ink.Pitch)
     }
 }
 
-/**
- * Prefill ring value: token progress when known; during an image encode a time-based prediction from
- * `expectedMs` that eases toward 90 % (it snaps to full when the state moves on); null = indeterminate.
- */
-@Composable
-private fun prefillProgress(p: GenState.Prefill?): Float? {
-    if (p == null) return null
-    if (p.encodingImage) {
-        if (p.expectedMs <= 0) return null
-        var predicted by remember(p.expectedMs) { mutableFloatStateOf(0f) }
-        LaunchedEffect(p.expectedMs) {
-            val start = System.currentTimeMillis()
-            while (predicted < 0.9f) {
-                val t = (System.currentTimeMillis() - start).toFloat() / p.expectedMs
-                predicted = (1f - (1f - t.coerceIn(0f, 1f)) * (1f - t.coerceIn(0f, 1f))).coerceAtMost(0.9f)
-                kotlinx.coroutines.delay(50)
-            }
-        }
-        return predicted
-    }
-    return if (p.total > 0) (p.done.toFloat() / p.total).coerceIn(0f, 1f) else null
-}
