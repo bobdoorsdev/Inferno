@@ -45,7 +45,7 @@ import to.eyed.inferno.ui.components.GhostIconButton
 import to.eyed.inferno.ui.components.GlassMenu
 import to.eyed.inferno.ui.components.Hairline
 import to.eyed.inferno.ui.components.MenuActionRow
-import to.eyed.inferno.ui.components.MorphingMark
+import to.eyed.inferno.ui.components.LoadingMark
 import to.eyed.inferno.ui.theme.ChipLabel
 import to.eyed.inferno.ui.theme.Ink
 import to.eyed.inferno.ui.theme.Numeric
@@ -78,13 +78,14 @@ fun TopNav(
     computeLine: (() -> String)? = null,
     /** "Compact now" in the context panel (long-press on the chip); null hides it (normal tier, no chat, engine busy). */
     onCompactNow: (() -> Unit)? = null,
+    calibrating: Boolean = false,
 ) {
     Column(modifier.background(Ink.Pitch)) {
         Box(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp)) {
             if (showDrawerToggle) {
                 GhostIconButton(Lucide.PanelLeft, S.openSidebar, onOpenDrawer, size = 40.dp, iconSize = 20.dp, tint = Ink.I100, modifier = Modifier.align(Alignment.CenterStart))
             }
-            ModelChip(engine, contextUsage, resolvedCtxLabel, selectedModelName, onOpenModelSheet, onCompactNow, Modifier.align(Alignment.Center).padding(horizontal = 48.dp), showRing = showContextRing, computeLine = computeLine)
+            ModelChip(engine, contextUsage, resolvedCtxLabel, selectedModelName, onOpenModelSheet, onCompactNow, Modifier.align(Alignment.Center).padding(horizontal = 48.dp), showRing = showContextRing, computeLine = computeLine, calibrating = calibrating)
             GhostIconButton(Lucide.SquarePen, S.newChat, onNewChat, size = 40.dp, iconSize = 20.dp, tint = Ink.I100, modifier = Modifier.align(Alignment.CenterEnd))
         }
         AnimatedVisibility(scrolled, enter = fadeIn(fastEffectsSpec()), exit = fadeOut(fastEffectsSpec())) { Hairline() }
@@ -107,6 +108,7 @@ private fun ModelChip(
     modifier: Modifier = Modifier,
     showRing: Boolean = false,
     computeLine: (() -> String)? = null,
+    calibrating: Boolean = false,
 ) {
     val haptics = rememberHaptics()
     val interaction = remember { MutableInteractionSource() }
@@ -129,7 +131,7 @@ private fun ModelChip(
             horizontalArrangement = Arrangement.spacedBy(7.dp),
         ) {
             val fade = fastEffectsSpec<Float>()
-            val chip = chipState(engine, selectedModelName)
+            val chip = if (calibrating && engine is EngineState.Ready) ChipState(ChipKind.LOADING, S.calibrating, Ink.I300) else chipState(engine, selectedModelName)
             // Keyed on the kind only: the loading percentage ticks every few hundred ms and must not restart
             // the crossfade; its text is tabular so the pill never jitters.
             AnimatedContent(
@@ -140,7 +142,7 @@ private fun ModelChip(
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                     when (kind) {
                         ChipKind.IDLE -> Icon(Lucide.Cpu, null, Modifier.size(14.dp), tint = Ink.I500)
-                        ChipKind.LOADING -> MorphingMark(18.dp, active = true)
+                        ChipKind.LOADING -> LoadingMark(20.dp, active = true)
                         ChipKind.SUSPENDED -> Icon(Lucide.Zap, null, Modifier.size(14.dp), tint = Ink.I500)
                         ChipKind.ERROR -> Icon(Lucide.CircleAlert, null, Modifier.size(14.dp), tint = Ink.I300)
                         ChipKind.READY -> Unit
