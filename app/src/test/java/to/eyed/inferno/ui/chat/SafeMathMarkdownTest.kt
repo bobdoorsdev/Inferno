@@ -14,12 +14,12 @@ class SafeMathMarkdownTest {
     }
 
     @Test fun leavesFencedCodeUntouched() {
-        val source = "\u0060\u0060\u0060tex\n\\\\(x+1\\\\)\n\u0060\u0060\u0060"
-        assertTrue(SafeMathMarkdown.sanitize(source).contains("\\\\(x+1\\\\)"))
+        val source = "\u0060\u0060\u0060tex\n\\(x+1\\)\n\u0060\u0060\u0060"
+        assertTrue(SafeMathMarkdown.sanitize(source).contains("\\(x+1\\)"))
     }
 
     @Test fun safelyDisplaysAnUnclosedInlineFormulaDuringStreaming() {
-        val safe = SafeMathMarkdown.sanitize("Estimate: \\\\(\\\\frac{1}{2}")
-        assertTrue(safe.contains("\u0060\\\\frac{1}{2}\u0060"))
+        val safe = SafeMathMarkdown.sanitize("Estimate: \\(\\frac{1}{2}")
+        assertTrue(safe.contains("\u0060\\frac{1}{2}\u0060"))
     }
 }
