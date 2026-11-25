@@ -130,8 +130,8 @@ fun WavyBar(
     color: Color = Ink.White,
 ) {
     val fraction = progress.coerceIn(0f, 1f)
-    androidx.compose.foundation.Canvas(modifier.fillMaxWidth().height(8.dp)) {
-        val corner = CornerRadius(size.height / 2f)
+    androidx.compose.foundation.Canvas(modifier.fillMaxWidth().height(12.dp)) {
+        val corner = CornerRadius(4.dp.toPx())
         drawRoundRect(whiteA(0.12f), cornerRadius = corner)
         val width = if (indeterminate) size.width * 0.28f else size.width * fraction
         if (width > 0f) {
