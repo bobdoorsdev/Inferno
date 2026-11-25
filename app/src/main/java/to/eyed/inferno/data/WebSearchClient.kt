@@ -8,6 +8,11 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.net.URLEncoder
@@ -29,6 +34,44 @@ class WebSearchClient(private val client: OkHttpClient = DEFAULT_CLIENT) {
                 }
             } }
             .awaitAll().flatten().distinctBy { it.url }.take(5)
+    }
+
+    /** Optional image lookup. Results are never mixed into factual web citations. */
+    suspend fun searchImages(query: String): List<WebImageResult> = withContext(Dispatchers.IO) {
+        val q = query.trim().take(MAX_QUERY_CHARS)
+        if (q.length < 2) return@withContext emptyList()
+        val encoded = URLEncoder.encode(q, Charsets.UTF_8.name())
+        val landing = Request.Builder()
+            .url("https://duckduckgo.com/?q=$encoded&iax=images&ia=images")
+            .header("User-Agent", USER_AGENT)
+            .header("Accept", "text/html")
+            .build()
+        val page = client.newCall(landing).execute().use { response ->
+            if (!response.isSuccessful) return@withContext emptyList()
+            response.body?.string().orEmpty()
+        }
+        val token = Regex("""vqd=['"]([^'"]+)['"]""").find(page)?.groupValues?.get(1)
+            ?: Regex(""""vqd"\\s*:\\s*"([^"]+)"""").find(page)?.groupValues?.get(1)
+            ?: return@withContext emptyList()
+        val request = Request.Builder()
+            .url("https://duckduckgo.com/i.js?l=wt-wt&o=json&q=$encoded&vqd=$token&f=,,,,")
+            .header("User-Agent", USER_AGENT)
+            .header("Accept", "application/json")
+            .header("Referer", "https://duckduckgo.com/")
+            .build()
+        val json = client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) return@withContext emptyList()
+            response.body?.string().orEmpty()
+        }
+        val rows = runCatching { Json.parseToJsonElement(json).jsonObject["results"]?.jsonArray }.getOrNull().orEmpty()
+        rows.mapNotNull { item ->
+            val obj = item.jsonObject
+            val image = obj["image"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+            val source = obj["url"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+            val title = obj["title"]?.jsonPrimitive?.contentOrNull?.take(120).orEmpty().ifBlank { q }
+            val uri = runCatching { Uri.parse(image) }.getOrNull() ?: return@mapNotNull null
+            if (uri.scheme != "https" || uri.host.isNullOrBlank()) null else WebImageResult(title, image, source)
+        }.distinctBy { it.imageUrl }.take(3)
     }
 
     suspend fun search(query: String): List<WebSearchResult> = withContext(Dispatchers.IO) {
