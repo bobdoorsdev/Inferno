@@ -219,12 +219,6 @@ private fun TierSection(visible: Boolean, content: @Composable () -> Unit) {
     ) { Column { content() } }
 }
 
-private fun levelDescription(level: ExperienceLevel): String = when (level) {
-    ExperienceLevel.NORMAL -> S.levelNormalDesc
-    ExperienceLevel.POWER -> S.levelPowerDesc
-    ExperienceLevel.DEVELOPER -> S.levelDeveloperDesc
-}
-
 /** "18.4 tok/s with 4 pinned cores" from the calibration, else the catalog estimate, else the preset blurb. */
 private fun perfLine(s: SettingsState, loaded: LoadedModel?, est: String?): String {
     val cal = loaded?.calibration ?: loaded?.let { s.calibration[it.model.id] }
