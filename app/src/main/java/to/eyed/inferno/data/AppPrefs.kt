@@ -60,7 +60,7 @@ data class SettingsState(
     val perfPreset: PerfPreset = PerfPreset.AUTO,
     val threads: Int = 4,                       // 1..8; default = number of big cores (Advanced; preset writes it)
     val pinBigCores: Boolean = true,            // Advanced
-    val contextSize: Int = 0,                   // 0 = Auto (max): planner searches UP to the largest size that fits; else tokens, multiple of 1024
+    val contextSize: Int = 0,                   // 0 = Auto (max): planner searches UP to the largest size that fits; else tokens, multiple of 512
     val kvCache: KvCachePref = KvCachePref.AUTO,
     val flashAttention: Boolean = true,         // Advanced; setKvCache(Q8_0/Q4_0) forces true and the toggle is disabled ("Required for quantized KV")
     val useMmap: Boolean = true,                // Advanced; "false" selects LLAMA_LOAD_MODE_DIRECT_IO for repacked tensors
@@ -76,6 +76,7 @@ data class SettingsState(
     // chat
     val streamingAnimations: Boolean = true,
     val haptics: Boolean = true,
+    val webSearchEnabled: Boolean = false,       // opt-in: send the latest user prompt to DuckDuckGo before local inference
     // downloads
     val allowMeteredDownloads: Boolean = false, // Settings > Storage; when false a metered network requires a per-download confirm
     val notificationsAsked: Boolean = false,    // POST_NOTIFICATIONS was requested once (5.6 Root.kt); never asked again
@@ -158,6 +159,7 @@ class AppPrefs(
     suspend fun setImageDetail(d: ImageDetail) = update { it.copy(imageDetail = d) }
     suspend fun setStreamingAnimations(v: Boolean) = update { it.copy(streamingAnimations = v) }
     suspend fun setHaptics(v: Boolean) = update { it.copy(haptics = v) }
+    suspend fun setWebSearchEnabled(v: Boolean) = update { it.copy(webSearchEnabled = v) }
     override suspend fun setAllowMeteredDownloads(allow: Boolean) = update { it.copy(allowMeteredDownloads = allow) }
     suspend fun setNotificationsAsked(v: Boolean) = update { it.copy(notificationsAsked = v) }
     override suspend fun setSelectedModel(id: String?) = update { it.copy(selectedModelId = id) }
@@ -205,6 +207,7 @@ private object K {
     val autoTrim = booleanPreferencesKey("autoTrim")
     val streamingAnimations = booleanPreferencesKey("streamingAnimations")
     val haptics = booleanPreferencesKey("haptics")
+    val webSearchEnabled = booleanPreferencesKey("webSearchEnabled")
     val allowMeteredDownloads = booleanPreferencesKey("allowMeteredDownloads")
     val notificationsAsked = booleanPreferencesKey("notificationsAsked")
     val selectedModelId = stringPreferencesKey("selectedModelId")
@@ -250,6 +253,7 @@ internal fun Preferences.toState(): SettingsState {
         imageDetail = enum(this[K.imageDetail], d.imageDetail),
         streamingAnimations = this[K.streamingAnimations] ?: d.streamingAnimations,
         haptics = this[K.haptics] ?: d.haptics,
+        webSearchEnabled = this[K.webSearchEnabled] ?: d.webSearchEnabled,
         allowMeteredDownloads = this[K.allowMeteredDownloads] ?: d.allowMeteredDownloads,
         notificationsAsked = this[K.notificationsAsked] ?: d.notificationsAsked,
         selectedModelId = this[K.selectedModelId],
@@ -295,6 +299,7 @@ internal fun MutablePreferences.write(s: SettingsState) {
     this[K.imageDetail] = s.imageDetail.name
     this[K.streamingAnimations] = s.streamingAnimations
     this[K.haptics] = s.haptics
+    this[K.webSearchEnabled] = s.webSearchEnabled
     this[K.allowMeteredDownloads] = s.allowMeteredDownloads
     this[K.notificationsAsked] = s.notificationsAsked
     setOrRemove(K.selectedModelId, s.selectedModelId)
