@@ -124,7 +124,15 @@ fun InfernoRoot(container: AppContainer, appVm: AppViewModel, chatVm: ChatViewMo
         LaunchedEffect(Unit) {
             var prev: EngineState = engine
             snapshotFlow { engine }.collect { s ->
-                if (s is EngineState.Ready && prev is EngineState.Loading && lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) haptics.confirm()
+                if (s is EngineState.Ready && prev is EngineState.Loading && lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+                    haptics.confirm()
+                    modelReady = true
+                    readyNoticeJob?.cancel()
+                    readyNoticeJob = noticeScope.launch {
+                        delay(1_800)
+                        modelReady = false
+                    }
+                }
                 prev = s
             }
         }
@@ -158,12 +166,13 @@ fun InfernoRoot(container: AppContainer, appVm: AppViewModel, chatVm: ChatViewMo
             // Global notices, top-centre, below the 52 dp nav row of every screen: error card, then the thermal chip.
             // Hidden while the chat drawer is out (the drawer owns the top of the screen then).
             AnimatedVisibility(
-                visible = !drawerOpen && (notice != null || isHot),
+                visible = !drawerOpen && (notice != null || isHot || modelReady),
                 enter = fadeIn(defaultEffectsSpec()), exit = fadeOut(defaultEffectsSpec()),
                 modifier = Modifier.align(Alignment.TopCenter),
             ) {
                 Column(Modifier.padding(horizontal = 16.dp).padding(top = 56.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     notice?.let { ErrorNotice(it, onDismiss = appVm::dismissNotice) }
+                    if (notice == null && modelReady) ChipPill("Model ready", icon = Lucide.Check, textColor = Ink.I100)
                     if (isHot) ChipPill(S.phoneIsHot, icon = Lucide.Thermometer, textColor = Ink.I300)
                 }
             }
