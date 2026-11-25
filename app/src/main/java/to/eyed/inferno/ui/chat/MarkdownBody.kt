@@ -209,7 +209,7 @@ private fun CopyChip(onCopy: () -> Unit) {
 
 
 /** Offline-friendly LaTeX-to-Unicode formatting; fenced code is passed through byte-for-byte. */
-private object MarkdownMath {
+internal object MarkdownMath {
     private val symbols = mapOf(
         "alpha" to "α", "beta" to "β", "gamma" to "γ", "delta" to "δ", "epsilon" to "ε", "varepsilon" to "ϵ",
         "zeta" to "ζ", "eta" to "η", "theta" to "θ", "vartheta" to "ϑ", "iota" to "ι", "kappa" to "κ",
@@ -282,6 +282,8 @@ private object MarkdownMath {
         value = Regex("""\\vec\s*\{([^{}]*)}""").replace(value) { it.groupValues[1] + "⃗" }
         value = Regex("""\^\{([^{}]+)}""").replace(value) { mapIndex(it.groupValues[1], superscript, "^(" + it.groupValues[1] + ")") }
         value = Regex("""_\{([^{}]+)}""").replace(value) { mapIndex(it.groupValues[1], subscript, "_(" + it.groupValues[1] + ")") }
+        value = Regex("""\^([A-Za-z0-9])""").replace(value) { mapIndex(it.groupValues[1], superscript, "^(" + it.groupValues[1] + ")") }
+        value = Regex("""_([A-Za-z0-9])""").replace(value) { mapIndex(it.groupValues[1], subscript, "_(" + it.groupValues[1] + ")") }
         value = Regex("""\\([A-Za-z]+|,|;|!)""").replace(value) { symbols[it.groupValues[1]] ?: it.value.removePrefix("\\") }
         value = value.replace(Regex("""\\left|\\right|\\displaystyle|\\limits|\\,|\\;"""), "")
             .replace("""\%""", "%").replace("""\_""", "_")
