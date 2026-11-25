@@ -476,7 +476,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
                 when (ev) {
                     is GenerationEvent.Resuming -> setGen(conversationId, GenState.Prefill(0, 0, false, expectedEncodeMs))
                     is GenerationEvent.Prefill -> setGen(conversationId, GenState.Prefill(ev.done, ev.total, ev.encodingImage, expectedEncodeMs))
-                    is GenerationEvent.Thinking -> { stream.thinking(ev.text); stream.publish(false) }
+                    is GenerationEvent.Thinking -> { stream.thinking(ev.text); stream.publish(ev.text.contains('\n')) }
                     is GenerationEvent.Token -> {
                         stream.token(ev.text)
                         if (assistantId == null) assistantId = c.chats.appendAssistant(conversationId, stream.textStr, stream.reasoningOrNull(), null).id
@@ -701,6 +701,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
         }
         fun publish(force: Boolean) {
             if (closed) return
+            if (force) { trailing?.cancel(); trailing = null }
             val now = System.nanoTime()
             if (!force && now - lastPublish < PUBLISH_NS) {
                 if (trailing == null) trailing = viewModelScope.launch { delay(PUBLISH_NS / 1_000_000); trailing = null; publish(true) }
