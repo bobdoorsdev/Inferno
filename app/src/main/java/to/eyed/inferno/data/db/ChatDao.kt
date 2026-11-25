@@ -19,6 +19,10 @@ interface ChatDao {
     @Query("SELECT * FROM messages WHERE conversationId = :id ORDER BY orderIndex")
     suspend fun messagesOnce(id: String): List<MessageWithImages>
 
+    @Transaction
+    @Query("SELECT * FROM messages WHERE conversationId = :id AND orderIndex <= :through ORDER BY orderIndex")
+    suspend fun messagesThrough(id: String, through: Int): List<MessageWithImages>
+
     @Upsert suspend fun upsert(c: ConversationEntity)
     @Upsert suspend fun upsert(m: MessageEntity)
     @Upsert suspend fun upsertImages(i: List<MessageImageEntity>)
