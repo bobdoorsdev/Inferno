@@ -68,7 +68,7 @@ Return JSON only: {"search_queries":[],"image_queries":[],"calculation":"","curr
         }.distinct().take(2).map { it.take(180) }
         val calculation = root["calculation"]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() && it.length <= 128 }
         val currentTime = root["current_time"]?.jsonPrimitive?.booleanOrNull == true
-        val title = root["title"]?.jsonPrimitive?.contentOrNull?.trim()?.replace(Regex("\\s+"), " ")?.take(48)?.takeIf { it.isNotEmpty() }
+        val title = root["title"]?.jsonPrimitive?.contentOrNull?.trim()?.replace(Regex("\s+"), " ")?.take(48)?.takeIf { it.isNotEmpty() }
         return AssistantToolPlan(queries, calculation, currentTime, imageQueries, title)
     }
 
@@ -84,8 +84,13 @@ Return JSON only: {"search_queries":[],"image_queries":[],"calculation":"","curr
         return now.format(DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy · HH:mm:ss z (VV)", Locale.getDefault()))
     }
 
-    fun promptContext(results: List<WebSearchResult>, calculation: LocalCalculation?, currentTime: String?): String? {
-        if (results.isEmpty() && calculation == null && currentTime == null) return null
+    fun promptContext(
+        results: List<WebSearchResult>,
+        calculation: LocalCalculation?,
+        currentTime: String?,
+        images: List<WebImageResult> = emptyList(),
+    ): String? {
+        if (results.isEmpty() && calculation == null && currentTime == null && images.isEmpty()) return null
         return buildString {
             if (calculation != null) append("ON-DEVICE CALCULATOR RESULT — verified by the app. Expression: ").append(calculation.expression).append("\nResult: ").append(calculation.result).append("\n\n")
             if (currentTime != null) append("ON-DEVICE CLOCK — current local device date/time and time zone: ").append(currentTime).append("\n\n")
@@ -97,6 +102,12 @@ Return JSON only: {"search_queries":[],"image_queries":[],"calculation":"","curr
                     append('\n')
                 }
             }
+            if (images.isNotEmpty()) {
+                append("\nOPTIONAL WEB IMAGES — use these only when they directly illustrate the user's request; embed a relevant image with Markdown and keep its source link.\n")
+                images.forEach { image ->
+                    append("Image: ").append(image.title).append("\nImage URL: ").append(image.imageUrl).append("\nSource page: ").append(image.sourceUrl).append('\n')
+                }
+            }
             append("\nUse tool results only where relevant; do not claim a tool was used if it returned no result.")
         }
     }
@@ -106,23 +117,23 @@ Return JSON only: {"search_queries":[],"image_queries":[],"calculation":"","curr
         if (results.isEmpty() && searchQueries.isEmpty() && images.isEmpty()) return null
         return buildString {
             if (searchQueries.isNotEmpty()) {
-                append("**Web search**\\n")
-                searchQueries.forEach { append("- ").append(it.replace(96.toChar().toString(), "")).append('\\n') }
-                append('\\n')
+                append("**Web search**\n")
+                searchQueries.forEach { append("- ").append(it.replace(96.toChar().toString(), "")).append('\n') }
+                append('\n')
             }
             if (results.isNotEmpty()) {
-                append("**Web sources**\\n")
+                append("**Web sources**\n")
                 results.forEachIndexed { index, result ->
                     append(index + 1).append(". [").append(result.title).append("](").append(result.url).append(")")
                     if (result.snippet.isNotBlank()) append(" — ").append(result.snippet)
-                    append('\\n')
+                    append('\n')
                 }
             }
             if (images.isNotEmpty()) {
-                append("\\n**Images**\\n")
+                append("\n**Images**\n")
                 images.forEach { image ->
-                    append("![ ").append(image.title.replace(']', ' ')).append(" ](").append(image.imageUrl).append(")\\n")
-                    append("[Image source](").append(image.sourceUrl).append(")\\n")
+                    append("![ ").append(image.title.replace(']', ' ')).append(" ](").append(image.imageUrl).append(")\n")
+                    append("[Image source](").append(image.sourceUrl).append(")\n")
                 }
             }
         }.trim()
@@ -139,13 +150,13 @@ Return JSON only: {"search_queries":[],"image_queries":[],"calculation":"","curr
         if (search == null && calculation == null && currentTime == null) return null
         return buildString {
             append(NOTES_MARKER)
-            if (search != null) append("\\n\\n").append(SEARCH_MARKER).append("\\n").append(search)
+            if (search != null) append("\n\n").append(SEARCH_MARKER).append("\n").append(search)
             if (calculation != null || currentTime != null) {
-                append("\\n\\n").append(LOCAL_MARKER).append("\\n")
-                if (calculation != null) append("**Calculator**\\n").append(96.toChar()).append(calculation.expression).append(" = ").append(calculation.result).append(96.toChar()).append('\\n')
+                append("\n\n").append(LOCAL_MARKER).append("\n")
+                if (calculation != null) append("**Calculator**\n").append(96.toChar()).append(calculation.expression).append(" = ").append(calculation.result).append(96.toChar()).append('\n')
                 if (currentTime != null) {
-                    if (calculation != null) append('\\n')
-                    append("**Local time**\\n").append(currentTime)
+                    if (calculation != null) append('\n')
+                    append("**Local time**\n").append(currentTime)
                 }
             }
         }
@@ -171,14 +182,14 @@ Return JSON only: {"search_queries":[],"image_queries":[],"calculation":"","curr
     /** Hard fallback: obvious time-sensitive requests still search when a small local planner omits a query. */
     fun fallbackSearchQuery(text: String): String? {
         val value = text.trim()
-        val trigger = Regex("""\\b(latest|newest|current|today|tonight|right now|rn|recent|this week|this month|this year|as of|price|prices|cost|release|released|available|availability|news|weather|schedule|score|standings|ranking|rankings|review|reviews|compare|best|top|search|look up|find online|who is the current|what happened)\\b""", RegexOption.IGNORE_CASE)
+        val trigger = Regex("""\b(latest|newest|current|today|tonight|right now|rn|recent|this week|this month|this year|as of|price|prices|cost|release|released|available|availability|news|weather|schedule|score|standings|ranking|rankings|review|reviews|compare|best|top|search|look up|find online|who is the current|what happened)\b""", RegexOption.IGNORE_CASE)
         return value.takeIf { it.isNotBlank() && trigger.containsMatchIn(it) }?.take(240)
     }
 
     /** Only request images when the user asks to see a subject or the prompt is explicitly visual. */
     fun fallbackImageQuery(text: String): String? {
         val value = text.trim()
-        val trigger = Regex("""\\b(show|find|search for|give me|send me).{0,35}\\b(image|images|picture|pictures|photo|photos|illustration|visual)\\b|\\b(what does .+ look like|show me .+ )""", RegexOption.IGNORE_CASE)
+        val trigger = Regex("""\b(show|find|search for|give me|send me).{0,35}\b(image|images|picture|pictures|photo|photos|illustration|visual)\b|\b(what does .+ look like|show me .+ )""", RegexOption.IGNORE_CASE)
         return value.takeIf { it.isNotBlank() && trigger.containsMatchIn(it) }?.take(180)
     }
 
