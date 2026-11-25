@@ -69,13 +69,38 @@ import to.eyed.inferno.ui.theme.whiteA
  * chunk's parse alive. `TextDirection.Content` keeps RTL answers readable inside the LTR chrome.
  */
 @Composable
-fun MarkdownBody(text: String, modifier: Modifier = Modifier) {
-    val safeText = remember(text) { SafeMathMarkdown.sanitize(text) }
-    val chunks = remember(safeText) { MarkdownChunker.chunks(safeText) }
+fun MarkdownBody(text: String, modifier: Modifier = Modifier, streaming: Boolean = false) {
+    val chunks = remember(text) { MarkdownChunker.chunks(text) }
     SelectionContainer {
         Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            chunks.forEachIndexed { index, chunk -> key(index) { MarkdownChunkView(chunk) } }
+            chunks.forEachIndexed { index, chunk ->
+                key(index) {
+                    if (streaming && index == chunks.lastIndex) StreamingMarkdownTail(chunk)
+                    else MarkdownChunkView(SafeMathMarkdown.sanitize(chunk))
+                }
+            }
         }
+    }
+}
+
+/** Lightweight live tail: completed code fences get the custom lexer; prose avoids reparsing Markdown per token. */
+@Composable
+private fun StreamingMarkdownTail(chunk: String) {
+    val first = chunk.lineSequence().firstOrNull()?.trim().orEmpty()
+    val opener = Regex("^(\u0060{3,}|~{3,})([A-Za-z0-9_+.-]*)$").matchEntire(first)
+    if (opener != null) {
+        val marker = opener.groupValues[1]
+        val closeIndex = chunk.lines().indexOfFirstIndexed { index, line ->
+            index > 0 && line.trim().let { it.length >= marker.length && it.all { c -> c == marker[0] } }
+        }
+        val codeLines = chunk.lines().drop(1).let { lines -> if (closeIndex > 0) lines.take(closeIndex - 1) else lines }
+        MonoCodeBlock(codeLines.joinToString("\n"), opener.groupValues[2])
+    } else {
+        Text(
+            chunk,
+            style = Typography.bodyLarge.copy(color = Ink.I100, textDirection = TextDirection.Content),
+            color = Ink.I100,
+        )
     }
 }
 
