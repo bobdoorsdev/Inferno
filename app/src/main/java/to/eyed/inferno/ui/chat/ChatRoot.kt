@@ -114,6 +114,7 @@ fun ChatRoot(appVm: AppViewModel, chatVm: ChatViewModel, onBeforeSend: () -> Uni
     val pending by chatVm.pending.collectAsStateWithLifecycle()
     val usage by chatVm.contextUsage.collectAsStateWithLifecycle()
     val imageBusy by chatVm.imageBusy.collectAsStateWithLifecycle()
+    val webSearching by chatVm.webSearching.collectAsStateWithLifecycle()
     val conversations by chatVm.conversations.collectAsStateWithLifecycle()
     val activeId by chatVm.activeId.collectAsStateWithLifecycle()
     val busyIds by chatVm.busyIds.collectAsStateWithLifecycle()
@@ -147,7 +148,7 @@ fun ChatRoot(appVm: AppViewModel, chatVm: ChatViewModel, onBeforeSend: () -> Uni
         else -> loaded?.let { it.hasVision && it.visionAllowed } ?: false
     }
     val noVisionReason = if (loaded != null && loaded.hasVision && !loaded.visionAllowed) S.noMemoryForVision else S.noVision
-    val thinkingAvailable = loaded?.model?.catalog?.thinking?.hasTags == true
+    val thinkingAvailable = loaded?.model?.catalog?.thinking?.hasTags == true || idleModel?.catalog?.thinking?.hasTags == true || (engine as? EngineState.Loading)?.model?.catalog?.thinking?.hasTags == true
     val disabledReason = when {
         engine is EngineState.Idle && !idleLoadable -> S.chooseModelToStart
         engine is EngineState.Error -> S.composerLoadModelToStart
@@ -331,7 +332,8 @@ fun ChatRoot(appVm: AppViewModel, chatVm: ChatViewModel, onBeforeSend: () -> Uni
                                         gen = gen, engine = engine, disabledReason = disabledReason, imageBusy = imageBusy,
                                         onSend = send, onStop = chatVm::cancel,
                                         // The Think chip is a power-user control (Settings > Generation owns the same switch).
-                                        thinkingAvailable = thinkingAvailable && settings.powerUser, thinkingOn = settings.thinking, onToggleThinking = appVm::setThinking,
+                                        thinkingAvailable = thinkingAvailable, thinkingOn = settings.thinking, onToggleThinking = appVm::setThinking,
+                                        webSearching = webSearching,
                                     )
                                 }
                             }
