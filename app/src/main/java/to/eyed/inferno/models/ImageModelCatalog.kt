@@ -104,7 +104,7 @@ object ImageModelCatalog {
             sha256 = "dd06826d1eca711efa38190395a5ee949d0427fc6422c39433358a815e5b066c",
         ),
         minSteps = 2,
-        maxSteps = 8,
+        maxSteps = 50,
         estSecondsBySize = mapOf(384 to 33, 512 to 63),
         peakRamBytes = 2_000_000_000L,
         secondsPerStepAtNative = 13.5f,
