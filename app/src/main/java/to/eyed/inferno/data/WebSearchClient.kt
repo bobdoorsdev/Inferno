@@ -2,6 +2,7 @@ package to.eyed.inferno.data
 
 import android.net.Uri
 import android.text.Html
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -18,7 +19,15 @@ data class WebSearchResult(val title: String, val url: String, val snippet: Stri
 class WebSearchClient(private val client: OkHttpClient = DEFAULT_CLIENT) {
     suspend fun searchAll(queries: List<String>): List<WebSearchResult> = coroutineScope {
         queries.map(String::trim).filter { it.length >= 2 }.distinct().take(2)
-            .map { query -> async { runCatching { search(query) }.getOrDefault(emptyList()) } }
+            .map { query -> async {
+                try {
+                    search(query)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    emptyList()
+                }
+            } }
             .awaitAll().flatten().distinctBy { it.url }.take(5)
     }
 
