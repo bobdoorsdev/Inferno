@@ -21,7 +21,7 @@ object AssistantToolRouter {
 
     fun shouldRouteLocally(text: String): Boolean {
         val value = text.lowercase(Locale.ROOT)
-        val asksTime = Regex("""\b(current time|what time is it|what's the time|time right now|what date is it|current date|today's date|date today|what day is it|day of the week|time zone|timezone|how long until|how many days until)\b""").containsMatchIn(value)
+        val asksTime = Regex("""\b(current time|real time|time now|what time is it|what's the time|time right now|what date is it|current date|today's date|date today|what day is it|day of the week|time zone|timezone|how long until|how many days until)\b""").containsMatchIn(value)
         val asksMath = Regex("""\b(calculate|compute|evaluate|work out|what is|how much is|what's|convert)\b""").containsMatchIn(value) &&
             Regex("""\d""").containsMatchIn(value) &&
             Regex("""[+\-*/%^×÷]|\b(plus|minus|times|multiplied|divided|percent|percentage|square root|fahrenheit|celsius|kilometers|miles|kilograms|pounds)\b""").containsMatchIn(value)

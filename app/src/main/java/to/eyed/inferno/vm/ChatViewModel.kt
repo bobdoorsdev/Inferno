@@ -529,7 +529,8 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
             detail,
         ).collect { event ->
             when (event) {
-                is GenerationEvent.Token, is GenerationEvent.Thinking -> output.append(event.text)
+                is GenerationEvent.Token -> output.append(event.text)
+                is GenerationEvent.Thinking -> output.append(event.text)
                 is GenerationEvent.Error, GenerationEvent.NeedsTruncation -> failed = true
                 else -> Unit
             }

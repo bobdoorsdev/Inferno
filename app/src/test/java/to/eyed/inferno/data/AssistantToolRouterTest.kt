@@ -20,6 +20,7 @@ class AssistantToolRouterTest {
         assertFalse(AssistantToolRouter.shouldRouteLocally("Explain how neural networks learn."))
         assertFalse(AssistantToolRouter.shouldRouteLocally("Write a short poem about rain."))
         assertTrue(AssistantToolRouter.shouldRouteLocally("What time is it right now?"))
+        assertTrue(AssistantToolRouter.shouldRouteLocally("Get the real time."))
         assertTrue(AssistantToolRouter.shouldRouteLocally("How much is 18 * 24?"))
     }
 
