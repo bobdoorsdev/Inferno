@@ -210,6 +210,17 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
         handle[KEY_ACTIVE] = null
         c.chats.deleteAll()
     }
+
+    /** Opens a new conversation containing the messages up to the selected assistant response. */
+    fun branch(message: ChatMessage) = viewModelScope.launch {
+        val source = activeId.value ?: return@launch
+        if (gen.value.isBusy) return@launch
+        val fork = c.chats.branch(source, message.orderIndex) ?: return@launch
+        stopFull.update { it - fork.id }
+        handle[KEY_ACTIVE] = fork.id
+        appVmRef?.notice("Branch created")
+    }
+
     fun jumpToLatest() { /* UI-only helper: the list owner scrolls; kept for the 5.5 surface */ }
 
     // ---- attachments -----------------------------------------------------------------------------------------
