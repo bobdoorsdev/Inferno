@@ -51,6 +51,31 @@ class ChatRepository(private val dao: ChatDao, private val imageUtil: ImageUtil)
 
     suspend fun messagesOnce(conversationId: String): List<ChatMessage> = dao.messagesOnce(conversationId).map { it.toChatMessage() }
 
+    /** Forks a conversation through a selected reply; copied image rows retain shared blob references. */
+    suspend fun branch(conversationId: String, throughOrderIndex: Int): Conversation? {
+        val source = dao.conversation(conversationId) ?: return null
+        val rows = dao.messagesThrough(conversationId, throughOrderIndex)
+        if (rows.isEmpty()) return null
+        val now = System.currentTimeMillis()
+        val id = UUID.randomUUID().toString()
+        val baseTitle = source.title.ifBlank { "New chat" }.take(40)
+        dao.upsert(source.copy(
+            id = id,
+            title = "$baseTitle · branch",
+            createdAt = now,
+            updatedAt = now,
+            pinned = false,
+            archived = false,
+        ))
+        rows.forEach { row ->
+            val newMessageId = UUID.randomUUID().toString()
+            val copied = row.message.copy(id = newMessageId, conversationId = id)
+            val copiedImages = row.images.map { it.copy(messageId = newMessageId) }
+            dao.insertMessage(copied, copiedImages)
+        }
+        return dao.conversation(id)?.toConversation()
+    }
+
     suspend fun create(modelId: String?): Conversation {
         val now = System.currentTimeMillis()
         val c = ConversationEntity(id = UUID.randomUUID().toString(), title = "", createdAt = now, updatedAt = now, modelId = modelId)
