@@ -360,28 +360,23 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
         setGen(conversationId, GenState.Prefill(0, 0, false))
         var assistantId: String? = null
         var toolNotes: String? = null
-        var generatedTitle: String? = null
-        var autoTitleCandidate: String? = null
         try {
             var history = c.chats.messagesOnce(conversationId)
             val latestUserText = history.lastOrNull { it.role == ChatRepository.ROLE_USER }?.content.orEmpty()
-            val firstUserText = history.firstOrNull { it.role == ChatRepository.ROLE_USER }?.content.orEmpty()
-            val hasAssistantReply = history.any { it.role == ChatRepository.ROLE_ASSISTANT }
-            autoTitleCandidate = if (!hasAssistantReply && firstUserText.isNotBlank()) ChatRepository.titleFrom(firstUserText) else null
+            val webIntent = settings.webSearchEnabled && AssistantToolRouter.shouldConsiderWeb(latestUserText)
             val shouldRoute = latestUserText.isNotBlank() &&
-                (settings.webSearchEnabled || AssistantToolRouter.shouldRouteLocally(latestUserText) || autoTitleCandidate != null)
+                (webIntent || AssistantToolRouter.shouldRouteLocally(latestUserText))
             _toolStatus.value = null
             _toolSearchNotes.value = null
             val toolPlan = if (shouldRoute) {
                 try {
-                    chooseTools(history, thinking, detail, settings.webSearchEnabled, autoTitleCandidate != null)
+                    chooseTools(history, thinking, detail, webIntent, false)
                 } catch (e: CancellationException) {
                     throw e
                 } catch (_: Exception) {
                     AssistantToolPlan()
                 }
             } else AssistantToolPlan()
-            generatedTitle = toolPlan.title
             val calculation = toolPlan.calculation?.let(AssistantToolRouter::calculate)
             val localTime = if (toolPlan.currentTime) AssistantToolRouter.currentTime() else null
             val fallbackQuery = if (settings.webSearchEnabled) AssistantToolRouter.fallbackSearchQuery(latestUserText) else null
@@ -501,10 +496,6 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
                         ).joinToString("\n\n").takeIf { it.isNotBlank() }
                         if (assistantId == null) assistantId = c.chats.appendAssistant(conversationId, stream.textStr, finalThinking, stats).id
                         else c.chats.updateAssistant(assistantId, stream.textStr, finalThinking, stats)
-                        if (!generatedTitle.isNullOrBlank() && !autoTitleCandidate.isNullOrBlank()) {
-                            val currentTitle = conversations.value.firstOrNull { it.id == conversationId }?.title
-                            if (currentTitle == autoTitleCandidate) c.chats.setTitle(conversationId, generatedTitle!!.trim().take(48))
-                        }
                         _lastStats.value = ev.stats
                         if (ev.stats.imageEncodeMs > 0 && promptImages.isNotEmpty()) persistEncodeSample(model.id, detail, ev.stats.imageEncodeMs, promptImages)
                         appVm.markFirstTurnOk()
