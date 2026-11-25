@@ -402,7 +402,7 @@ private fun AnimatedCopyButton(label: String, onCopy: () -> Unit) {
         Modifier
             .height(32.dp)
             .clip(RoundedCornerShape(9.dp))
-            .background(if (copied) Ink.SurfaceHigh else Color.Transparent)
+            .background(Ink.Pitch)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
