@@ -35,7 +35,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.composables.icons.lucide.ArrowLeft
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.X
-import to.eyed.inferno.data.ExperienceLevel
 import to.eyed.inferno.data.GpuPref
 import to.eyed.inferno.data.PerfPreset
 import to.eyed.inferno.data.SettingsState
@@ -119,21 +118,8 @@ private fun SettingsBody(appVm: AppViewModel, chatVm: ChatViewModel, onOpenBench
     val loaded = (engine as? EngineState.Ready)?.loaded ?: (engine as? EngineState.Generating)?.loaded
     val catalog = engine.modelOrNull?.catalog
     var sheet by rememberSaveable { mutableStateOf("") }
-    val power = s.powerUser
-    val dev = s.developerMode
-
-    // ---- Experience: who these settings are for; everything below folds in and out with the choice ----------------
-    SectionHeader(S.experience, Modifier.padding(top = 0.dp))
-    SettingsCard {
-        ControlRow(S.experience) {
-            ConnectedGroup(listOf(S.levelNormal, S.levelPower, S.levelDeveloper), s.experienceLevel.ordinal, { appVm.setExperienceLevel(ExperienceLevel.entries[it]) })
-        }
-        CardDivider()
-        val fade = fastEffectsSpec<Float>()
-        AnimatedContent(s.experienceLevel, transitionSpec = { fadeIn(fade) togetherWith fadeOut(fade) }, label = "levelDesc") { level ->
-            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)) { Text(levelDescription(level), style = Typography.bodySmall, color = Ink.I500) }
-        }
-    }
+    val power = true
+    val dev = true
 
     // ---- Performance (power+): the one top-level engine decision; developers also get the Compute facts -----------
     TierSection(power) {
@@ -186,35 +172,23 @@ private fun SettingsBody(appVm: AppViewModel, chatVm: ChatViewModel, onOpenBench
         }
     }
 
-    // ---- Chat (everyone): plain words only ----------------------------------------------------------------------
-    SectionHeader(S.chat)
+    // ---- Chat + storage -----------------------------------------------------------------------------------------
+    SectionHeader("Chat & storage")
     SettingsCard {
-        ControlRow(S.photoQuality, description = imageDetailLine(s, loaded, catalog?.encodeMsAt448, s.devGenerationStats)) {
-            ConnectedGroup(listOf(S.fast, S.balanced, S.highDetail), s.imageDetail.ordinal, { appVm.setImageDetail(ImageDetail.entries[it]) })
-        }
-        CardDivider()
         ToggleRow(S.stayReady, s.keepModelLoaded, appVm::setKeepModelLoaded, description = S.stayReadyDesc)
         CardDivider()
         ToggleRow(S.streamingAnimations, s.streamingAnimations, appVm::setStreamingAnimations, description = S.streamingAnimationsDesc)
         CardDivider()
         ToggleRow(S.haptics, s.haptics, appVm::setHaptics, description = S.hapticsDesc)
-    }
-
-    // ---- Storage (everyone) -------------------------------------------------------------------------------------
-    SectionHeader(S.storage)
-    SettingsCard {
+        CardDivider()
         val n = models.count { it.isDownloaded }
         SettingRow(S.modelsStorage, S.modelsStorageLine(n, DownloadService.fmt(storage.modelsBytes), storage.partialBytes.takeIf { it > 0 }?.let { DownloadService.fmt(it) })) {
             GlassButton(S.manage, onClick = onOpenModels)
         }
         CardDivider()
         ToggleRow(S.allowMetered, s.allowMeteredDownloads, appVm::setAllowMeteredDownloads, description = S.allowMeteredDesc)
-        TierSection(power) {
-            Column {
-                CardDivider()
-                SettingRow(S.clearImageCache, S.clearImageCacheDesc) { GlassButton(S.clear, onClick = appVm::clearImageCache) }
-            }
-        }
+        CardDivider()
+        SettingRow(S.clearImageCache, S.clearImageCacheDesc) { GlassButton(S.clear, onClick = appVm::clearImageCache) }
     }
 
     // ---- Advanced (developer): the engine knobs, the benchmark and the Developer page -----------------------------
