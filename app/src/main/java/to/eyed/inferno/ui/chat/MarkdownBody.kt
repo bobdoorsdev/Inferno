@@ -363,7 +363,7 @@ object MarkdownChunker {
             }
         }
         if (markerChar == null || start < 0) return source to null
-        return lines.take(start).joinToString("\n") to OpenFence(language, lines.drop(start + 1).joinToString("\n"))
+        return lines.take(start).joinToString("\n").trimEnd('\n') to OpenFence(language, lines.drop(start + 1).joinToString("\n"))
     }
 
     fun chunks(source: String): List<String> {
