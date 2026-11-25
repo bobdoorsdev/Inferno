@@ -29,7 +29,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
@@ -48,6 +47,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.collect
 import to.eyed.inferno.AppContainer
 import to.eyed.inferno.engine.EngineState
 import to.eyed.inferno.models.DownloadService
@@ -121,9 +121,9 @@ fun InfernoRoot(container: AppContainer, appVm: AppViewModel, chatVm: ChatViewMo
         // Model Ready -> one Confirm, only on a load completing (Loading -> Ready) and only while RESUMED.
         // Keyed on the transition, not on `is Ready`: every turn goes Ready -> Generating -> Ready and ChatRoot
         // already plays the Done confirm.
-        LaunchedEffect(Unit) {
-            var prev: EngineState = engine
-            snapshotFlow { engine }.collect { s ->
+        LaunchedEffect(appVm.engine) {
+            var prev: EngineState = appVm.engine.value
+            appVm.engine.collect { s ->
                 if (s is EngineState.Ready && prev is EngineState.Loading && lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
                     haptics.confirm()
                     modelReady = true
