@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -28,7 +30,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -40,6 +44,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil3.compose.AsyncImage
 import com.composables.icons.lucide.Check
 import com.composables.icons.lucide.Copy
 import com.composables.icons.lucide.Lucide
@@ -69,17 +74,17 @@ import to.eyed.inferno.ui.theme.whiteA
 /**
  * Assistant markdown in the monochrome language: white headings, I100 body, mono code on I900 cards,
  * white underlined links (never blue). Streaming strategy: the source is split into stable block-level
- * chunks so only the growing last chunk re-parses while tokens arrive; `key(index)` keeps every earlier
- * chunk's parse alive. `TextDirection.Content` keeps RTL answers readable inside the LTR chrome.
+ * chunks so only completed chunks enter the Markdown parser while tokens arrive; the live tail stays lightweight.
+ * Embedded image links are rendered with Coil at their original position. `TextDirection.Content` keeps RTL readable.
  */
 @Composable
 fun MarkdownBody(text: String, modifier: Modifier = Modifier, streaming: Boolean = false) {
-    val formatted = remember(text) { MarkdownMath.format(text) }
+    val formatted = remember(text, streaming) { if (streaming) text else SafeMathMarkdown.sanitize(MarkdownMath.format(text)) }
     val split = remember(formatted) { MarkdownChunker.splitOpenFence(formatted) }
     val chunks = remember(split.first) { MarkdownChunker.chunks(split.first) }
     SelectionContainer {
         Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            chunks.forEachIndexed { index, chunk -> key(index) { MarkdownChunkView(chunk) } }
+            chunks.forEachIndexed { index, chunk -> key(index) { if (streaming && index == chunks.lastIndex) StreamingMarkdownTail(chunk) else MarkdownChunkView(chunk) } }
             split.second?.let { fence ->
                 key("live-code") { MonoCodeBlock(fence.code, fence.language, streaming = streaming) }
             }
@@ -89,6 +94,78 @@ fun MarkdownBody(text: String, modifier: Modifier = Modifier, streaming: Boolean
 
 @Composable
 private fun MarkdownChunkView(chunk: String) {
+    val matches = remember(chunk) { MarkdownImagePattern.findAll(chunk).toList() }
+    if (matches.isEmpty()) {
+        MarkdownTextChunk(chunk)
+        return
+    }
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        var cursor = 0
+        matches.forEach { match ->
+            val start = match.range.first
+            if (start > cursor) {
+                val preceding = chunk.substring(cursor, start)
+                if (preceding.isNotBlank()) MarkdownTextChunk(preceding)
+            }
+            MarkdownImageCard(match.groupValues[1], match.groupValues[2])
+            cursor = match.range.last + 1
+        }
+        if (cursor < chunk.length) {
+            val trailing = chunk.substring(cursor)
+            if (trailing.isNotBlank()) MarkdownTextChunk(trailing)
+        }
+    }
+}
+
+private val MarkdownImagePattern = Regex("""!\[([^\]]*)\]\((https?://[^)\s]+)(?:\s+"[^"]*")?\)""")
+
+@Composable
+private fun MarkdownImageCard(alt: String, url: String) {
+    val uriHandler = LocalUriHandler.current
+    var failed by remember(url) { mutableStateOf(false) }
+    Column(
+        Modifier.widthIn(max = 360.dp).fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(5.dp),
+    ) {
+        if (!failed) {
+            AsyncImage(
+                model = url,
+                contentDescription = alt.ifBlank { "Search result image" },
+                contentScale = ContentScale.Crop,
+                onError = { failed = true },
+                modifier = Modifier.fillMaxWidth().heightIn(max = 240.dp)
+                    .clip(RoundedCornerShape(Radii.row))
+                    .background(Ink.SurfaceHigh)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        role = Role.Button,
+                    ) { runCatching { uriHandler.openUri(url) } },
+            )
+        } else {
+            Box(
+                Modifier.fillMaxWidth().heightIn(min = 64.dp).clip(RoundedCornerShape(Radii.row))
+                    .background(Ink.SurfaceHigh).padding(14.dp),
+                contentAlignment = Alignment.CenterStart,
+            ) {
+                Text("Image unavailable", style = Typography.bodySmall, color = Ink.I500)
+            }
+        }
+        if (alt.isNotBlank()) Text(alt, style = Typography.bodySmall, color = Ink.I500, maxLines = 2)
+    }
+}
+
+@Composable
+private fun StreamingMarkdownTail(chunk: String) {
+    Text(
+        chunk,
+        style = Typography.bodyLarge.copy(color = Ink.I100, textDirection = TextDirection.Content),
+        color = Ink.I100,
+    )
+}
+
+@Composable
+private fun MarkdownTextChunk(chunk: String) {
     val body = Typography.bodyLarge.copy(color = Ink.I100, textDirection = TextDirection.Content)
     // immediate parses the first composition synchronously (no blank frame) and retainState keeps the
     // previous tree on screen during the async re-parse; without both, each publish flashes the
@@ -174,7 +251,7 @@ fun MonoCodeBlock(code: String, language: String?, modifier: Modifier = Modifier
         }
         Hairline()
         Box(Modifier.horizontalScroll(rememberScrollState())) {
-            Text(highlightCode(trimmed, language), style = MonoBody, softWrap = false, modifier = Modifier.padding(14.dp))
+            Text(highlightCode(trimmed, language), style = MonoBody.copy(color = CodePalette.Text), softWrap = false, modifier = Modifier.padding(14.dp))
         }
     }
 }
@@ -187,20 +264,21 @@ private fun CopyChip(onCopy: () -> Unit) {
     LaunchedEffect(copied) { if (copied) { delay(1_600); copied = false } }
     Row(
         Modifier
-            .clip(RoundedCornerShape(8.dp))
+            .clip(RoundedCornerShape(10.dp))
+            .background(whiteA(0.06f))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
                 role = Role.Button,
             ) { haptics.tap(); onCopy(); copied = true }
-            .padding(horizontal = 8.dp, vertical = 7.dp),
+            .padding(horizontal = 11.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Icon(
             if (copied) Lucide.Check else Lucide.Copy,
             contentDescription = S.copyCode,
-            Modifier.size(12.dp),
+            Modifier.size(16.dp),
             tint = if (copied) Ink.White else Ink.I500,
         )
         Text(if (copied) S.copied else S.copy, style = RowMeta, color = if (copied) Ink.White else Ink.I500)
@@ -296,37 +374,6 @@ internal object MarkdownMath {
         value.map { table[it] ?: it }.joinToString("").let { result -> if (result.any { it !in table.values }) fallback else result }
 }
 
-private fun highlightCode(code: String, language: String?): AnnotatedString {
-    val keywords = setOf(
-        "abstract", "as", "async", "await", "break", "case", "catch", "class", "const", "continue",
-        "def", "do", "else", "elseif", "enum", "export", "extends", "false", "final", "finally",
-        "for", "foreach", "from", "fun", "function", "if", "implements", "import", "in", "interface",
-        "let", "local", "mut", "new", "nil", "null", "of", "override", "package", "private",
-        "protected", "public", "raise", "return", "self", "static", "super", "switch", "this",
-        "throw", "true", "try", "type", "typeof", "var", "val", "void", "while", "yield"
-    )
-    val types = setOf("Any", "Boolean", "Char", "Double", "Float", "Int", "Integer", "List", "Map", "Object", "String", "Table", "Vector", "number", "string", "boolean", "table", "nil")
-    val tokens = Regex("""<!--.*?-->|//[^\n]*|#[^\n]*|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\x60[^\x60]*\x60|</?[A-Za-z][^>]*>|&[A-Za-z0-9#]+;|\b[A-Za-z_][A-Za-z0-9_]*\b|\b\d+(?:\.\d+)?\b""")
-    return buildAnnotatedString {
-        var offset = 0
-        tokens.findAll(code).forEach { match ->
-            append(code.substring(offset, match.range.first))
-            val token = match.value
-            val color = when {
-                token.startsWith("<!--") || token.startsWith("//") || token.startsWith("#") -> Color(0xFF6A9955)
-                token.startsWith('"') || token.startsWith('\'') || token.startsWith(96.toChar()) -> Color(0xFFCE9178)
-                token.startsWith("<") || token.startsWith("&") -> Color(0xFF569CD6)
-                token.firstOrNull()?.isDigit() == true -> Color(0xFFB5CEA8)
-                token in keywords -> Color(0xFFC586C0)
-                token in types -> Color(0xFF4EC9B0)
-                else -> Color(0xFFDCDCAA)
-            }
-            withStyle(SpanStyle(color = color)) { append(token) }
-            offset = match.range.last + 1
-        }
-        append(code.substring(offset))
-    }
-}
 
 /**
  * Splits markdown into independently renderable chunks on blank lines, keeping fenced code blocks
