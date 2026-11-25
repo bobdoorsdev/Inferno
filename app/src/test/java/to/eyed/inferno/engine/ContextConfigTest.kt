@@ -27,7 +27,8 @@ class ContextConfigTest {
     }
 
     @Test fun invariantsRejectNativeAssertInputs() {
-        assertThrows(IllegalArgumentException::class.java) { ContextConfig(nCtx = 1024) }              // < MIN_CTX
+        assertThrows(IllegalArgumentException::class.java) { ContextConfig(nCtx = 256) }               // < MIN_CTX
+        ContextConfig(nCtx = 512)                                                                       // new minimum window
         assertThrows(IllegalArgumentException::class.java) { ContextConfig(nCtx = 4100) }              // not a multiple of 256
         assertThrows(IllegalArgumentException::class.java) { ContextConfig(nCtx = 4096, nBatch = 1024, nUbatch = 512) }
         assertThrows(IllegalArgumentException::class.java) { ContextConfig(nCtx = 4096, nBatch = 256, nUbatch = 256) }
