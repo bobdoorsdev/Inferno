@@ -337,7 +337,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
         val thinking = catalog?.thinking ?: ThinkingSpec()
         val thinkingOn = settings.thinking && thinking.hasTags
         val params = appVm.effectiveParams()
-        val detail = settings.imageDetail
+        val detail = ImageDetail.HIGH
         val stream = Streamer(conversationId)
         setGen(conversationId, GenState.Prefill(0, 0, false))
         var assistantId: String? = null
