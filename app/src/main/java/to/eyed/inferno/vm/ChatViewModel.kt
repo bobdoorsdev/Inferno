@@ -558,7 +558,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
         }
     }
 
-    /** Accumulates the turn and publishes GenState at <= 12.5 Hz with a tok/s figure refreshed at 2 Hz. */
+    /** Accumulates the turn and publishes GenState at <= 20 Hz with a tok/s figure refreshed at 2 Hz. */
     private inner class Streamer(private val id: String) {
         val text = StringBuilder()
         val reasoning = StringBuilder()
@@ -660,7 +660,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
         const val NO_CHAT = ""
         const val MAX_ATTACHMENTS = 2
         const val MAX_PROMPT_IMAGES = 8
-        const val PUBLISH_NS = 80_000_000L
+        const val PUBLISH_NS = 50_000_000L
         const val TPS_NS = 500_000_000L
         const val PERSIST_NS = 2_000_000_000L
         const val PERSIST_TOKENS = 200
