@@ -30,6 +30,7 @@ import to.eyed.inferno.data.ChatRepository
 import to.eyed.inferno.data.ContextPolicy
 import to.eyed.inferno.data.Conversation
 import to.eyed.inferno.data.MessageStats
+import to.eyed.inferno.data.WebSearchClient
 import to.eyed.inferno.engine.ContextManager
 import to.eyed.inferno.engine.EngineState
 import to.eyed.inferno.engine.loadedAny
@@ -97,6 +98,9 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
     val lastStats: StateFlow<GenerationStats?> = _lastStats.asStateFlow()
     private val _trimmedNotice = MutableStateFlow(0)
     val trimmedNotice: StateFlow<Int> = _trimmedNotice.asStateFlow()
+    private val webSearchClient = WebSearchClient()
+    private val _webSearching = MutableStateFlow(false)
+    val webSearching: StateFlow<Boolean> = _webSearching.asStateFlow()
 
     /** Wall time of the last model switch: assistant turns older than it carry a stale kvUsed (5.5 contextUsage). */
     private var modelSwitchAt = 0L
@@ -343,6 +347,23 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
         var assistantId: String? = null
         try {
             var history = c.chats.messagesOnce(conversationId)
+            val webResults = if (settings.webSearchEnabled) {
+                val query = history.lastOrNull { it.role == ChatRepository.ROLE_USER }?.content
+                if (query.isNullOrBlank()) emptyList() else {
+                    _webSearching.value = true
+                    try {
+                        webSearchClient.search(query).also { if (it.isEmpty()) appVmRef?.notice(S.webSearchFailed) }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        appVmRef?.notice(S.webSearchFailed)
+                        emptyList()
+                    } finally {
+                        _webSearching.value = false
+                    }
+                }
+            } else emptyList()
+            val webContext = WebSearchClient.promptContext(webResults)
             val conv = conversations.value.firstOrNull { it.id == conversationId }
             val nCtx = loaded.context.nCtx
             val reserve = c.contextManager.reserveFor(params, nCtx, thinkingOn)
@@ -356,7 +377,9 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
                 val images: List<PromptImage> = if (loaded.visionAllowed && loaded.hasVision) attachments.map { c.images.toPromptImage(it, model, detail) } else emptyList()
                 val keep = images.map { it.id }.toSet()
                 val messages0 = view.prompt().map { it.copy(imageIds = it.imageIds.filter { id -> id in keep }) }
-                return Triple(ContextManager.systemWith(systemPrompt, view.summary?.content), messages0, images)
+                val baseSystem = ContextManager.systemWith(systemPrompt, view.summary?.content)
+                val fullSystem = listOfNotNull(baseSystem, webContext).joinToString("\n\n").takeIf { it.isNotBlank() }
+                return Triple(fullSystem, messages0, images)
             }
             var (system, messages0, images) = parts()
             // (2) the context policy decides what the model sees when the window is tight.
@@ -421,8 +444,9 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
                     }
                     is GenerationEvent.Done -> {
                         val stats = toStats(ev.stats, ev.reason.name, model.id, loaded, params).copy(thinkingMs = stream.thinkingMs)
-                        if (assistantId == null) assistantId = c.chats.appendAssistant(conversationId, stream.textStr, stream.reasoningOrNull(), stats).id
-                        else c.chats.updateAssistant(assistantId, stream.textStr, stream.reasoningOrNull(), stats)
+                        val finalText = WebSearchClient.appendSources(stream.textStr, webResults)
+                        if (assistantId == null) assistantId = c.chats.appendAssistant(conversationId, finalText, stream.reasoningOrNull(), stats).id
+                        else c.chats.updateAssistant(assistantId, finalText, stream.reasoningOrNull(), stats)
                         _lastStats.value = ev.stats
                         if (ev.stats.imageEncodeMs > 0 && promptImages.isNotEmpty()) persistEncodeSample(model.id, detail, ev.stats.imageEncodeMs, promptImages)
                         appVm.markFirstTurnOk()
