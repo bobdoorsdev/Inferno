@@ -68,7 +68,7 @@ Return JSON only: {"search_queries":[],"image_queries":[],"calculation":"","curr
         }.distinct().take(2).map { it.take(180) }
         val calculation = root["calculation"]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() && it.length <= 128 }
         val currentTime = root["current_time"]?.jsonPrimitive?.booleanOrNull == true
-        val title = root["title"]?.jsonPrimitive?.contentOrNull?.trim()?.replace(Regex("\s+"), " ")?.take(48)?.takeIf { it.isNotEmpty() }
+        val title = root["title"]?.jsonPrimitive?.contentOrNull?.trim()?.replace(Regex("""\s+"""), " ")?.take(48)?.takeIf { it.isNotEmpty() }
         return AssistantToolPlan(queries, calculation, currentTime, imageQueries, title)
     }
 
