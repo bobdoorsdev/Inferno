@@ -398,29 +398,31 @@ private fun AnimatedCopyButton(label: String, onCopy: () -> Unit) {
             copied = false
         }
     }
-    Box(
-        Modifier.minimumInteractiveComponentSize().size(32.dp).clip(CircleShape).clickable(
-            interactionSource = remember { MutableInteractionSource() },
-            indication = null,
-            role = Role.Button,
-        ) {
-            haptics.tap()
-            onCopy()
-            copied = true
-        },
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(Lucide.Copy, if (copied) S.copied else label, Modifier.size(15.dp), tint = if (copied) Ink.I100 else Ink.I500)
-        AnimatedVisibility(
-            visible = copied,
-            modifier = Modifier.align(Alignment.BottomEnd),
-            enter = scaleIn(fastSpatialSpec()) + fadeIn(defaultEffectsSpec()),
-            exit = scaleOut(fastSpatialSpec()) + fadeOut(defaultEffectsSpec()),
-        ) {
-            Box(Modifier.size(13.dp).clip(CircleShape).background(Ink.White), contentAlignment = Alignment.Center) {
-                Icon(Lucide.Check, null, Modifier.size(9.dp), tint = Ink.Pitch)
+    Row(
+        Modifier
+            .height(32.dp)
+            .clip(RoundedCornerShape(9.dp))
+            .background(if (copied) Ink.SurfaceHigh else Color.Transparent)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                role = Role.Button,
+            ) {
+                haptics.tap()
+                onCopy()
+                copied = true
             }
-        }
+            .padding(horizontal = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Icon(
+            if (copied) Lucide.Check else Lucide.Copy,
+            contentDescription = if (copied) S.copied else label,
+            Modifier.size(15.dp),
+            tint = if (copied) Ink.White else Ink.I500,
+        )
+        if (copied) Text(S.copied, style = RowMeta, color = Ink.White)
     }
 }
 
