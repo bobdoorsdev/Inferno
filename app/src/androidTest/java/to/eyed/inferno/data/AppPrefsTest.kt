@@ -57,7 +57,7 @@ class AppPrefsTest {
                 repeatLastN = 128, frequencyPenalty = 0.2f, presencePenalty = 1.5f, dryMultiplier = 0.8f, dryBase = 1.5f,
                 dryAllowedLength = 3, dryPenaltyLastN = 256, seed = 7, maxTokens = 512),
             useModelSamplingDefaults = false, systemPrompt = "You are terse. é—🦉", thinking = true, imageDetail = ImageDetail.HIGH,
-            streamingAnimations = false, haptics = false, allowMeteredDownloads = true, notificationsAsked = true,
+            streamingAnimations = false, haptics = false, webSearchEnabled = true, allowMeteredDownloads = true, notificationsAsked = true,
             selectedModelId = "qwen3.5-2b-q4_0", onboardingDone = true, minLogPriority = 3,
             loadAttemptModelId = "gemma-4-e2b-q4_0", lastLoadCrashModelId = "minicpm-v-4.6-q4_0",
             calibration = mapOf("qwen3.5-2b-q4_0" to Calibration(86.6, 14.8, 2100, 1700000000000,
