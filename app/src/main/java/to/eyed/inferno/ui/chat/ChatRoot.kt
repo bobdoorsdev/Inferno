@@ -310,7 +310,7 @@ fun ChatRoot(appVm: AppViewModel, chatVm: ChatViewModel, onBeforeSend: () -> Uni
                             MessagesList(
                                 messages = messages, gen = gen, listState = listState, trimmedBefore = trimmedBefore,
                                 announceId = announceId, imageScope = imageScope,
-                                onRegenerate = chatVm::regenerate, onOpenImage = { viewerId = it.id },
+                                onRegenerate = chatVm::regenerate, onBranch = chatVm::branch, onOpenImage = { viewerId = it.id },
                                 onOpenTurnDetails = { detailsId = it.id }, onEdit = { editId = it.id },
                                 modifier = Modifier.fillMaxSize(),
                                 // The composer starts with a 32 dp gradient; the last turn rests 8 dp into it, so it never fades yet still scrolls under.
