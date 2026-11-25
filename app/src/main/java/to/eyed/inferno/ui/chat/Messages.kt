@@ -160,20 +160,20 @@ fun SharedTransitionScope.MessagesList(
             verticalArrangement = Arrangement.spacedBy(24.dp, Alignment.Bottom),
         ) {
             if (live is Live.Item) item(key = "live", contentType = "live") {
-                if (toolStatus != null || toolSearchNotes != null) {
+                if (gen is GenState.Streaming && gen.text.isNotBlank()) {
+                    AssistantMessage(
+                        text = gen.text, reasoning = gen.reasoning, thinkingMs = gen.thinkingMs, streaming = true,
+                        stats = null, showActions = false, showRegenerate = false, announce = false,
+                        searchNotes = toolSearchNotes, toolStatus = toolStatus,
+                        onRegenerate = {}, onDetails = {}, liveMeta = liveMeta,
+                    )
+                } else if (toolStatus != null || toolSearchNotes != null) {
                     AssistantActivityPanel(
                         reasoning = (gen as? GenState.Thinking)?.reasoning.orEmpty(),
                         searchNotes = toolSearchNotes,
                         status = toolStatus,
                         live = true,
                         thinkingMs = (gen as? GenState.Thinking)?.thinkingMs ?: 0L,
-                    )
-                } else if (gen is GenState.Streaming && gen.text.isNotBlank()) {
-                    AssistantMessage(
-                        text = gen.text, reasoning = gen.reasoning, thinkingMs = gen.thinkingMs, streaming = true,
-                        stats = null, showActions = false, showRegenerate = false, announce = false,
-                        searchNotes = toolSearchNotes, toolStatus = toolStatus,
-                        onRegenerate = {}, onDetails = {}, liveMeta = liveMeta,
                     )
                 } else ThinkingIndicator(gen, tokenWords = dev.tokenWords)
             }
