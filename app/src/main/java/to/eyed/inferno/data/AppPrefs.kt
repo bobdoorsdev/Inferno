@@ -72,7 +72,7 @@ data class SettingsState(
     val useModelSamplingDefaults: Boolean = true,
     val systemPrompt: String = "",
     val thinking: Boolean = false,
-    val imageDetail: ImageDetail = ImageDetail.BALANCED,
+    val imageDetail: ImageDetail = ImageDetail.HIGH,
     // chat
     val streamingAnimations: Boolean = true,
     val haptics: Boolean = true,
@@ -250,7 +250,7 @@ internal fun Preferences.toState(): SettingsState {
         useModelSamplingDefaults = this[K.useModelSamplingDefaults] ?: d.useModelSamplingDefaults,
         systemPrompt = this[K.systemPrompt] ?: d.systemPrompt,
         thinking = this[K.thinking] ?: d.thinking,
-        imageDetail = enum(this[K.imageDetail], d.imageDetail),
+        imageDetail = ImageDetail.HIGH,
         streamingAnimations = this[K.streamingAnimations] ?: d.streamingAnimations,
         haptics = this[K.haptics] ?: d.haptics,
         webSearchEnabled = this[K.webSearchEnabled] ?: d.webSearchEnabled,
