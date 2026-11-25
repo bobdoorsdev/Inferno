@@ -481,7 +481,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
                         stream.token(ev.text)
                         if (assistantId == null) assistantId = c.chats.appendAssistant(conversationId, stream.textStr, stream.reasoningOrNull(), null).id
                         else if (stream.shouldPersist()) c.chats.updateAssistant(assistantId!!, stream.textStr, stream.reasoningOrNull(), null)
-                        stream.publish(false)
+                        stream.publish(ev.text.contains('\n'))
                     }
                     is GenerationEvent.Done -> {
                         val stats = toStats(ev.stats, ev.reason.name, model.id, loaded, params).copy(thinkingMs = stream.thinkingMs)
