@@ -3,8 +3,15 @@
 package to.eyed.inferno.ui.components
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -24,6 +31,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -107,5 +116,28 @@ fun MorphingMark(
         contentAlignment = Alignment.Center,
     ) {
         OwlMark(size * 0.56f, color = owlColor)
+    }
+}
+
+
+/** Branded loader: a rotating two-part orbit around the owl, used for loading and calibration. */
+@Composable
+fun LoadingMark(size: Dp, active: Boolean, modifier: Modifier = Modifier) {
+    val motion = rememberInfiniteTransition(label = "loadingOrbit")
+    val rotation by motion.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(tween(1_500, easing = LinearEasing)),
+        label = "loadingOrbitRotation",
+    )
+    Box(modifier.size(size).clearAndSetSemantics {}, contentAlignment = Alignment.Center) {
+        Canvas(Modifier.fillMaxSize()) {
+            val stroke = size.minDimension * 0.075f
+            drawArc(Ink.SurfaceHigh, 0f, 360f, false, style = Stroke(stroke, cap = StrokeCap.Round))
+            drawArc(Ink.I500, -78f, 78f, false, style = Stroke(stroke, cap = StrokeCap.Round))
+            drawArc(Ink.White, if (active) rotation else -32f, 118f, false, style = Stroke(stroke, cap = StrokeCap.Round))
+            drawArc(Ink.I300, if (active) rotation + 196f else 164f, 24f, false, style = Stroke(stroke, cap = StrokeCap.Round))
+        }
+        MorphingMark(size * 0.62f, active = active)
     }
 }
