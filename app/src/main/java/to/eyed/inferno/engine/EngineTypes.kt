@@ -29,7 +29,7 @@ data class ContextConfig(
     val nOutputsMax: Int = 8,
 ) {
     init {
-        require(nCtx % 256 == 0 && nCtx >= 2048) { "nCtx must be a multiple of 256 and >= 2048" }
+        require(nCtx % 256 == 0 && nCtx >= ContextManager.MIN_CTX) { "nCtx must be a multiple of 256 and >= ${ContextManager.MIN_CTX}" }
         require(nBatch == nUbatch && nBatch >= 512 && nBatch % 64 == 0) { "nBatch/nUbatch" }
         require(kvType == KvCacheType.F16 || flashAttention) { "quantized KV cache requires flash attention" }
         require(nOutputsMax >= 1)
