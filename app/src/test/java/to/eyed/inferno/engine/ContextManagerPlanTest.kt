@@ -40,9 +40,10 @@ class ContextManagerPlanTest {
     private fun gate(avail: Long) = (ContextManager.BUDGET_GATE * ContextManager.budgetBytes(avail)).toLong()
 
     @Test fun context512TokenIsValidAndOutputReserveCannotOverrunIt() {
+        val manager = ContextManager(AnalyticEngine())
         assertEquals(512, ContextConfig(nCtx = 512).nCtx)
-        assertTrue(ContextManager.reserveFor(GenerationParams(), 512, false) <= 128)
-        assertTrue(ContextManager.reserveFor(GenerationParams(maxTokens = 4096), 512, true) <= 256)
+        assertTrue(manager.reserveFor(GenerationParams(), 512, false) <= 128)
+        assertTrue(manager.reserveFor(GenerationParams(maxTokens = 4096), 512, true) <= 256)
     }
 
     @Test fun autoGrowsAboveTheCatalogFloorWhenMemoryAllows() = runBlocking {
