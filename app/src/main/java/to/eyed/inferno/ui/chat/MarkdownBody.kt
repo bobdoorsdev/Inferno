@@ -90,9 +90,9 @@ private fun StreamingMarkdownTail(chunk: String) {
     val opener = Regex("^(\u0060{3,}|~{3,})([A-Za-z0-9_+.-]*)$").matchEntire(first)
     if (opener != null) {
         val marker = opener.groupValues[1]
-        val closeIndex = chunk.lines().indexOfFirstIndexed { index, line ->
+        val closeIndex = chunk.lines().withIndex().firstOrNull { (index, line) ->
             index > 0 && line.trim().let { it.length >= marker.length && it.all { c -> c == marker[0] } }
-        }
+        }?.index ?: -1
         val codeLines = chunk.lines().drop(1).let { lines -> if (closeIndex > 0) lines.take(closeIndex - 1) else lines }
         MonoCodeBlock(codeLines.joinToString("\n"), opener.groupValues[2])
     } else {
