@@ -11,12 +11,22 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.pow
 
-data class AssistantToolPlan(val searchQueries: List<String> = emptyList(), val calculation: String? = null, val currentTime: Boolean = false)
+data class AssistantToolPlan(
+    val searchQueries: List<String> = emptyList(),
+    val calculation: String? = null,
+    val currentTime: Boolean = false,
+    val imageQueries: List<String> = emptyList(),
+    val title: String? = null,
+)
 data class LocalCalculation(val expression: String, val result: String)
+data class WebImageResult(val title: String, val imageUrl: String, val sourceUrl: String)
+data class AssistantToolNotes(val reasoning: String, val search: String?, val local: String?)
 
 /** The local model chooses tools; arithmetic and clock values are computed on-device. */
 object AssistantToolRouter {
     const val NOTES_MARKER = "<!-- INFERNO_TOOLS -->"
+    const val SEARCH_MARKER = "<!-- INFERNO_SEARCH -->"
+    const val LOCAL_MARKER = "<!-- INFERNO_LOCAL -->"
     val EMPTY = AssistantToolPlan()
 
     fun shouldRouteLocally(text: String): Boolean {
@@ -29,16 +39,17 @@ object AssistantToolRouter {
         return asksTime || asksMath || bareExpression
     }
 
-    fun prompt(allowWeb: Boolean): String {
-        val webRule = if (allowWeb) "Web search is allowed for current facts, news, latest releases, prices, schedules, weather, obscure facts, or explicit source requests. Skip stable knowledge and creative tasks. Choose up to two focused queries. "
-        else "Web search is disabled; never request it. "
+    fun prompt(allowWeb: Boolean, createTitle: Boolean = false): String {
+        val webRule = if (allowWeb) "Search the web for current facts, news, latest releases, prices, schedules, weather, obscure facts, and explicit lookup requests. Do not search stable knowledge or creative tasks. Never skip an obviously current lookup. Choose up to two focused queries. " else "Web search is disabled; never request web or image search. "
+        val titleRule = if (createTitle) "Also create a concise, natural 2–6 word chat title from the first user request. " else "Set title to an empty string. "
         return """
-You plan tools for an offline-first assistant. Judge the latest user request and use recent turns to resolve references.
-$webRule
+You are the tool planner for an offline-first assistant. Judge the latest user request and use recent turns to resolve references.
+$webRule$titleRule
+Image search: choose up to two image_queries only when actual pictures materially help answer the request or the user asks to see images. Never search for decorative images.
 Calculator: use for exact arithmetic or unit conversion. Return only an expression with numbers, parentheses, + - * / % ^. Never guess changing rates.
 Device clock: current local date, time, and time zone. Use only for now/today or time-relative requests.
 Do not use tools when a direct answer is enough. Never invent results.
-Return JSON only: {"search_queries":[],"calculation":"","current_time":false}
+Return JSON only: {"search_queries":[],"image_queries":[],"calculation":"","current_time":false,"title":""}
 """.trim()
     }
 
@@ -51,9 +62,14 @@ Return JSON only: {"search_queries":[],"calculation":"","current_time":false}
             is JsonArray -> element.mapNotNull { it.jsonPrimitive.contentOrNull?.trim()?.takeIf(String::isNotEmpty) }
             else -> element?.jsonPrimitive?.contentOrNull?.trim()?.takeIf(String::isNotEmpty)?.let(::listOf).orEmpty()
         }.distinct().take(2).map { it.take(180) }
+        val imageQueries = when (val element = root["image_queries"]) {
+            is JsonArray -> element.mapNotNull { it.jsonPrimitive.contentOrNull?.trim()?.takeIf(String::isNotEmpty) }
+            else -> element?.jsonPrimitive?.contentOrNull?.trim()?.takeIf(String::isNotEmpty)?.let(::listOf).orEmpty()
+        }.distinct().take(2).map { it.take(180) }
         val calculation = root["calculation"]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() && it.length <= 128 }
         val currentTime = root["current_time"]?.jsonPrimitive?.booleanOrNull == true
-        return AssistantToolPlan(queries, calculation, currentTime)
+        val title = root["title"]?.jsonPrimitive?.contentOrNull?.trim()?.replace(Regex("\\s+"), " ")?.take(48)?.takeIf { it.isNotEmpty() }
+        return AssistantToolPlan(queries, calculation, currentTime, imageQueries, title)
     }
 
     fun calculate(expression: String): LocalCalculation? = runCatching {
@@ -85,29 +101,85 @@ Return JSON only: {"search_queries":[],"calculation":"","current_time":false}
         }
     }
 
-    /** Tool references are stored in the collapsible Think panel, not in the visible answer. */
-    fun notes(results: List<WebSearchResult>, calculation: LocalCalculation?, currentTime: String?, searchQueries: List<String> = emptyList()): String? {
-        if (results.isEmpty() && calculation == null && currentTime == null && searchQueries.isEmpty()) return null
+    /** Search evidence and local tools are stored separately so the UI can reopen their own tabs later. */
+    fun searchNotes(results: List<WebSearchResult>, searchQueries: List<String>, images: List<WebImageResult> = emptyList()): String? {
+        if (results.isEmpty() && searchQueries.isEmpty() && images.isEmpty()) return null
         return buildString {
-            append(NOTES_MARKER).append("\n\n")
             if (searchQueries.isNotEmpty()) {
-                append("**Web search**\n")
-                searchQueries.forEach { query -> append("- ").append(query.replace(96.toChar().toString(), "")).append('\n') }
-                if (results.isNotEmpty()) append('\n')
+                append("**Web search**\\n")
+                searchQueries.forEach { append("- ").append(it.replace(96.toChar().toString(), "")).append('\\n') }
+                append('\\n')
             }
             if (results.isNotEmpty()) {
-                append("**Web sources**\n")
-                results.forEachIndexed { index, result -> append(index + 1).append(". [").append(result.title).append("](").append(result.url).append(")\n") }
+                append("**Web sources**\\n")
+                results.forEachIndexed { index, result ->
+                    append(index + 1).append(". [").append(result.title).append("](").append(result.url).append(")")
+                    if (result.snippet.isNotBlank()) append(" — ").append(result.snippet)
+                    append('\\n')
+                }
             }
-            if (calculation != null) {
-                if (results.isNotEmpty()) append('\n')
-                append("**Calculator**\n").append(96.toChar()).append(calculation.expression).append(" = ").append(calculation.result).append(96.toChar()).append('\n')
+            if (images.isNotEmpty()) {
+                append("\\n**Images**\\n")
+                images.forEach { image ->
+                    append("![ ").append(image.title.replace(']', ' ')).append(" ](").append(image.imageUrl).append(")\\n")
+                    append("[Image source](").append(image.sourceUrl).append(")\\n")
+                }
             }
-            if (currentTime != null) {
-                if (results.isNotEmpty() || calculation != null) append('\n')
-                append("**Local time**\n").append(currentTime)
+        }.trim()
+    }
+
+    fun notes(
+        results: List<WebSearchResult>,
+        calculation: LocalCalculation?,
+        currentTime: String?,
+        searchQueries: List<String> = emptyList(),
+        images: List<WebImageResult> = emptyList(),
+    ): String? {
+        val search = searchNotes(results, searchQueries, images)
+        if (search == null && calculation == null && currentTime == null) return null
+        return buildString {
+            append(NOTES_MARKER)
+            if (search != null) append("\\n\\n").append(SEARCH_MARKER).append("\\n").append(search)
+            if (calculation != null || currentTime != null) {
+                append("\\n\\n").append(LOCAL_MARKER).append("\\n")
+                if (calculation != null) append("**Calculator**\\n").append(96.toChar()).append(calculation.expression).append(" = ").append(calculation.result).append(96.toChar()).append('\\n')
+                if (currentTime != null) {
+                    if (calculation != null) append('\\n')
+                    append("**Local time**\\n").append(currentTime)
+                }
             }
         }
+    }
+
+    fun splitNotes(raw: String?): AssistantToolNotes {
+        if (raw.isNullOrBlank()) return AssistantToolNotes("", null, null)
+        val marker = raw.indexOf(NOTES_MARKER)
+        if (marker < 0) return AssistantToolNotes(raw.trim(), null, null)
+        val reasoning = raw.substring(0, marker).trim()
+        val body = raw.substring(marker + NOTES_MARKER.length).trim()
+        val searchStart = body.indexOf(SEARCH_MARKER)
+        val localStart = body.indexOf(LOCAL_MARKER)
+        val search = if (searchStart >= 0) {
+            val startAt = searchStart + SEARCH_MARKER.length
+            body.substring(startAt, if (localStart > searchStart) localStart else body.length).trim().takeIf(String::isNotBlank)
+        } else null
+        val local = if (localStart >= 0) body.substring(localStart + LOCAL_MARKER.length).trim().takeIf(String::isNotBlank)
+            else if (searchStart < 0) body.takeIf(String::isNotBlank) else null
+        return AssistantToolNotes(reasoning, search, local)
+    }
+
+    /** Hard fallback: obvious time-sensitive requests still search when a small local planner omits a query. */
+    fun fallbackSearchQuery(text: String): String? {
+        val value = text.trim()
+        val trigger = Regex("""\\b(latest|newest|current|today|tonight|right now|rn|recent|this week|this month|this year|as of|price|prices|cost|release|released|available|availability|news|weather|schedule|score|standings|ranking|rankings|review|reviews|compare|best|top|search|look up|find online|who is the current|what happened)\\b""", RegexOption.IGNORE_CASE)
+        return value.takeIf { it.isNotBlank() && trigger.containsMatchIn(it) }?.take(240)
+    }
+
+    /** Only request images when the user asks to see a subject or the prompt is explicitly visual. */
+    fun fallbackImageQuery(text: String): String? {
+        val value = text.trim()
+        val trigger = Regex("""\\b(show|find|search for|give me|send me).{0,35}\\b(image|images|picture|pictures|photo|photos|illustration|visual)\\b|\\b(what does .+ look like|show me .+ )""", RegexOption.IGNORE_CASE)
+        return value.takeIf { it.isNotBlank() && trigger.containsMatchIn(it) }?.take(180)
     }
 
     /** Safe recursive-descent parser; no eval or executable model output. */
