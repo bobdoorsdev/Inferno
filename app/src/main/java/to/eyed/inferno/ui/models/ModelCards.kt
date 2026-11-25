@@ -59,7 +59,7 @@ import to.eyed.inferno.ui.components.InfernoSheet
 import to.eyed.inferno.ui.components.MenuRow
 import to.eyed.inferno.ui.components.PrimaryButton
 import to.eyed.inferno.ui.components.SheetHeader
-import to.eyed.inferno.ui.components.MorphingMark
+import to.eyed.inferno.ui.components.LoadingMark
 import to.eyed.inferno.ui.components.WavyBar
 import to.eyed.inferno.ui.theme.Ink
 import to.eyed.inferno.ui.theme.Numeric
@@ -97,6 +97,7 @@ fun ModelCard(
     menuExtra: (@Composable (close: () -> Unit) -> Unit)? = null,
     /** Developer mode: quant · ctx · tok/s · KV in the subtitle; otherwise size · tier · licence plus the blurb. */
     techSpecs: Boolean = false,
+    calibrating: Boolean = false,
 ) {
     val state = entry.download
     val onDisk = entry.isDownloaded
@@ -133,6 +134,7 @@ fun ModelCard(
                 }
                 Spacer(Modifier.height(3.dp))
                 Text(subtitle(entry, calibration, techSpecs), style = Typography.bodyMedium, color = Ink.I500, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                if (calibrating) Text(S.calibrating, style = Typography.bodySmall, color = Ink.I300)
                 if (!techSpecs) blurb(entry)?.let { Text(it, style = Typography.bodyMedium, color = Ink.I500, maxLines = 2, overflow = TextOverflow.Ellipsis) }
             }
             Spacer(Modifier.width(12.dp))
@@ -158,7 +160,7 @@ private fun Trailing(entry: ModelEntry, selected: Boolean, loading: Boolean, can
             label = "modelTrailing",
         ) { (_, sel, load) ->
             when {
-                load -> Box(Modifier.size(36.dp), contentAlignment = Alignment.Center) { MorphingMark(22.dp, active = true) }
+                load -> Box(Modifier.size(36.dp), contentAlignment = Alignment.Center) { LoadingMark(26.dp, active = true) }
                 sel -> Box(Modifier.size(36.dp), contentAlignment = Alignment.Center) {
                     Icon(Lucide.Check, S.loaded, Modifier.size(18.dp), tint = Ink.White)
                 }
