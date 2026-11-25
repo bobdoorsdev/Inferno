@@ -35,6 +35,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
@@ -122,8 +123,6 @@ fun Sidebar(
         // the search field and pop the keyboard on every open. This 1 dp sink takes it instead.
         Box(Modifier.size(1.dp).focusable())
         Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 14.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            OwlMark(20.dp)
-            Spacer(Modifier.width(10.dp))
             Text(S.appName, style = Typography.titleMedium.copy(fontSize = 18.sp, lineHeight = 24.sp, letterSpacing = (-0.2).sp), color = Ink.White, modifier = Modifier.weight(1f))
             if (onClose != null) GhostIconButton(Lucide.X, S.closeSidebar, onClose, size = 40.dp, iconSize = 18.dp, tint = Ink.I300)
         }
@@ -133,7 +132,6 @@ fun Sidebar(
             item(key = "nav", contentType = "nav") {
                 Column {
                     NavRow(Lucide.SquarePen, S.newChat, onClick = onNew)
-                    NavRow(Lucide.Wand, S.createImage, onClick = onCreateImage)
                     NavRow(Lucide.Images, S.gallery, onClick = onGallery)
                     NavRow(Lucide.HardDrive, S.models, subtitle = loadedModelName ?: S.noModelLoaded, onClick = onOpenModels)
                 }
@@ -190,7 +188,7 @@ fun Sidebar(
 @Composable
 private fun SearchPill(query: String, onChange: (String) -> Unit, modifier: Modifier = Modifier) {
     Row(
-        modifier.fillMaxWidth().surfaceLow(CircleShape).padding(start = 14.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
+        modifier.fillMaxWidth().surfaceLow(CircleShape).padding(start = 14.dp, end = 2.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(Lucide.Search, null, Modifier.size(16.dp), tint = Ink.I500)
@@ -208,10 +206,10 @@ private fun SearchPill(query: String, onChange: (String) -> Unit, modifier: Modi
                     inner()
                 }
             },
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f).widthIn(min = 0.dp).clipToBounds(),
         )
-        if (query.isNotEmpty()) GhostIconButton(Lucide.X, S.cancel, onClick = { onChange("") }, size = 28.dp, iconSize = 13.dp, tint = Ink.I500)
-        else Spacer(Modifier.width(28.dp))
+        if (query.isNotEmpty()) GhostIconButton(Lucide.X, S.cancel, onClick = { onChange("") }, size = 30.dp, iconSize = 13.dp, tint = Ink.I500)
+        else Spacer(Modifier.size(width = 30.dp, height = 30.dp))
     }
 }
 
