@@ -69,6 +69,7 @@ import com.composables.icons.lucide.Brain
 import com.composables.icons.lucide.Camera
 import com.composables.icons.lucide.Image
 import com.composables.icons.lucide.Images
+import com.composables.icons.lucide.Globe
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Plus
 import com.composables.icons.lucide.Square
@@ -117,6 +118,7 @@ fun InputBar(
     thinkingAvailable: Boolean,
     thinkingOn: Boolean,
     onToggleThinking: (Boolean) -> Unit,
+    webSearching: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val idle = disabledReason != null
@@ -133,7 +135,7 @@ fun InputBar(
         // The one gradient in the app: lets the list fade under the composer.
         Box(Modifier.fillMaxWidth().height(32.dp).background(Brush.verticalGradient(0f to Color.Transparent, 1f to Ink.Pitch)))
         Column(Modifier.fillMaxWidth().background(Ink.Pitch).padding(start = 12.dp, end = 12.dp, bottom = 12.dp)) {
-            ComposerNotice(gen, imageBusy)
+            ComposerNotice(gen, imageBusy, webSearching)
             if (attachments.isNotEmpty()) ThumbStrip(attachments, onRemoveAttachment)
             Column(
                 Modifier
@@ -183,8 +185,9 @@ fun InputBar(
 
 /** Queued turn / image generation notices above the card; they expand and collapse with the spatial spec. */
 @Composable
-private fun ComposerNotice(gen: GenState, imageBusy: Boolean) {
+private fun ComposerNotice(gen: GenState, imageBusy: Boolean, webSearching: Boolean) {
     val text = when {
+        webSearching -> S.searchingWeb
         gen is GenState.Queued -> S.willSendWhenReady
         imageBusy -> S.generatingImage
         else -> null
@@ -196,7 +199,12 @@ private fun ComposerNotice(gen: GenState, imageBusy: Boolean) {
     ) {
         var last by remember { mutableStateOf(text ?: "") }
         if (text != null) last = text
-        Box(Modifier.fillMaxWidth().padding(bottom = 8.dp), contentAlignment = Alignment.Center) { QuietNotice(last) }
+        Box(Modifier.fillMaxWidth().padding(bottom = 8.dp), contentAlignment = Alignment.Center) {
+            if (webSearching) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Icon(Lucide.Globe, null, Modifier.size(14.dp), tint = Ink.I300)
+                QuietNotice(last)
+            } else QuietNotice(last)
+        }
     }
 }
 
