@@ -190,7 +190,7 @@ private fun ActivityTab(label: String, selected: Boolean, onClick: () -> Unit) {
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Text(label, style = Typography.bodyMedium.copy(fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal), color = if (selected) Ink.White else Ink.I500)
-        Box(Modifier.fillMaxWidth().heightIn(min = 2.dp).background(if (selected) Ink.White else Ink.SurfaceHigh, RoundedCornerShape(2.dp)))
+        Box(Modifier.width(22.dp).heightIn(min = 2.dp).background(if (selected) Ink.White else Ink.SurfaceHigh, RoundedCornerShape(2.dp)))
     }
 }
 
