@@ -224,7 +224,7 @@ private fun Screens(appVm: AppViewModel, chatVm: ChatViewModel, benchVm: BenchVi
         },
     ) { s ->
         when (s) {
-            Screen.CHAT -> ChatRoot(appVm, chatVm, onBeforeSend = ensureNotifications, onDrawerOpenChanged = onDrawerOpenChanged)
+            Screen.CHAT -> ChatRoot(appVm, chatVm, imageVm, onBeforeSend = ensureNotifications, onDrawerOpenChanged = onDrawerOpenChanged)
             Screen.MODELS -> ModelManagerScreen(appVm, onBeforeDownload = ensureNotifications)
             Screen.SETTINGS -> SettingsScreen(appVm, chatVm)
             Screen.BENCH -> BenchScreen(benchVm, appVm)
