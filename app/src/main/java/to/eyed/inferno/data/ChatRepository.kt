@@ -58,6 +58,33 @@ class ChatRepository(private val dao: ChatDao, private val imageUtil: ImageUtil)
         return c.toConversation()
     }
 
+
+    /** Forks the visible history through one assistant turn, reusing image blobs through new message references. */
+    suspend fun branch(conversationId: String, throughOrderIndex: Int): Conversation? {
+        val source = dao.conversation(conversationId) ?: return null
+        val rows = dao.messagesThrough(conversationId, throughOrderIndex)
+        if (rows.isEmpty()) return null
+        val now = System.currentTimeMillis()
+        val id = UUID.randomUUID().toString()
+        val baseTitle = source.title.ifBlank { "New chat" }.take(40)
+        val fork = ConversationEntity(
+            id = id,
+            title = "$baseTitle · branch",
+            createdAt = now,
+            updatedAt = now,
+            modelId = source.modelId,
+            trimmedBefore = source.trimmedBefore.coerceAtMost(throughOrderIndex),
+        )
+        dao.upsert(fork)
+        rows.forEach { row ->
+            val newMessageId = UUID.randomUUID().toString()
+            val copied = row.message.copy(id = newMessageId, conversationId = id)
+            val copiedImages = row.images.map { it.copy(messageId = newMessageId) }
+            dao.insertMessage(copied, copiedImages)
+        }
+        return fork.toConversation()
+    }
+
     suspend fun appendUser(conversationId: String, text: String, attachments: List<Attachment>): ChatMessage {
         val now = System.currentTimeMillis()
         val m = MessageEntity(
