@@ -1,6 +1,10 @@
 package to.eyed.inferno.ui.chat
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.rememberInfiniteTransition
@@ -75,6 +79,120 @@ fun formatDuration(ms: Long): String {
     val s = ms / 1000.0
     return if (s < 60) String.format(Locale.US, "%.1f s", s)
     else "${(s / 60).toInt()} min ${(s % 60).toInt()} s"
+}
+
+/**
+ * One persistent activity frame with compact Think/Search tabs. It stays in the transcript after
+ * completion, collapses automatically, and can be reopened without opening two stacked cards.
+ */
+@Composable
+fun AssistantActivityPanel(
+    reasoning: String,
+    searchNotes: String?,
+    status: String?,
+    live: Boolean,
+    thinkingMs: Long,
+    modifier: Modifier = Modifier,
+) {
+    val parsed = remember(reasoning) { AssistantToolRouter.splitNotes(reasoning) }
+    val search = searchNotes?.takeIf { it.isNotBlank() } ?: parsed.search
+    val think = listOf(parsed.reasoning, parsed.local).filter { it.isNotBlank() }.joinToString("\n\n")
+    val hasThink = think.isNotBlank() || (live && status == null)
+    val hasSearch = !search.isNullOrBlank() || status != null
+    var expanded by rememberSaveable { mutableStateOf(live) }
+    var selected by rememberSaveable { mutableStateOf(if (hasSearch && !hasThink) "search" else "think") }
+    LaunchedEffect(live) { if (live) expanded = true else expanded = false }
+    LaunchedEffect(status, hasSearch, hasThink) {
+        if (status != null || (hasSearch && !hasThink)) selected = "search"
+        else if (hasThink && selected == "search" && !hasSearch) selected = "think"
+    }
+    val haptics = rememberHaptics()
+    val rotation by animateFloatAsState(if (expanded) 180f else 0f, fastSpatialSpec(), label = "activityChevron")
+    val activeSearch = selected == "search" && hasSearch
+    val title = when {
+        activeSearch && status != null -> "Searching…"
+        activeSearch -> if (search.isNullOrBlank()) "Search" else "Search results"
+        live -> S.thinking
+        thinkingMs >= 1_000 -> S.thoughtFor(formatDuration(thinkingMs))
+        else -> S.reasoning
+    }
+    Column(
+        modifier.fillMaxWidth()
+            .surfaceLow(RoundedCornerShape(Radii.row))
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                if (hasThink && hasSearch) {
+                    ActivityTab("Think", selected == "think") { haptics.tap(); selected = "think"; expanded = true }
+                    ActivityTab("Search", selected == "search") { haptics.tap(); selected = "search"; expanded = true }
+                } else {
+                    Text(title, style = Typography.bodyMedium.copy(fontWeight = FontWeight.Medium), color = Ink.I100)
+                }
+                if (live && (status != null || selected == "think")) PulsingDots()
+            }
+            androidx.compose.foundation.layout.Box(
+                Modifier.size(32.dp).clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    role = Role.Button,
+                ) { haptics.tap(); expanded = !expanded },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Lucide.ChevronDown, null, Modifier.size(16.dp).graphicsLayer { rotationZ = rotation }, tint = Ink.I500)
+            }
+        }
+        if (hasThink && hasSearch) {
+            Text(title, style = Typography.labelSmall, color = Ink.I500, modifier = Modifier.padding(top = 1.dp))
+        }
+        AnimatedVisibility(
+            visible = expanded,
+            enter = expandVertically(defaultSpatialSpec()) + fadeIn(defaultEffectsSpec()),
+            exit = shrinkVertically(defaultSpatialSpec()) + fadeOut(defaultEffectsSpec()),
+        ) {
+            AnimatedContent(
+                targetState = activeSearch,
+                transitionSpec = { fadeIn(defaultEffectsSpec()) togetherWith fadeOut(defaultEffectsSpec()) },
+                label = "activityTabContent",
+            ) { showSearch ->
+                val content = if (showSearch) search.orEmpty() else think
+                if (content.isNotBlank()) {
+                    val scroll = rememberScrollState()
+                    LaunchedEffect(content, showSearch) { if (live) scroll.scrollTo(scroll.maxValue) }
+                    Box(
+                        Modifier.fillMaxWidth().padding(top = 10.dp).heightIn(max = 260.dp).verticalScroll(scroll),
+                    ) {
+                        MarkdownBody(content, Modifier.padding(end = 4.dp))
+                    }
+                } else if (showSearch && status != null) {
+                    Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        MorphingMark(20.dp, active = true)
+                        Text("Finding relevant pages and sources", style = Typography.bodySmall, color = Ink.I500)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ActivityTab(label: String, selected: Boolean, onClick: () -> Unit) {
+    Column(
+        Modifier.clickable(
+            interactionSource = remember { MutableInteractionSource() },
+            indication = null,
+            role = Role.Tab,
+            onClick = onClick,
+        ).padding(vertical = 2.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(label, style = Typography.bodyMedium.copy(fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal), color = if (selected) Ink.White else Ink.I500)
+        Box(Modifier.fillMaxWidth().heightIn(min = 2.dp).background(if (selected) Ink.White else Ink.SurfaceHigh, RoundedCornerShape(2.dp)))
+    }
 }
 
 /**
