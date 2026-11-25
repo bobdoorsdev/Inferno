@@ -55,12 +55,13 @@ class WebSearchClient(private val client: OkHttpClient = DEFAULT_CLIENT) {
                 val parsed = runCatching { Uri.parse(wrapper) }.getOrNull() ?: return@mapNotNull null
                 val destination = parsed.getQueryParameter("uddg")?.takeIf { it.startsWith("https://") || it.startsWith("http://") } ?: wrapper
                 val uri = runCatching { Uri.parse(destination) }.getOrNull() ?: return@mapNotNull null
-                if (uri.scheme !in setOf("http", "https") || uri.host.isNullOrBlank() || uri.host.endsWith("duckduckgo.com")) return@mapNotNull null
+                val host = uri.host ?: return@mapNotNull null
+                if ((uri.scheme != "http" && uri.scheme != "https") || host.endsWith("duckduckgo.com", ignoreCase = true)) return@mapNotNull null
                 val title = clean(match.groupValues[2]).take(180)
                 if (title.isBlank()) return@mapNotNull null
                 val index = LINK.findAll(html).takeWhile { it.range.first != match.range.first }.count()
                 WebSearchResult(title, destination, snippets.getOrNull(index).orEmpty())
-            }.distinctBy { it.url }.take(3)
+            }.distinctBy { it.url }.take(3).toList()
         }
 
         private fun clean(raw: String): String =
