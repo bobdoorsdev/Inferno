@@ -157,11 +157,24 @@ private fun MarkdownImageCard(alt: String, url: String) {
 
 @Composable
 private fun StreamingMarkdownTail(chunk: String) {
-    Text(
-        chunk,
-        style = Typography.bodyLarge.copy(color = Ink.I100, textDirection = TextDirection.Content),
-        color = Ink.I100,
-    )
+    val lines = remember(chunk) { chunk.split('\n') }
+    val opener = remember(lines) { Regex("^(\u0060{3,}|~{3,})([A-Za-z0-9_+.-]*)$").matchEntire(lines.firstOrNull()?.trim().orEmpty()) }
+    val closeIndex = remember(lines, opener) {
+        if (opener == null) -1 else lines.withIndex().firstOrNull { (index, line) ->
+            index > 0 && line.trim().let { it.length >= opener.groupValues[1].length && it.all { c -> c == opener.groupValues[1][0] } }
+        }?.index ?: -1
+    }
+    if (opener != null && closeIndex > 0) {
+        MonoCodeBlock(lines.drop(1).take(closeIndex - 1).joinToString("\n"), opener.groupValues[2], streaming = true)
+        val trailing = lines.drop(closeIndex + 1).joinToString("\n")
+        if (trailing.isNotBlank()) MarkdownTextChunk(trailing)
+    } else {
+        Text(
+            chunk,
+            style = Typography.bodyLarge.copy(color = Ink.I100, textDirection = TextDirection.Content),
+            color = Ink.I100,
+        )
+    }
 }
 
 @Composable
