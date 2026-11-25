@@ -218,6 +218,16 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
         handle[KEY_ACTIVE] = null
         c.chats.deleteAll()
     }
+    /** Creates a sibling conversation through the selected assistant reply. */
+    fun branch(message: ChatMessage) = viewModelScope.launch {
+        val source = activeId.value ?: return@launch
+        if (gen.value.isBusy) return@launch
+        val fork = c.chats.branch(source, message.orderIndex) ?: return@launch
+        stopFull.update { it - fork.id }
+        handle[KEY_ACTIVE] = fork.id
+        appVmRef?.notice("Branch created")
+    }
+
     fun jumpToLatest() { /* UI-only helper: the list owner scrolls; kept for the 5.5 surface */ }
 
     // ---- attachments -----------------------------------------------------------------------------------------
@@ -345,7 +355,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
         val thinking = catalog?.thinking ?: ThinkingSpec()
         val thinkingOn = settings.thinking && thinking.hasTags
         val params = appVm.effectiveParams()
-        val detail = settings.imageDetail
+        val detail = ImageDetail.HIGH
         val stream = Streamer(conversationId)
         setGen(conversationId, GenState.Prefill(0, 0, false))
         var assistantId: String? = null
@@ -764,7 +774,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
         const val NO_CHAT = ""
         const val MAX_ATTACHMENTS = 2
         const val MAX_PROMPT_IMAGES = 8
-        const val PUBLISH_NS = 80_000_000L
+        const val PUBLISH_NS = 50_000_000L
         const val TPS_NS = 500_000_000L
         const val PERSIST_NS = 2_000_000_000L
         const val PERSIST_TOKENS = 200
