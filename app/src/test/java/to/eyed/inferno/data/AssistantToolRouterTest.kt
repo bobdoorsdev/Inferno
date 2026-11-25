@@ -24,6 +24,20 @@ class AssistantToolRouterTest {
         assertTrue(AssistantToolRouter.shouldRouteLocally("How much is 18 * 24?"))
     }
 
+    @Test fun plannerAcceptsImageSearchAndGeneratedTitle() {
+        val plan = AssistantToolRouter.parse(
+            """{"search_queries":["current release"],"image_queries":["red panda"],"title":"Current Release"}"""
+        )
+        assertEquals(listOf("red panda"), plan.imageQueries)
+        assertEquals("Current Release", plan.title)
+    }
+
+    @Test fun obviousCurrentRequestsHaveFallbackQueries() {
+        assertEquals("What is the latest Android release?", AssistantToolRouter.fallbackSearchQuery("What is the latest Android release?"))
+        assertNull(AssistantToolRouter.fallbackSearchQuery("Explain a neural network"))
+        assertEquals("Show me pictures of a red panda", AssistantToolRouter.fallbackImageQuery("Show me pictures of a red panda"))
+    }
+
     @Test fun calculatorUsesOperatorPrecedenceAndParentheses() {
         assertEquals("14", AssistantToolRouter.calculate("2 + 3 * 4")?.result)
         assertEquals("20", AssistantToolRouter.calculate("(2 + 3) * 4")?.result)
