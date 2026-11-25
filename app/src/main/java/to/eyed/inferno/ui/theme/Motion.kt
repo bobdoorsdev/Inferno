@@ -103,18 +103,7 @@ val LocalHaptics = compositionLocalOf { true }
  * scale is not zero. Springs still run when this is false (they are short).
  */
 @Composable
-fun animationsEnabled(): Boolean {
-    val setting = LocalAnimations.current
-    if (LocalInspectionMode.current) return setting
-    val context = LocalContext.current
-    // Read once per composition owner: the system value only changes in developer options.
-    val systemScale = remember(context) {
-        runCatching {
-            Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f)
-        }.getOrDefault(1f)
-    }
-    return setting && systemScale != 0f
-}
+fun animationsEnabled(): Boolean = true
 
 private fun HapticFeedback.perform(enabled: Boolean, type: HapticFeedbackType) {
     if (enabled) performHapticFeedback(type)
