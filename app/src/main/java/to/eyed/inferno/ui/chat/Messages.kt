@@ -9,6 +9,9 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -27,9 +30,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -54,12 +59,15 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.composables.icons.lucide.ChevronDown
+import com.composables.icons.lucide.Check
 import com.composables.icons.lucide.Copy
 import com.composables.icons.lucide.Info
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.NotebookPen
 import com.composables.icons.lucide.Pencil
 import com.composables.icons.lucide.RefreshCw
+import kotlinx.coroutines.delay
+import to.eyed.inferno.data.AssistantToolRouter
 import to.eyed.inferno.data.Attachment
 import to.eyed.inferno.data.ChatMessage
 import to.eyed.inferno.data.ChatRepository
@@ -132,6 +140,7 @@ fun SharedTransitionScope.MessagesList(
     /** Height of the composer overlaid on the list, so the last turn can always scroll clear of it. */
     bottomInset: Dp = 132.dp,
     dev: ChatDevFlags = ChatDevFlags(),
+    toolStatus: String? = null,
 ) {
     val live = liveFor(messages, gen)
     val liveMeta = (gen as? GenState.Streaming)?.takeIf { dev.tokenCounter && it.tokens > 0 }?.let { S.liveTokens(it.tokens, String.format(Locale.US, "%.1f", it.tokPerSec)) }
@@ -150,7 +159,9 @@ fun SharedTransitionScope.MessagesList(
             verticalArrangement = Arrangement.spacedBy(24.dp, Alignment.Bottom),
         ) {
             if (live is Live.Item) item(key = "live", contentType = "live") {
-                if (gen is GenState.Streaming && gen.text.isNotBlank()) {
+                if (toolStatus != null) {
+                    ReasoningPanel(toolStatus, live = true, thinkingMs = 0L)
+                } else if (gen is GenState.Streaming && gen.text.isNotBlank()) {
                     AssistantMessage(
                         text = gen.text, reasoning = gen.reasoning, thinkingMs = gen.thinkingMs, streaming = true,
                         stats = null, showActions = false, showRegenerate = false, announce = false,
@@ -337,7 +348,7 @@ private fun AssistantMessage(
         AnimatedVisibility(showActions, enter = fadeIn(defaultEffectsSpec()), exit = fadeOut(defaultEffectsSpec())) {
             Column {
                 Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
-                    GhostIconButton(Lucide.Copy, S.copyMessage, onClick = { haptics.tap(); copyToClipboard(context, text, "Inferno message") }, size = 32.dp, iconSize = 15.dp, tint = Ink.I500)
+                    AnimatedCopyButton(S.copyMessage) { copyToClipboard(context, text, "Inferno message") }
                     if (showRegenerate) GhostIconButton(Lucide.RefreshCw, S.regenerate, onClick = { haptics.tap(); onRegenerate() }, size = 32.dp, iconSize = 15.dp, tint = Ink.I500)
                     if (stats != null && showDetails) GhostIconButton(Lucide.Info, S.details, onClick = { haptics.tap(); onDetails() }, size = 32.dp, iconSize = 15.dp, tint = Ink.I500)
                     if (showMeta && stats != null) metaLine(stats, techMeta)?.let { meta ->
@@ -345,6 +356,45 @@ private fun AssistantMessage(
                         Text(meta, style = Meta, color = Ink.I500)
                     }
                 }
+            }
+        }
+    }
+}
+
+/**
+ * A soft confirmation grows from the familiar copy glyph; the original copy icon remains visible.
+ */
+@Composable
+private fun AnimatedCopyButton(label: String, onCopy: () -> Unit) {
+    val haptics = rememberHaptics()
+    var copied by remember { mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(copied) {
+        if (copied) {
+            delay(1_400)
+            copied = false
+        }
+    }
+    Box(
+        Modifier.minimumInteractiveComponentSize().size(32.dp).clip(CircleShape).clickable(
+            interactionSource = remember { MutableInteractionSource() },
+            indication = null,
+            role = Role.Button,
+        ) {
+            haptics.tap()
+            onCopy()
+            copied = true
+        },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(Lucide.Copy, if (copied) S.copied else label, Modifier.size(15.dp), tint = if (copied) Ink.I100 else Ink.I500)
+        AnimatedVisibility(
+            visible = copied,
+            modifier = Modifier.align(Alignment.BottomEnd),
+            enter = scaleIn(fastSpatialSpec()) + fadeIn(defaultEffectsSpec()),
+            exit = scaleOut(fastSpatialSpec()) + fadeOut(defaultEffectsSpec()),
+        ) {
+            Box(Modifier.size(13.dp).clip(CircleShape).background(Ink.White), contentAlignment = Alignment.Center) {
+                Icon(Lucide.Check, null, Modifier.size(9.dp), tint = Ink.Pitch)
             }
         }
     }

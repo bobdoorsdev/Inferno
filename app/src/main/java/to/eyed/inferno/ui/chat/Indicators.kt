@@ -46,6 +46,7 @@ import androidx.compose.ui.text.font.FontWeight
 import com.composables.icons.lucide.ChevronDown
 import com.composables.icons.lucide.Lucide
 import kotlinx.coroutines.delay
+import to.eyed.inferno.data.AssistantToolRouter
 import to.eyed.inferno.ui.S
 import to.eyed.inferno.ui.components.MorphingMark
 import to.eyed.inferno.ui.components.QuietNotice
@@ -85,8 +86,10 @@ fun formatDuration(ms: Long): String {
 fun ReasoningPanel(reasoning: String, live: Boolean, thinkingMs: Long, modifier: Modifier = Modifier) {
     var expanded by rememberSaveable { mutableStateOf(false) }
     val haptics = rememberHaptics()
+    val hasToolNotes = reasoning.contains(AssistantToolRouter.NOTES_MARKER)
     val title = when {
         live -> S.thinking
+        hasToolNotes -> S.usedTools
         thinkingMs >= 1_000 -> S.thoughtFor(formatDuration(thinkingMs))
         else -> S.reasoning
     }
@@ -118,10 +121,10 @@ fun ReasoningPanel(reasoning: String, live: Boolean, thinkingMs: Long, modifier:
                 val scroll = rememberScrollState()
                 LaunchedEffect(reasoning.length) { scroll.scrollTo(scroll.maxValue) }
                 Box(Modifier.fillMaxWidth().padding(top = 10.dp).heightIn(max = 160.dp).verticalScroll(scroll)) {
-                    Text(reasoning, style = ReasoningText, color = Ink.I500)
+                    MarkdownBody(reasoning, Modifier.padding(end = 4.dp))
                 }
             } else {
-                Text(reasoning, style = ReasoningText, color = Ink.I500, modifier = Modifier.padding(top = 10.dp))
+                MarkdownBody(reasoning, Modifier.padding(top = 10.dp))
             }
         }
     }

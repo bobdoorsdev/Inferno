@@ -18,7 +18,6 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
@@ -28,11 +27,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.node.DelegatableNode
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
@@ -117,6 +117,10 @@ private fun ButtonGroupDefaults.connectedButtonContentPadding() =
  * Determinate wavy bar: white on 12 % white. [frozen] flattens the wave (a paused download) and [indeterminate]
  * plays the M3 indeterminate wave (verifying). Height is the M3 default (10 dp) so the stroke reads at 4 dp.
  */
+/**
+ * Flat, determinate progress bar for downloads. Drawn directly on Canvas: no animated wave,
+ * no endpoint marker, and a steady fill that tracks the actual received byte fraction.
+ */
 @Composable
 fun WavyBar(
     progress: Float,
@@ -125,26 +129,20 @@ fun WavyBar(
     indeterminate: Boolean = false,
     color: Color = Ink.White,
 ) {
-    val stroke = Stroke(width = with(LocalDensity.current) { 4.dp.toPx() }, cap = androidx.compose.ui.graphics.StrokeCap.Round)
-    if (indeterminate) {
-        LinearWavyProgressIndicator(
-            modifier = modifier.fillMaxWidth(),
-            color = color,
-            trackColor = whiteA(0.12f),
-            stroke = stroke,
-            trackStroke = stroke,
-        )
-    } else {
-        val clamped = progress.coerceIn(0f, 1f)
-        LinearWavyProgressIndicator(
-            progress = { clamped },
-            modifier = modifier.fillMaxWidth(),
-            color = color,
-            trackColor = whiteA(0.12f),
-            stroke = stroke,
-            trackStroke = stroke,
-            amplitude = if (frozen) { _ -> 0f } else { p -> if (p <= 0.02f || p >= 0.98f) 0f else 1f },
-        )
+    val fraction = progress.coerceIn(0f, 1f)
+    androidx.compose.foundation.Canvas(modifier.fillMaxWidth().height(8.dp)) {
+        val corner = CornerRadius(size.height / 2f)
+        drawRoundRect(whiteA(0.12f), cornerRadius = corner)
+        val width = if (indeterminate) size.width * 0.28f else size.width * fraction
+        if (width > 0f) {
+            val left = if (indeterminate) (size.width - width) / 2f else 0f
+            drawRoundRect(
+                color = if (frozen) color.copy(alpha = 0.7f) else color,
+                topLeft = Offset(left, 0f),
+                size = Size(width, size.height),
+                cornerRadius = corner,
+            )
+        }
     }
 }
 

@@ -23,7 +23,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -60,6 +59,7 @@ import to.eyed.inferno.ui.components.InfernoSheet
 import to.eyed.inferno.ui.components.MenuRow
 import to.eyed.inferno.ui.components.PrimaryButton
 import to.eyed.inferno.ui.components.SheetHeader
+import to.eyed.inferno.ui.components.MorphingMark
 import to.eyed.inferno.ui.components.WavyBar
 import to.eyed.inferno.ui.theme.Ink
 import to.eyed.inferno.ui.theme.Numeric
@@ -158,7 +158,7 @@ private fun Trailing(entry: ModelEntry, selected: Boolean, loading: Boolean, can
             label = "modelTrailing",
         ) { (_, sel, load) ->
             when {
-                load -> Box(Modifier.size(36.dp), contentAlignment = Alignment.Center) { LoadingIndicator(Modifier.size(22.dp), color = Ink.White) }
+                load -> Box(Modifier.size(36.dp), contentAlignment = Alignment.Center) { MorphingMark(22.dp, active = true) }
                 sel -> Box(Modifier.size(36.dp), contentAlignment = Alignment.Center) {
                     Icon(Lucide.Check, S.loaded, Modifier.size(18.dp), tint = Ink.White)
                 }

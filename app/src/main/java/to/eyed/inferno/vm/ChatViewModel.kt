@@ -24,6 +24,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import to.eyed.inferno.AppContainer
+import to.eyed.inferno.data.AssistantToolPlan
+import to.eyed.inferno.data.AssistantToolRouter
 import to.eyed.inferno.data.Attachment
 import to.eyed.inferno.data.ChatMessage
 import to.eyed.inferno.data.ChatRepository
@@ -99,8 +101,8 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
     private val _trimmedNotice = MutableStateFlow(0)
     val trimmedNotice: StateFlow<Int> = _trimmedNotice.asStateFlow()
     private val webSearchClient = WebSearchClient()
-    private val _webSearching = MutableStateFlow(false)
-    val webSearching: StateFlow<Boolean> = _webSearching.asStateFlow()
+    private val _toolStatus = MutableStateFlow<String?>(null)
+    val toolStatus: StateFlow<String?> = _toolStatus.asStateFlow()
 
     /** Wall time of the last model switch: assistant turns older than it carry a stale kvUsed (5.5 contextUsage). */
     private var modelSwitchAt = 0L
@@ -345,25 +347,40 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
         val stream = Streamer(conversationId)
         setGen(conversationId, GenState.Prefill(0, 0, false))
         var assistantId: String? = null
+        var toolNotes: String? = null
         try {
             var history = c.chats.messagesOnce(conversationId)
-            val webResults = if (settings.webSearchEnabled) {
-                val query = history.lastOrNull { it.role == ChatRepository.ROLE_USER }?.content
-                if (query.isNullOrBlank()) emptyList() else {
-                    _webSearching.value = true
-                    try {
-                        webSearchClient.search(query).also { if (it.isEmpty()) appVmRef?.notice(S.webSearchFailed) }
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (_: Exception) {
-                        appVmRef?.notice(S.webSearchFailed)
-                        emptyList()
-                    } finally {
-                        _webSearching.value = false
+            val latestUserText = history.lastOrNull { it.role == ChatRepository.ROLE_USER }?.content.orEmpty()
+            val shouldRoute = latestUserText.isNotBlank() &&
+                (settings.webSearchEnabled || AssistantToolRouter.shouldRouteLocally(latestUserText))
+            val toolPlan = if (shouldRoute) {
+                _toolStatus.value = S.checkingTools
+                try {
+                    chooseTools(latestUserText, thinking, detail, settings.webSearchEnabled)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    AssistantToolPlan()
+                }
+            } else AssistantToolPlan()
+            val calculation = toolPlan.calculation?.let(AssistantToolRouter::calculate)
+            val localTime = if (toolPlan.currentTime) AssistantToolRouter.currentTime() else null
+            val webResults = if (settings.webSearchEnabled && toolPlan.searchQueries.isNotEmpty()) {
+                _toolStatus.value = S.searchingWeb
+                try {
+                    webSearchClient.searchAll(toolPlan.searchQueries).also {
+                        if (it.isEmpty()) appVmRef?.notice(S.webSearchFailed)
                     }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    appVmRef?.notice(S.webSearchFailed)
+                    emptyList()
                 }
             } else emptyList()
-            val webContext = WebSearchClient.promptContext(webResults)
+            _toolStatus.value = null
+            val toolContext = AssistantToolRouter.promptContext(webResults, calculation, localTime)
+            toolNotes = AssistantToolRouter.notes(webResults, calculation, localTime)
             val conv = conversations.value.firstOrNull { it.id == conversationId }
             val nCtx = loaded.context.nCtx
             val reserve = c.contextManager.reserveFor(params, nCtx, thinkingOn)
@@ -378,7 +395,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
                 val keep = images.map { it.id }.toSet()
                 val messages0 = view.prompt().map { it.copy(imageIds = it.imageIds.filter { id -> id in keep }) }
                 val baseSystem = ContextManager.systemWith(systemPrompt, view.summary?.content)
-                val fullSystem = listOfNotNull(baseSystem, webContext).joinToString("\n\n").takeIf { it.isNotBlank() }
+                val fullSystem = listOfNotNull(baseSystem, toolContext).joinToString("\n\n").takeIf { it.isNotBlank() }
                 return Triple(fullSystem, messages0, images)
             }
             var (system, messages0, images) = parts()
@@ -444,9 +461,12 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
                     }
                     is GenerationEvent.Done -> {
                         val stats = toStats(ev.stats, ev.reason.name, model.id, loaded, params).copy(thinkingMs = stream.thinkingMs)
-                        val finalText = WebSearchClient.appendSources(stream.textStr, webResults)
-                        if (assistantId == null) assistantId = c.chats.appendAssistant(conversationId, finalText, stream.reasoningOrNull(), stats).id
-                        else c.chats.updateAssistant(assistantId, finalText, stream.reasoningOrNull(), stats)
+                        val finalThinking = listOfNotNull(
+                            stream.reasoningOrNull()?.takeIf { it.isNotBlank() },
+                            toolNotes,
+                        ).joinToString("\n\n").takeIf { it.isNotBlank() }
+                        if (assistantId == null) assistantId = c.chats.appendAssistant(conversationId, stream.textStr, finalThinking, stats).id
+                        else c.chats.updateAssistant(assistantId, stream.textStr, finalThinking, stats)
                         _lastStats.value = ev.stats
                         if (ev.stats.imageEncodeMs > 0 && promptImages.isNotEmpty()) persistEncodeSample(model.id, detail, ev.stats.imageEncodeMs, promptImages)
                         appVm.markFirstTurnOk()
@@ -476,11 +496,45 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
             persistPartial(conversationId, assistantId, stream, errorStats(model.id))
             setGen(conversationId, GenState.Error(e.message ?: S.generationFailed))
         } finally {
+            _toolStatus.value = null
             // Every orderly end of the turn (Done, Error, NeedsTruncation, Stop, exception) reached Kotlin, so the
             // native side did not die: disarm the crash-loop guard. Only a real process death leaves it set.
             // markFirstTurnOk launches on appVm.viewModelScope and is a no-op when the guard is already clear.
             appVm.markFirstTurnOk()
         }
+    }
+
+    /**
+     * A hidden planning pass lets the selected local model decide whether to search or call local utilities.
+     * Its JSON is never saved as a chat turn; the normal answer is generated after the chosen tools run.
+     */
+    private suspend fun chooseTools(
+        latestUserText: String,
+        thinking: ThinkingSpec,
+        detail: ImageDetail,
+        allowWeb: Boolean,
+    ): AssistantToolPlan {
+        val output = StringBuilder()
+        var failed = false
+        c.engine.generate(
+            "tool-router",
+            listOf(
+                PromptMessage("system", AssistantToolRouter.prompt(allowWeb)),
+                PromptMessage(ChatRepository.ROLE_USER, latestUserText.take(800)),
+            ),
+            emptyList(),
+            GenerationParams(temperature = 0f, topK = 1, topP = 1f, minP = 0f, maxTokens = 80),
+            thinking,
+            false,
+            detail,
+        ).collect { event ->
+            when (event) {
+                is GenerationEvent.Token -> output.append(event.text)
+                is GenerationEvent.Error, GenerationEvent.NeedsTruncation -> failed = true
+                else -> Unit
+            }
+        }
+        return if (failed) AssistantToolPlan() else AssistantToolRouter.parse(output.toString())
     }
 
     // ---- context policy actions --------------------------------------------------------------------------------

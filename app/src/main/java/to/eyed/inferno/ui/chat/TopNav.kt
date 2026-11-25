@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
@@ -46,6 +45,7 @@ import to.eyed.inferno.ui.components.GhostIconButton
 import to.eyed.inferno.ui.components.GlassMenu
 import to.eyed.inferno.ui.components.Hairline
 import to.eyed.inferno.ui.components.MenuActionRow
+import to.eyed.inferno.ui.components.MorphingMark
 import to.eyed.inferno.ui.theme.ChipLabel
 import to.eyed.inferno.ui.theme.Ink
 import to.eyed.inferno.ui.theme.Numeric
@@ -140,7 +140,7 @@ private fun ModelChip(
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                     when (kind) {
                         ChipKind.IDLE -> Icon(Lucide.Cpu, null, Modifier.size(14.dp), tint = Ink.I500)
-                        ChipKind.LOADING -> LoadingIndicator(Modifier.size(16.dp), color = Ink.White)
+                        ChipKind.LOADING -> MorphingMark(18.dp, active = true)
                         ChipKind.SUSPENDED -> Icon(Lucide.Zap, null, Modifier.size(14.dp), tint = Ink.I500)
                         ChipKind.ERROR -> Icon(Lucide.CircleAlert, null, Modifier.size(14.dp), tint = Ink.I300)
                         ChipKind.READY -> Unit
