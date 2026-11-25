@@ -2,8 +2,10 @@ package to.eyed.inferno.ui.chat
 
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.database.Cursor
 import android.net.Uri
 import android.provider.MediaStore
+import android.provider.OpenableColumns
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -63,6 +65,8 @@ import com.composables.icons.lucide.ChevronDown
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.X
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import to.eyed.inferno.data.ChatRepository
@@ -162,6 +166,13 @@ fun ChatRoot(appVm: AppViewModel, chatVm: ChatViewModel, onBeforeSend: () -> Uni
     // ---- launchers -------------------------------------------------------------------------------------------
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(2)) { uris ->
         uris.take(2).forEach { chatVm.attachFromUri(it) }
+    }
+    val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) scope.launch {
+            runCatching { readTextAttachment(context, uri) }
+                .onSuccess { block -> draft = if (draft.isBlank()) block else "$draft\n\n$block" }
+                .onFailure { appVm.notice(it.message ?: "Could not read this file") }
+        }
     }
     val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
         val uri = cameraUri
@@ -327,11 +338,13 @@ fun ChatRoot(appVm: AppViewModel, chatVm: ChatViewModel, onBeforeSend: () -> Uni
                                         value = draft, onValueChange = { draft = it },
                                         attachments = pending, onRemoveAttachment = chatVm::removeAttachment,
                                         canAttachImages = canAttachImages, cameraAvailable = cameraAvailable, noVisionReason = noVisionReason,
-                                        onPickPhotos = pickPhotos, onCapturePhoto = capturePhoto, onNoVision = appVm::notice,
+                                        onPickPhotos = pickPhotos, onCapturePhoto = capturePhoto,
+                                        onPickFile = { filePicker.launch(arrayOf("text/*", "application/json", "application/xml", "application/javascript", "application/octet-stream")) },
+                                        onNoVision = appVm::notice,
                                         gen = gen, engine = engine, disabledReason = disabledReason, imageBusy = imageBusy,
                                         onSend = send, onStop = chatVm::cancel,
                                         // The Think chip is a power-user control (Settings > Generation owns the same switch).
-                                        thinkingAvailable = thinkingAvailable && settings.powerUser, thinkingOn = settings.thinking, onToggleThinking = appVm::setThinking,
+                                        thinkingAvailable = thinkingAvailable, thinkingOn = settings.thinking, onToggleThinking = appVm::setThinking,
                                     )
                                 }
                             }
@@ -415,3 +428,49 @@ private fun Modifier.bleedVertically(insets: WindowInsets): Modifier = layout { 
     val placeable = measurable.measure(constraints.copy(minHeight = constraints.minHeight + extra, maxHeight = constraints.maxHeight + extra))
     layout(placeable.width, constraints.maxHeight) { placeable.place(0, -top) }
 }
+
+
+private const val MAX_TEXT_ATTACHMENT_BYTES = 65_536
+
+/**
+ * Text/code attachments are streamed into the prompt as UTF-8 text. Keep this path bounded:
+ * arbitrary binary files and oversized inputs are rejected before their contents enter chat state.
+ */
+private suspend fun readTextAttachment(context: android.content.Context, uri: Uri): String =
+    withContext(Dispatchers.IO) {
+        val name = context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+            ?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
+            ?.takeIf { it.isNotBlank() }
+            ?: uri.lastPathSegment?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
+            ?: "attachment.txt"
+        val extension = name.substringAfterLast('.', "").lowercase()
+        val allowed = setOf(
+            "txt", "md", "markdown", "json", "csv", "xml", "html", "htm", "css", "js", "mjs", "ts",
+            "py", "lua", "luau", "sh", "bash", "sql", "kt", "kts", "java", "c", "cpp", "h", "hpp",
+            "yaml", "yml", "toml", "ini", "log", "gradle",
+        )
+        require(extension in allowed) { "Unsupported file type. Choose a text or source-code file." }
+        val bytes = context.contentResolver.openInputStream(uri)?.use { input ->
+            val output = java.io.ByteArrayOutputStream()
+            val buffer = ByteArray(8_192)
+            var total = 0
+            while (true) {
+                val read = input.read(buffer)
+                if (read < 0) break
+                total += read
+                require(total <= MAX_TEXT_ATTACHMENT_BYTES) { "File exceeds the 64 KB text attachment limit." }
+                output.write(buffer, 0, read)
+            }
+            output.toByteArray()
+        } ?: error("Could not open this file")
+        val body = bytes.toString(Charsets.UTF_8)
+        require(!body.contains('\u0000')) { "This file is binary, not UTF-8 text." }
+        val language = when (extension) {
+            "py" -> "python"
+            "lua", "luau" -> "luau"
+            "html", "htm" -> "html"
+            "js", "mjs" -> "javascript"
+            else -> extension
+        }
+        "**Attached file: $name**\\n\\u0060\\u0060\\u0060$language\\n$body\\n\\u0060\\u0060\\u0060"
+    }
