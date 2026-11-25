@@ -475,6 +475,7 @@ private suspend fun readTextAttachment(context: android.content.Context, uri: Ur
             "js", "mjs" -> "javascript"
             else -> extension
         }
-        val fence = "\u0060".repeat(3)
+        val longestFence = Regex("\u0060+").findAll(body).maxOfOrNull { it.value.length } ?: 0
+        val fence = "\u0060".repeat(maxOf(3, longestFence + 1))
         "**Attached file: $name**\n" + fence + language + "\n" + body + "\n" + fence
     }
