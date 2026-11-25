@@ -70,7 +70,8 @@ import to.eyed.inferno.ui.theme.whiteA
  */
 @Composable
 fun MarkdownBody(text: String, modifier: Modifier = Modifier) {
-    val chunks = remember(text) { MarkdownChunker.chunks(text) }
+    val safeText = remember(text) { SafeMathMarkdown.sanitize(text) }
+    val chunks = remember(safeText) { MarkdownChunker.chunks(safeText) }
     SelectionContainer {
         Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             chunks.forEachIndexed { index, chunk -> key(index) { MarkdownChunkView(chunk) } }
@@ -165,7 +166,7 @@ fun MonoCodeBlock(code: String, language: String?, modifier: Modifier = Modifier
         }
         Hairline()
         Box(Modifier.horizontalScroll(rememberScrollState())) {
-            Text(trimmed, style = MonoBody, color = Ink.I100, softWrap = false, modifier = Modifier.padding(14.dp))
+            Text(highlightCode(trimmed, language), style = MonoBody.copy(color = CodePalette.Text), softWrap = false, modifier = Modifier.padding(14.dp))
         }
     }
 }
@@ -178,20 +179,21 @@ private fun CopyChip(onCopy: () -> Unit) {
     LaunchedEffect(copied) { if (copied) { delay(1_600); copied = false } }
     Row(
         Modifier
-            .clip(RoundedCornerShape(8.dp))
+            .clip(RoundedCornerShape(10.dp))
+            .background(whiteA(0.06f))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
                 role = Role.Button,
             ) { haptics.tap(); onCopy(); copied = true }
-            .padding(horizontal = 8.dp, vertical = 7.dp),
+            .padding(horizontal = 11.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Icon(
             if (copied) Lucide.Check else Lucide.Copy,
             contentDescription = S.copyCode,
-            Modifier.size(12.dp),
+            Modifier.size(16.dp),
             tint = if (copied) Ink.White else Ink.I500,
         )
         Text(if (copied) S.copied else S.copy, style = RowMeta, color = if (copied) Ink.White else Ink.I500)
