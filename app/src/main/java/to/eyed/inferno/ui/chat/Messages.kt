@@ -141,6 +141,7 @@ fun SharedTransitionScope.MessagesList(
     bottomInset: Dp = 132.dp,
     dev: ChatDevFlags = ChatDevFlags(),
     toolStatus: String? = null,
+    toolSearchNotes: String? = null,
 ) {
     val live = liveFor(messages, gen)
     val liveMeta = (gen as? GenState.Streaming)?.takeIf { dev.tokenCounter && it.tokens > 0 }?.let { S.liveTokens(it.tokens, String.format(Locale.US, "%.1f", it.tokPerSec)) }
@@ -159,12 +160,19 @@ fun SharedTransitionScope.MessagesList(
             verticalArrangement = Arrangement.spacedBy(24.dp, Alignment.Bottom),
         ) {
             if (live is Live.Item) item(key = "live", contentType = "live") {
-                if (toolStatus != null) {
-                    ReasoningPanel(toolStatus, live = true, thinkingMs = 0L)
+                if (toolStatus != null || toolSearchNotes != null) {
+                    AssistantActivityPanel(
+                        reasoning = (gen as? GenState.Thinking)?.reasoning.orEmpty(),
+                        searchNotes = toolSearchNotes,
+                        status = toolStatus,
+                        live = true,
+                        thinkingMs = (gen as? GenState.Thinking)?.thinkingMs ?: 0L,
+                    )
                 } else if (gen is GenState.Streaming && gen.text.isNotBlank()) {
                     AssistantMessage(
                         text = gen.text, reasoning = gen.reasoning, thinkingMs = gen.thinkingMs, streaming = true,
                         stats = null, showActions = false, showRegenerate = false, announce = false,
+                        searchNotes = toolSearchNotes, toolStatus = toolStatus,
                         onRegenerate = {}, onDetails = {}, liveMeta = liveMeta,
                     )
                 } else ThinkingIndicator(gen, tokenWords = dev.tokenWords)
@@ -188,6 +196,8 @@ fun SharedTransitionScope.MessagesList(
                             reasoning = if (streamingRow && s != null) s.reasoning else m.thinking.orEmpty(),
                             thinkingMs = if (streamingRow && s != null) s.thinkingMs else m.stats?.thinkingMs ?: 0L,
                             streaming = streamingRow,
+                            searchNotes = if (streamingRow) toolSearchNotes else null,
+                            toolStatus = if (streamingRow) toolStatus else null,
                             stats = m.stats,
                             showActions = !gen.isBusy,
                             showRegenerate = m.id == lastAssistantId,
@@ -330,15 +340,24 @@ private fun AssistantMessage(
     showDetails: Boolean = false,
     techMeta: Boolean = false,
     liveMeta: String? = null,
+    searchNotes: String? = null,
+    toolStatus: String? = null,
 ) {
     val context = LocalContext.current
     val haptics = rememberHaptics()
     Column(modifier.fillMaxWidth()) {
-        if (reasoning.isNotBlank()) {
-            ReasoningPanel(reasoning, live = false, thinkingMs = thinkingMs.takeIf { it > 0 } ?: 0L)
+        val activityContent = reasoning.isNotBlank() || !searchNotes.isNullOrBlank() || toolStatus != null
+        if (activityContent) {
+            AssistantActivityPanel(
+                reasoning = reasoning,
+                searchNotes = searchNotes,
+                status = toolStatus,
+                live = streaming,
+                thinkingMs = thinkingMs.takeIf { it > 0 } ?: 0L,
+            )
             Spacer(Modifier.height(10.dp))
         }
-        if (text.isNotBlank()) MarkdownBody(text)
+        if (text.isNotBlank()) MarkdownBody(text, streaming = streaming)
         if (streaming) Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             BlinkingCaret()
             if (liveMeta != null) Text(liveMeta, style = Meta, color = Ink.I500)
