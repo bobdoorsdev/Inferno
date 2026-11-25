@@ -88,17 +88,6 @@ fun AdvancedSection(appVm: AppViewModel, s: SettingsState, onOpenBench: () -> Un
 @Composable
 fun AboutAndDangerSections(appVm: AppViewModel, chatVm: ChatViewModel, onOpenLicences: () -> Unit, buildLine: Boolean) {
     val context = LocalContext.current
-    SectionHeader(S.about)
-    SettingsCard {
-        NavRow(S.openSourceLicences, null, onClick = onOpenLicences, description = S.licencesDesc)
-        CardDivider()
-        NavRow(S.sourceCode, null, description = S.sourceDesc, onClick = {
-            runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, S.sourceUrl.toUri())) }
-        })
-        CardDivider()
-        SettingRow(S.privacy, "${S.privacyLine} ${S.privacyDesc}")
-    }
-
     SectionHeader(S.dangerZone, color = Ink.Danger)
     SettingsCard {
         SettingRow(S.deleteAllChats, S.deleteAllChatsDesc) { ConfirmTwice(S.delete, onConfirm = { chatVm.deleteAll() }) }
