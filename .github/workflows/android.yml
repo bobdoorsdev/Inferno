@@ -1,4 +1,4 @@
-name: Android build (custom branch)
+name: Android build (custom tools)
 
 on:
   push:
