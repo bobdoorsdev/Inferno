@@ -10,12 +10,25 @@ object SafeMathMarkdown {
 
     fun sanitize(source: String): String {
         val out = StringBuilder(source.length + 32)
+        val display = StringBuilder()
         var fenceChar: Char? = null
         var fenceSize = 0
-        var displayMath = false
+        var displayClose: String? = null
+        fun emitDisplay() {
+            out.append("\u0060\u0060\u0060math\n")
+            out.append(display.toString().trimEnd('\n'))
+            out.append("\n\u0060\u0060\u0060\n")
+            display.setLength(0)
+            displayClose = null
+        }
         for (line in source.split('\n')) {
+            if (displayClose != null) {
+                if (line.trim() == displayClose) emitDisplay()
+                else display.append(line).append('\n')
+                continue
+            }
             val marker = fence.matchEntire(line)
-            if (!displayMath && marker != null) {
+            if (marker != null) {
                 val raw = marker.groupValues[1]
                 if (fenceChar == null) {
                     fenceChar = raw[0]
@@ -32,29 +45,17 @@ object SafeMathMarkdown {
                 continue
             }
             val trimmed = line.trim()
-            if (displayMath) {
-                if (trimmed == "$$" || trimmed == "\\]") {
-                    out.append("\u0060\u0060\u0060\n")
-                    displayMath = false
-                } else out.append(line).append('\n')
-                continue
+            when {
+                trimmed == "$$" -> { displayClose = "$$"; continue }
+                trimmed == "\\[" -> { displayClose = "\\]"; continue }
+                trimmed.startsWith("$$") && trimmed.length > 4 && trimmed.endsWith("$$") ->
+                    out.append("\u0060\u0060\u0060math\n").append(trimmed.substring(2, trimmed.length - 2)).append("\n\u0060\u0060\u0060\n")
+                trimmed.startsWith("\\[") && trimmed.endsWith("\\]") && trimmed.length > 4 ->
+                    out.append("\u0060\u0060\u0060math\n").append(trimmed.substring(2, trimmed.length - 2)).append("\n\u0060\u0060\u0060\n")
+                else -> out.append(inlineMath(line)).append('\n')
             }
-            if (trimmed == "$$" || trimmed == "\\[") {
-                out.append("\u0060\u0060\u0060math\n")
-                displayMath = true
-                continue
-            }
-            if (trimmed.startsWith("$$") && trimmed.length > 4 && trimmed.endsWith("$$")) {
-                out.append("\u0060\u0060\u0060math\n").append(trimmed.substring(2, trimmed.length - 2)).append("\n\u0060\u0060\u0060\n")
-                continue
-            }
-            if (trimmed.startsWith("\\[") && trimmed.endsWith("\\]") && trimmed.length > 4) {
-                out.append("\u0060\u0060\u0060math\n").append(trimmed.substring(2, trimmed.length - 2)).append("\n\u0060\u0060\u0060\n")
-                continue
-            }
-            out.append(inlineMath(line)).append('\n')
         }
-        if (displayMath) out.append("\u0060\u0060\u0060\n")
+        if (displayClose != null) emitDisplay()
         return out.toString().trimEnd('\n')
     }
 
