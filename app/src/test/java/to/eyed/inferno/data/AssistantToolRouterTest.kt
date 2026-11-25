@@ -24,6 +24,14 @@ class AssistantToolRouterTest {
         assertTrue(AssistantToolRouter.shouldRouteLocally("How much is 18 * 24?"))
     }
 
+    @Test fun webPlannerRunsOnlyForLikelyLookups() {
+        assertTrue(AssistantToolRouter.shouldConsiderWeb("What is the latest Android release?"))
+        assertTrue(AssistantToolRouter.shouldConsiderWeb("Compare the best local LLM apps this month"))
+        assertTrue(AssistantToolRouter.shouldConsiderWeb("Show me pictures of a red panda"))
+        assertFalse(AssistantToolRouter.shouldConsiderWeb("Explain how a transformer works"))
+        assertFalse(AssistantToolRouter.shouldConsiderWeb("Write a Lua function to select a room"))
+    }
+
     @Test fun plannerAcceptsImageSearchAndGeneratedTitle() {
         val plan = AssistantToolRouter.parse(
             """{"search_queries":["current release"],"image_queries":["red panda"],"title":"Current Release"}"""
