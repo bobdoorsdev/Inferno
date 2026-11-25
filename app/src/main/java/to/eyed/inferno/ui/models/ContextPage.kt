@@ -42,7 +42,7 @@ import to.eyed.inferno.ui.theme.Numeric
 import to.eyed.inferno.ui.theme.Typography
 import to.eyed.inferno.vm.AppViewModel
 
-// Context-length page of the model sheet: Auto toggle with the resolved label, a 1,024-step slider
+// Context-length page of the model sheet: Auto toggle with the resolved label, a 512-step slider
 // whose label is an instant analytic estimate (AppViewModel.previewEstimate, no native call), the KV type
 // group (developer) and Apply. Hosted by ModelSheet and by the Settings screen, both power user and up.
 
@@ -117,7 +117,7 @@ fun ContextPage(appVm: AppViewModel, onBack: () -> Unit, modifier: Modifier = Mo
                     val steps = (cap - ContextManager.MIN_CTX) / ContextManager.CTX_STEP - 1
                     InkSlider(
                         value = draft.toFloat(),
-                        onValueChange = { draft = ContextManager.roundDown(it.toInt() + ContextManager.CTX_STEP / 2, ContextManager.CTX_STEP).coerceIn(ContextManager.MIN_CTX, cap) },
+                        onValueChange = { draft = (ContextManager.MIN_CTX + ContextManager.roundDown((it.toInt() - ContextManager.MIN_CTX + ContextManager.CTX_STEP / 2).coerceAtLeast(0), ContextManager.CTX_STEP)).coerceIn(ContextManager.MIN_CTX, cap) },
                         valueRange = ContextManager.MIN_CTX.toFloat()..cap.toFloat(),
                         steps = steps.coerceAtLeast(0),
                         enabled = !auto,
