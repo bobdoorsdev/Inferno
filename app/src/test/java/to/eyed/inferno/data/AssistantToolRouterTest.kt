@@ -41,8 +41,11 @@ class AssistantToolRouterTest {
             listOf(WebSearchResult("Example", "https://example.com", "A useful result")),
             AssistantToolRouter.calculate("2 + 2"),
             "Wednesday, 25 November 2026",
+            listOf("latest release"),
         )
         assertTrue(notes!!.startsWith(AssistantToolRouter.NOTES_MARKER))
+        assertTrue(notes.contains("**Web search**"))
+        assertTrue(notes.contains("latest release"))
         assertTrue(notes.contains("[Example](https://example.com)"))
         assertTrue(notes.contains("2 + 2 = 4"))
         assertTrue(notes.contains("Wednesday, 25 November 2026"))

@@ -87,10 +87,15 @@ Output ONLY one JSON object, no markdown or explanation, using this schema:
     }
 
     /** Tool references are stored in the collapsible Think panel, not in the visible answer. */
-    fun notes(results: List<WebSearchResult>, calculation: LocalCalculation?, currentTime: String?): String? {
-        if (results.isEmpty() && calculation == null && currentTime == null) return null
+    fun notes(results: List<WebSearchResult>, calculation: LocalCalculation?, currentTime: String?, searchQueries: List<String> = emptyList()): String? {
+        if (results.isEmpty() && calculation == null && currentTime == null && searchQueries.isEmpty()) return null
         return buildString {
             append(NOTES_MARKER).append("\n\n")
+            if (searchQueries.isNotEmpty()) {
+                append("**Web search**\n")
+                searchQueries.forEach { query -> append("- ").append(query.replace(96.toChar().toString(), "")).append('\n') }
+                if (results.isNotEmpty()) append('\n')
+            }
             if (results.isNotEmpty()) {
                 append("**Web sources**\n")
                 results.forEachIndexed { index, result -> append(index + 1).append(". [").append(result.title).append("](").append(result.url).append(")\n") }

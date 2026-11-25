@@ -380,7 +380,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
             } else emptyList()
             _toolStatus.value = null
             val toolContext = AssistantToolRouter.promptContext(webResults, calculation, localTime)
-            toolNotes = AssistantToolRouter.notes(webResults, calculation, localTime)
+            toolNotes = AssistantToolRouter.notes(webResults, calculation, localTime, toolPlan.searchQueries)
             val conv = conversations.value.firstOrNull { it.id == conversationId }
             val nCtx = loaded.context.nCtx
             val reserve = c.contextManager.reserveFor(params, nCtx, thinkingOn)
@@ -529,7 +529,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
             detail,
         ).collect { event ->
             when (event) {
-                is GenerationEvent.Token -> output.append(event.text)
+                is GenerationEvent.Token, is GenerationEvent.Thinking -> output.append(event.text)
                 is GenerationEvent.Error, GenerationEvent.NeedsTruncation -> failed = true
                 else -> Unit
             }
