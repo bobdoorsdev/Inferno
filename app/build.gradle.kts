@@ -38,11 +38,11 @@ android {
     ndkVersion = "28.2.13676358"
 
     defaultConfig {
-        applicationId = "to.eyed.inferno"
+        applicationId = "to.eyed.inferno.custom"
         minSdk = 33
         targetSdk = 37
         versionCode = 1
-        versionName = "0.1.0"
+        versionName = "0.1.0-custom"
         // Test runner: swaps in TestApp when the manifest Application is absent, otherwise runs against InfernoApp.
         testInstrumentationRunner = "to.eyed.inferno.TestRunner"
 
