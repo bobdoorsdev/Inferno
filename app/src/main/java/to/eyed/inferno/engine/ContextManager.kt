@@ -243,8 +243,10 @@ class ContextManager(private val engine: PlannerEngine) {
     /** Keeps output headroom proportional to small contexts; the reserve must never exceed half the window. */
     fun reserveFor(params: GenerationParams, nCtx: Int, thinkingOn: Boolean): Int {
         val limit = minOf(4096, (nCtx / 2).coerceAtLeast(64))
-        return if (thinkingOn) (if (params.maxTokens > 0) params.maxTokens else maxOf(128, nCtx / 8)).coerceIn(64, limit)
-        else minOf(512, (nCtx / 4).coerceAtLeast(64))
+        return if (thinkingOn) {
+            val minimum = minOf(1024, limit)
+            (if (params.maxTokens > 0) params.maxTokens else maxOf(1024, nCtx / 8)).coerceIn(minimum, limit)
+        } else minOf(512, (nCtx / 4).coerceAtLeast(64))
     }
 
     private suspend fun count(messages: List<PromptMessage>, byId: Map<String, PromptImage>): Int =
