@@ -378,6 +378,8 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
             val searchQueries = (toolPlan.searchQueries + listOfNotNull(fallbackQuery)).distinct().take(2)
             val imageFallback = if (settings.webSearchEnabled) AssistantToolRouter.fallbackImageQuery(latestUserText) else null
             val imageQueries = (toolPlan.imageQueries + listOfNotNull(imageFallback)).distinct().take(2)
+            val visibleSearchQueries = (searchQueries + imageQueries.map { "Images: $it" }).distinct()
+            _toolSearchNotes.value = AssistantToolRouter.searchNotes(emptyList(), visibleSearchQueries, emptyList())
             val webResults = if (settings.webSearchEnabled && searchQueries.isNotEmpty()) {
                 _toolStatus.value = S.searchingWeb
                 try {
@@ -399,7 +401,6 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
                     catch (_: Exception) { emptyList() }
                 }.distinctBy { it.imageUrl }.take(4)
             } else emptyList()
-            val visibleSearchQueries = (searchQueries + imageQueries.map { "Images: $it" }).distinct()
             _toolSearchNotes.value = AssistantToolRouter.searchNotes(webResults, visibleSearchQueries, webImages)
             _toolStatus.value = null
             val toolContext = AssistantToolRouter.promptContext(webResults, calculation, localTime, webImages)
