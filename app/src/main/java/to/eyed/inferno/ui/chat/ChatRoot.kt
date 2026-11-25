@@ -116,6 +116,7 @@ fun ChatRoot(appVm: AppViewModel, chatVm: ChatViewModel, onBeforeSend: () -> Uni
     val imageBusy by chatVm.imageBusy.collectAsStateWithLifecycle()
     val toolStatus by chatVm.toolStatus.collectAsStateWithLifecycle()
     val toolSearchNotes by chatVm.toolSearchNotes.collectAsStateWithLifecycle()
+    val loadInProgress by appVm.loadInProgress.collectAsStateWithLifecycle()
     val conversations by chatVm.conversations.collectAsStateWithLifecycle()
     val activeId by chatVm.activeId.collectAsStateWithLifecycle()
     val busyIds by chatVm.busyIds.collectAsStateWithLifecycle()
@@ -288,6 +289,7 @@ fun ChatRoot(appVm: AppViewModel, chatVm: ChatViewModel, onBeforeSend: () -> Uni
                         showContextRing = settings.showsContextRing,
                         computeLine = if (settings.devThermalInfo) ({ appVm.computeLine(liveThreads) }) else null,
                         onCompactNow = if (canCompact) ({ chatVm.compactNow() }) else null,
+                        calibrating = loadInProgress && engine is EngineState.Ready,
                     )
                     Box(Modifier.weight(1f).fillMaxWidth()) {
                         if (messages.isEmpty() && (!gen.isBusy || gen is GenState.Queued)) {
