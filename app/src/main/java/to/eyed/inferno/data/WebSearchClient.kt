@@ -51,7 +51,7 @@ class WebSearchClient(private val client: OkHttpClient = DEFAULT_CLIENT) {
             response.body?.string().orEmpty()
         }
         val token = Regex("""vqd=['"]([^'"]+)['"]""").find(page)?.groupValues?.get(1)
-            ?: Regex(""""vqd"\\s*:\\s*"([^"]+)"""").find(page)?.groupValues?.get(1)
+            ?: Regex(""""vqd"\s*:\s*"([^"]+)"""").find(page)?.groupValues?.get(1)
             ?: return@withContext emptyList()
         val request = Request.Builder()
             .url("https://duckduckgo.com/i.js?l=wt-wt&o=json&q=$encoded&vqd=$token&f=,,,,")
@@ -127,7 +127,7 @@ class WebSearchClient(private val client: OkHttpClient = DEFAULT_CLIENT) {
 
         private fun clean(raw: String): String =
             Html.fromHtml(TAGS.replace(raw, " "), Html.FROM_HTML_MODE_LEGACY)
-                .toString().replace(Regex("\\s+"), " ").trim()
+                .toString().replace(Regex("\s+"), " ").trim()
 
         fun promptContext(results: List<WebSearchResult>): String? {
             if (results.isEmpty()) return null
