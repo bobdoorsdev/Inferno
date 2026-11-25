@@ -264,6 +264,7 @@ class ContextManager(private val engine: PlannerEngine) {
 
     companion object {
         private const val TAG = "ContextManager"
+        // 512 is the small-context floor; all slider values advance in 512-token increments.
         const val MIN_CTX = 512; const val CTX_STEP = 512; const val MAX_CTX = 131072
         const val TRIM_TARGET = 0.75f
         // ---- Context policy (COMPACT / STOP) ----
