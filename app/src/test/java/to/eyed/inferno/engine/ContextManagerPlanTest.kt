@@ -39,6 +39,12 @@ class ContextManagerPlanTest {
 
     private fun gate(avail: Long) = (ContextManager.BUDGET_GATE * ContextManager.budgetBytes(avail)).toLong()
 
+    @Test fun 512TokenContextIsValidAndOutputReserveCannotOverrunIt() {
+        assertEquals(512, ContextConfig(nCtx = 512).nCtx)
+        assertTrue(ContextManager.reserveFor(GenerationParams(), 512, false) <= 128)
+        assertTrue(ContextManager.reserveFor(GenerationParams(maxTokens = 4096), 512, true) <= 256)
+    }
+
     @Test fun autoGrowsAboveTheCatalogFloorWhenMemoryAllows() = runBlocking {
         // Qwen3.5-2B: 12 KB/token, floor 32k, train 262k, ~1.2 GB resident + 0.25 GB compute, Q8_0 mmproj 0.4 GB + 0.3 GB
         // encoder peak. Idle Seeker (3.9 GB free -> gate 2.9 GB) must resolve to >= 65,536 (the KV type flips to Q8_0 past ~56k f16).
