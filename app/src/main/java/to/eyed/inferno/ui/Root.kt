@@ -27,6 +27,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -40,9 +41,13 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.composables.icons.lucide.Lucide
+import com.composables.icons.lucide.Check
 import com.composables.icons.lucide.Thermometer
 import com.composables.icons.lucide.X
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import to.eyed.inferno.AppContainer
 import to.eyed.inferno.engine.EngineState
 import to.eyed.inferno.models.DownloadService
@@ -95,6 +100,9 @@ fun InfernoRoot(container: AppContainer, appVm: AppViewModel, chatVm: ChatViewMo
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     // The chat drawer reports when it is out so the global chips do not float over it.
     var drawerOpen by remember { mutableStateOf(false) }
+    var modelReady by remember { mutableStateOf(false) }
+    val noticeScope = rememberCoroutineScope()
+    var readyNoticeJob by remember { mutableStateOf<Job?>(null) }
 
     CompositionLocalProvider(LocalAnimations provides settings.streamingAnimations, LocalHaptics provides settings.haptics) {
         val haptics = rememberHaptics()
