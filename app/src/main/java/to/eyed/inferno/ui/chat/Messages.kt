@@ -57,6 +57,7 @@ import com.composables.icons.lucide.ChevronDown
 import com.composables.icons.lucide.Copy
 import com.composables.icons.lucide.Info
 import com.composables.icons.lucide.Lucide
+import com.composables.icons.lucide.GitBranch
 import com.composables.icons.lucide.NotebookPen
 import com.composables.icons.lucide.Pencil
 import com.composables.icons.lucide.RefreshCw
@@ -125,6 +126,7 @@ fun SharedTransitionScope.MessagesList(
     announceId: String?,
     imageScope: AnimatedVisibilityScope,
     onRegenerate: () -> Unit,
+    onBranch: (ChatMessage) -> Unit,
     onOpenImage: (Attachment) -> Unit,
     onOpenTurnDetails: (ChatMessage) -> Unit,
     onEdit: (ChatMessage) -> Unit,
@@ -154,7 +156,7 @@ fun SharedTransitionScope.MessagesList(
                     AssistantMessage(
                         text = gen.text, reasoning = gen.reasoning, thinkingMs = gen.thinkingMs, streaming = true,
                         stats = null, showActions = false, showRegenerate = false, announce = false,
-                        onRegenerate = {}, onDetails = {}, liveMeta = liveMeta,
+                        onRegenerate = {}, onBranch = {}, onDetails = {}, liveMeta = liveMeta,
                     )
                 } else ThinkingIndicator(gen, tokenWords = dev.tokenWords)
             }
@@ -183,6 +185,7 @@ fun SharedTransitionScope.MessagesList(
                             showMeta = m.id == lastAssistantId && !streamingRow,
                             announce = m.id == announceId,
                             onRegenerate = onRegenerate,
+                            onBranch = { onBranch(m) },
                             onDetails = { onOpenTurnDetails(m) },
                             modifier = Modifier.animateItem(fadeInSpec = null, fadeOutSpec = null, placementSpec = placement),
                             showDetails = dev.turnDetails,
@@ -312,6 +315,7 @@ private fun AssistantMessage(
     showRegenerate: Boolean,
     announce: Boolean,
     onRegenerate: () -> Unit,
+    onBranch: () -> Unit,
     onDetails: () -> Unit,
     modifier: Modifier = Modifier,
     showMeta: Boolean = false,
@@ -338,6 +342,7 @@ private fun AssistantMessage(
             Column {
                 Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
                     GhostIconButton(Lucide.Copy, S.copyMessage, onClick = { haptics.tap(); copyToClipboard(context, text, "Inferno message") }, size = 32.dp, iconSize = 15.dp, tint = Ink.I500)
+                    GhostIconButton(Lucide.GitBranch, "Branch from this reply", onClick = { haptics.tap(); onBranch() }, size = 32.dp, iconSize = 15.dp, tint = Ink.I500)
                     if (showRegenerate) GhostIconButton(Lucide.RefreshCw, S.regenerate, onClick = { haptics.tap(); onRegenerate() }, size = 32.dp, iconSize = 15.dp, tint = Ink.I500)
                     if (stats != null && showDetails) GhostIconButton(Lucide.Info, S.details, onClick = { haptics.tap(); onDetails() }, size = 32.dp, iconSize = 15.dp, tint = Ink.I500)
                     if (showMeta && stats != null) metaLine(stats, techMeta)?.let { meta ->
