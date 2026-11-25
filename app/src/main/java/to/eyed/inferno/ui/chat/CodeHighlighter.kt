@@ -78,8 +78,9 @@ fun highlightCode(code: String, language: String?): AnnotatedString {
             add(i + 1, CodePalette.Punctuation)
             if (i < code.length && code[i] in "/!?") add(i + 1, CodePalette.Punctuation)
             val tagStart = i
-            while (i < code.length && (code[i].isLetterOrDigit() || code[i] in ":._-")) i++
-            if (i > tagStart) add(i, CodePalette.Tag, true)
+            var tagEnd = i
+            while (tagEnd < code.length && (code[tagEnd].isLetterOrDigit() || code[tagEnd] in ":._-")) tagEnd++
+            if (tagEnd > tagStart) add(tagEnd, CodePalette.Tag, true)
             while (i < code.length) {
                 when {
                     code.startsWith("/>", i) -> { add(i + 2, CodePalette.Punctuation); break }
@@ -89,8 +90,9 @@ fun highlightCode(code: String, language: String?): AnnotatedString {
                     code[i] == '=' -> add(i + 1, CodePalette.Punctuation)
                     else -> {
                         val start = i
-                        while (i < code.length && !code[i].isWhitespace() && code[i] !in "=>/'\"") i++
-                        if (i == start) add(i + 1, CodePalette.Punctuation) else add(i, CodePalette.Attribute)
+                        var end = i
+                        while (end < code.length && !code[end].isWhitespace() && code[end] !in "=>/'\"") end++
+                        if (end == start) add(end + 1, CodePalette.Punctuation) else add(end, CodePalette.Attribute)
                     }
                 }
             }
