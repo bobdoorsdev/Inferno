@@ -356,7 +356,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
             val toolPlan = if (shouldRoute) {
                 _toolStatus.value = S.checkingTools
                 try {
-                    chooseTools(latestUserText, thinking, detail, settings.webSearchEnabled)
+                    chooseTools(history, thinking, detail, settings.webSearchEnabled)
                 } catch (e: CancellationException) {
                     throw e
                 } catch (_: Exception) {
@@ -509,19 +509,24 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
      * Its JSON is never saved as a chat turn; the normal answer is generated after the chosen tools run.
      */
     private suspend fun chooseTools(
-        latestUserText: String,
+        history: List<ChatMessage>,
         thinking: ThinkingSpec,
         detail: ImageDetail,
         allowWeb: Boolean,
     ): AssistantToolPlan {
+        val recent = history.filterNot { it.isSummary }.takeLast(3)
+        val toolMessages = buildList {
+            add(PromptMessage("system", AssistantToolRouter.prompt(allowWeb)))
+            recent.forEachIndexed { index, message ->
+                val limit = if (index == recent.lastIndex) 600 else 140
+                add(PromptMessage(message.role, if (index == recent.lastIndex) message.content.take(limit) else message.content.takeLast(limit)))
+            }
+        }
         val output = StringBuilder()
         var failed = false
         c.engine.generate(
             "tool-router",
-            listOf(
-                PromptMessage("system", AssistantToolRouter.prompt(allowWeb)),
-                PromptMessage(ChatRepository.ROLE_USER, latestUserText.take(800)),
-            ),
+            toolMessages,
             emptyList(),
             GenerationParams(temperature = 0f, topK = 1, topP = 1f, minP = 0f, maxTokens = 80),
             thinking,
