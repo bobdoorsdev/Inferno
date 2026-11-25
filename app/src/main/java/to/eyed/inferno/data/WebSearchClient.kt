@@ -23,7 +23,7 @@ class WebSearchClient(private val client: OkHttpClient = DEFAULT_CLIENT) {
             .header("Accept", "text/html")
             .build()
         client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) throw IllegalStateException("DuckDuckGo returned HTTP \${response.code}")
+            if (!response.isSuccessful) throw IllegalStateException("DuckDuckGo returned HTTP ${response.code}")
             parse(response.body?.string().orEmpty())
         }
     }
@@ -82,7 +82,7 @@ class WebSearchClient(private val client: OkHttpClient = DEFAULT_CLIENT) {
 
         fun appendSources(answer: String, results: List<WebSearchResult>): String {
             if (results.isEmpty()) return answer
-            val sources = results.mapIndexed { i, r -> "[\${i + 1}] [\${r.title}](\${r.url})" }.joinToString("\n")
+            val sources = results.mapIndexed { i, r -> "[${i + 1}] [${r.title}](${r.url})" }.joinToString("\n")
             return answer.trimEnd() + "\n\n**Sources**\n" + sources
         }
     }
