@@ -195,8 +195,6 @@ private fun SettingsBody(appVm: AppViewModel, chatVm: ChatViewModel, onOpenBench
         CardDivider()
         ToggleRow(S.stayReady, s.keepModelLoaded, appVm::setKeepModelLoaded, description = S.stayReadyDesc)
         CardDivider()
-        ToggleRow(S.streamingAnimations, s.streamingAnimations, appVm::setStreamingAnimations, description = S.streamingAnimationsDesc)
-        CardDivider()
         ToggleRow(S.haptics, s.haptics, appVm::setHaptics, description = S.hapticsDesc)
         CardDivider()
         ToggleRow(S.webSearch, s.webSearchEnabled, appVm::setWebSearchEnabled, description = S.webSearchDesc)
