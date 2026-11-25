@@ -2,7 +2,6 @@ package to.eyed.inferno.ui.chat
 
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.database.Cursor
 import android.net.Uri
 import android.provider.MediaStore
 import android.provider.OpenableColumns
@@ -472,5 +471,6 @@ private suspend fun readTextAttachment(context: android.content.Context, uri: Ur
             "js", "mjs" -> "javascript"
             else -> extension
         }
-        "**Attached file: $name**\\n\\u0060\\u0060\\u0060$language\\n$body\\n\\u0060\\u0060\\u0060"
+        val fence = "\u0060".repeat(3)
+        "**Attached file: $name**\n${fence}$language\n$body\n$fence"
     }
