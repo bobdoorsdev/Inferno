@@ -74,7 +74,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
         // A queued send waits for Ready; it fails when the engine settles in Idle/Error with no load in flight.
         viewModelScope.launch {
             combine(c.engine.state, app.loadInProgress) { s, loading -> s to loading }.collect { (s, loading) ->
-                if (s is EngineState.Ready) pendingSend?.let { q -> pendingSend = null; dispatch(q.text, q.attachments, q.target) }
+                if (s is EngineState.Ready) pendingSend?.let { q -> pendingSend = null; dispatch(q.text, q.attachments, q.files, q.target) }
                 if ((s is EngineState.Idle || s is EngineState.Error) && !loading) pendingSend?.let { q ->
                     pendingSend = null
                     setGen(q.target, GenState.Error((s as? EngineState.Error)?.message ?: S.couldNotLoadModel))
@@ -105,6 +105,8 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
 
     private val _pending = MutableStateFlow(restorePending())
     val pending: StateFlow<List<Attachment>> = _pending.asStateFlow()
+    private val _pendingFiles = MutableStateFlow(restorePendingFiles())
+    val pendingFiles: StateFlow<List<to.eyed.inferno.data.FileAttachment>> = _pendingFiles.asStateFlow()
 
     private val _lastStats = MutableStateFlow<GenerationStats?>(null)
     val lastStats: StateFlow<GenerationStats?> = _lastStats.asStateFlow()
@@ -158,7 +160,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
      */
     private val genJobs = mutableMapOf<String, Job>()
     /** A turn queued while the model loads, remembered with the chat it was typed in. */
-    private data class QueuedSend(val target: String, val text: String, val attachments: List<Attachment>)
+    private data class QueuedSend(val target: String, val text: String, val attachments: List<Attachment>, val files: List<to.eyed.inferno.data.FileAttachment>)
     private var pendingSend: QueuedSend? = null
 
     /** Registers the job under [key] before its body runs (LAZY start) so a cancel() can never miss it. */
@@ -261,6 +263,29 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
         c.images.deleteIfUnreferenced(att.id, c.db.dao().imageRefs(att.id))
     }
 
+    fun attachFileFromUri(uri: Uri) = viewModelScope.launch {
+        if (_pendingFiles.value.size >= MAX_FILES) { appVmRef?.notice("You can attach up to $MAX_FILES files"); return@launch }
+        runCatching { c.files.import(uri) }.onSuccess { file ->
+            if (_pendingFiles.value.none { it.id == file.id } && _pendingFiles.value.size < MAX_FILES) {
+                _pendingFiles.update { it + file }
+                savePendingFiles()
+            } else c.files.delete(file.id)
+        }.onFailure { appVmRef?.notice(it.message ?: "Could not attach this file") }
+    }
+
+    fun removeFileAttachment(index: Int) = viewModelScope.launch {
+        val file = _pendingFiles.value.getOrNull(index) ?: return@launch
+        _pendingFiles.update { it.filterIndexed { i, _ -> i != index } }
+        savePendingFiles()
+        c.files.delete(file.id)
+    }
+
+    private fun restorePendingFiles(): List<to.eyed.inferno.data.FileAttachment> =
+        handle.get<ArrayList<String>>(KEY_PENDING_FILES)?.mapNotNull(c.files::restorePendingKey) ?: emptyList()
+    private fun savePendingFiles() {
+        handle[KEY_PENDING_FILES] = ArrayList(_pendingFiles.value.map(c.files::pendingKey))
+    }
+
     private fun restorePending(): List<Attachment> =
         handle.get<ArrayList<String>>(KEY_PENDING)?.mapNotNull { s ->
             val p = s.split(':'); if (p.size == 3) c.images.attachment(p[0], p[1].toIntOrNull() ?: 0, p[2].toIntOrNull() ?: 0) else null
@@ -275,12 +300,15 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
         if (current.isBusy && current !is GenState.Queued) { appVmRef?.notice(S.stopCurrentAnswer); return }
         if (imageBusy.value) { appVmRef?.notice(S.waitForImageFirst); return }
         val atts = _pending.value
+        val files = _pendingFiles.value
+        if (text.isBlank() && atts.isEmpty() && files.isEmpty()) return
         fun queue() {
             // Replacing an earlier queued turn must not leave its chat stuck in Queued.
             pendingSend?.let { setGen(it.target, GenState.Idle) }
             val target = activeId.value ?: NO_CHAT
-            pendingSend = QueuedSend(target, text, atts)
+            pendingSend = QueuedSend(target, text, atts, files)
             _pending.value = emptyList(); savePending()
+            _pendingFiles.value = emptyList(); savePendingFiles()
             setGen(target, GenState.Queued(text))
         }
         when (c.engine.state.value) {
@@ -295,12 +323,12 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
                 if (selected != null && appVmRef != null) { appVmRef!!.selectAndLoad(selected.id); queue() }
                 else appVmRef?.notice(S.chooseModelFirst)
             }
-            else -> dispatch(text, atts)
+            else -> dispatch(text, atts, files)
         }
     }
 
     /** [target] is the chat the turn belongs to (NO_CHAT: create one); a queued send keeps the chat it was typed in. */
-    private fun dispatch(text: String, atts: List<Attachment>, target: String = activeId.value ?: NO_CHAT) {
+    private fun dispatch(text: String, atts: List<Attachment>, files: List<to.eyed.inferno.data.FileAttachment>, target: String = activeId.value ?: NO_CHAT) {
         launchGen(target) {
             val id = target.takeIf { it != NO_CHAT }
                 ?: c.chats.create(c.engine.state.value.modelOrNull?.id).id.also { newId ->
@@ -308,8 +336,9 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
                     genJobs.remove(NO_CHAT)?.let { genJobs[newId] = it }   // re-key so Stop in the new chat finds it
                 }
             genStates.update { it - target }
-            c.chats.appendUser(id, text, atts)
+            c.chats.appendUser(id, text, atts, files)
             if (_pending.value == atts) { _pending.value = emptyList(); savePending() }
+            if (_pendingFiles.value == files) { _pendingFiles.value = emptyList(); savePendingFiles() }
             run(id)
         }
     }
@@ -331,7 +360,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
         launchGen(id) {
             val msg = c.chats.message(messageId) ?: return@launchGen
             c.chats.truncateFrom(id, msg.orderIndex)
-            c.chats.appendUser(id, newText, msg.images)
+            c.chats.appendUser(id, newText, msg.images, msg.files)
             run(id)
         }
     }
@@ -817,9 +846,11 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
     private companion object {
         const val KEY_ACTIVE = "activeId"
         const val KEY_PENDING = "pendingIds"
+        const val KEY_PENDING_FILES = "pendingFileIds"
         /** Key for the gen state of a not-yet-created chat (queued send before the first message). */
         const val NO_CHAT = ""
         const val MAX_ATTACHMENTS = 2
+        const val MAX_FILES = 10
         const val MAX_PROMPT_IMAGES = 8
         const val PUBLISH_NS = 50_000_000L
         const val TPS_NS = 500_000_000L
