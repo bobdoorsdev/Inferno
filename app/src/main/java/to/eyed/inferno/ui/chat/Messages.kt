@@ -413,11 +413,11 @@ private fun extractCodeArtifacts(answer: String): List<AssistantCodeFile> {
         "yml" to "yml", "toml" to "toml", "rust" to "rs", "go" to "go", "c" to "c", "cpp" to "cpp",
     )
     val files = mutableListOf<AssistantCodeFile>()
-    fence.findAll(answer).forEachIndexed { index, match ->
+    fence.findAll(answer).forEach { match ->
         val language = match.groupValues[1].lowercase()
         val extension = extensions[language] ?: "txt"
         val hinted = match.groupValues[2].trim()
-        if (hinted.isBlank()) return@forEachIndexed
+        if (hinted.isBlank()) return@forEach
         val safe = hinted.replace('\\', '/').split('/')
             .filter { it.isNotBlank() && it != "." && it != ".." }
             .joinToString("/") { it.replace(Regex("""[^A-Za-z0-9._-]"""), "_") }
