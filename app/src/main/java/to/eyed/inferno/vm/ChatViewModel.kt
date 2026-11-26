@@ -59,6 +59,11 @@ import to.eyed.inferno.ui.S
  * editAndResend differ only in what they do to the history first. `activeId` and the pending attachment ids
  * live in the SavedStateHandle.
  */
+private const val CODE_RUNNER_INSTRUCTIONS = """
+Inferno has a sandboxed in-app browser runner for HTML, SVG, JavaScript, and CSS only.
+If the user explicitly asks you to run, execute, test, or preview one of those formats, return the complete runnable source in one fenced code block and add the word "run" after its language, for example ```html run or ```svg run. Inferno will open the isolated preview automatically. The runner has no network or file access and no Android bridge. Never claim Python, Luau, shell, or other code was executed; those runtimes are not available.
+""".trim()
+
 class ChatViewModel(private val c: AppContainer, private val handle: SavedStateHandle) : ViewModel() {
     private val appVm: AppViewModel get() = appVmRef ?: error("AppViewModel not bound")
     private var appVmRef: AppViewModel? = null
@@ -463,7 +468,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
                 val keep = images.map { it.id }.toSet()
                 val messages0 = view.prompt().map { it.copy(imageIds = it.imageIds.filter { id -> id in keep }) }
                 val baseSystem = ContextManager.systemWith(systemPrompt, view.summary?.content)
-                val fullSystem = listOfNotNull(baseSystem, toolContext).joinToString("\n\n").takeIf { it.isNotBlank() }
+                val fullSystem = listOfNotNull(baseSystem, toolContext, CODE_RUNNER_INSTRUCTIONS).joinToString("\n\n").takeIf { it.isNotBlank() }
                 return Triple(fullSystem, messages0, images)
             }
             var (system, messages0, images) = parts()
