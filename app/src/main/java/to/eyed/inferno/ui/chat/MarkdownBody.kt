@@ -6,6 +6,8 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.tween
@@ -119,14 +121,26 @@ private fun formatMarkdownChunk(source: String): String =
 
 private fun linkInlineCitations(source: String, urls: List<String>): String {
     if (urls.isEmpty()) return source
-    val citation = Regex("""(?<!\!)\[(\d{1,2}(?:\s*[,;]\s*\d{1,2})*)](?!\s*\()""")
-    return citation.replace(source) { match ->
-        Regex("""\d{1,2}""").findAll(match.groupValues[1]).mapNotNull { item ->
-            val index = item.value.toIntOrNull()?.minus(1) ?: return@mapNotNull null
-            urls.getOrNull(index)?.takeIf { it.startsWith("https://") || it.startsWith("http://") }
-                ?.let { "[" + item.value + "](" + it + ")" }
-        }.joinToString(", ").ifBlank { match.value }
+    fun linkText(block: String): String {
+        val citation = Regex("""(?<!\\!)\\[(\\d{1,2}(?:\\s*[,;]\\s*\\d{1,2})*)](?!\\s*\\()""")
+        return citation.replace(block) { match ->
+            Regex("""\\d{1,2}""").findAll(match.groupValues[1]).mapNotNull { item ->
+                val index = item.value.toIntOrNull()?.minus(1) ?: return@mapNotNull null
+                urls.getOrNull(index)?.takeIf { it.startsWith("https://") || it.startsWith("http://") }
+                    ?.let { "[" + item.value + "](" + it + ")" }
+            }.joinToString(", ").ifBlank { match.value }
+        }
     }
+    val fences = Regex("""(?s)(?:\\x60{3,}.*?\\x60{3,}|~~~.*?~~~)""")
+    val out = StringBuilder(source.length + 64)
+    var cursor = 0
+    fences.findAll(source).forEach { fence ->
+        out.append(linkText(source.substring(cursor, fence.range.first)))
+        out.append(fence.value)
+        cursor = fence.range.last + 1
+    }
+    out.append(linkText(source.substring(cursor)))
+    return out.toString()
 }
 
 @Composable
@@ -177,14 +191,26 @@ private fun MarkdownChunkView(chunk: String, animated: Boolean = false) {
                 if (preceding.isNotBlank()) MarkdownTextChunk(preceding, animated)
             }
             if (match.groupValues[1] == "__favicon__") {
-                AsyncImage(
-                    model = match.groupValues[2],
-                    contentDescription = "Website icon",
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier.size(18.dp).clip(RoundedCornerShape(4.dp)),
-                )
-            } else MarkdownImageCard(match.groupValues[1], match.groupValues[2], match.groupValues.getOrNull(3).orEmpty())
-            cursor = match.range.last + 1
+                val lineEnd = chunk.indexOf('\\n', match.range.last + 1).let { if (it < 0) chunk.length else it }
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    AsyncImage(
+                        model = match.groupValues[2],
+                        contentDescription = "Website icon",
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.size(18.dp).clip(RoundedCornerShape(4.dp)),
+                    )
+                    val sourceLine = chunk.substring(match.range.last + 1, lineEnd).trim()
+                    if (sourceLine.isNotBlank()) Box(Modifier.weight(1f)) { MarkdownTextChunk(sourceLine, animated) }
+                }
+                cursor = if (lineEnd < chunk.length) lineEnd + 1 else lineEnd
+            } else {
+                MarkdownImageCard(match.groupValues[1], match.groupValues[2], match.groupValues.getOrNull(3).orEmpty())
+                cursor = match.range.last + 1
+            }
         }
         if (cursor < chunk.length) {
             val trailing = chunk.substring(cursor)
