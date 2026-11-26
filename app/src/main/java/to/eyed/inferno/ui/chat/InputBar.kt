@@ -246,11 +246,12 @@ private fun AttachButton(
                 MenuActionRow(Lucide.Wand, "AI tools") { open = false; onOpenTools() }
             }
         } else {
-            GhostIconButton(
-                Lucide.Image, S.attach, enabled = !idle,
-                onClick = { onNoVision(noVisionReason ?: S.noVision) },
-                size = 38.dp, iconSize = 19.dp, tint = Ink.I500,
-            )
+            // AI workflows do not require a vision model, so keep the tools menu available even for text-only models.
+            GhostIconButton(Lucide.Plus, "Open tools", onClick = { haptics.tap(); open = true }, size = 38.dp, iconSize = 21.dp, tint = Ink.I100)
+            GlassMenu(expanded = open, onDismiss = { open = false }, minWidth = 168.dp) {
+                MenuActionRow(Lucide.Wand, "AI tools") { open = false; onOpenTools() }
+                MenuActionRow(Lucide.Image, S.attach) { open = false; onNoVision(noVisionReason ?: S.noVision) }
+            }
         }
     }
 }
