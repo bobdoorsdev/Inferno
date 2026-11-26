@@ -736,7 +736,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
                         val hasWebSearchAttempt = visibleSearchQueries.any { !it.startsWith("Images:", ignoreCase = true) }
                         val safeText = if (hasWebSearchAttempt && AssistantToolRouter.looksLikeSimulatedSearchOutput(stream.textStr)) {
                             Log.w("InfernoSearch", "Rejected simulated tool output; falling back to actual search results.")
-                            AssistantToolRouter.rawSearchFallback(finalResults, visibleSearchQueries, searchFeedback)
+                            AssistantToolRouter.rawSearchFallback(finalResults, visibleSearchQueries.toList(), searchFeedback)
                         } else stream.textStr
                         val finalAnswer = AssistantToolRouter.enrichAnswer(safeText, finalResults, finalImages)
                         if (assistantId == null) assistantId = c.chats.appendAssistant(conversationId, finalAnswer, finalThinking, stats).id
