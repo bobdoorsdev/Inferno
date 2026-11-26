@@ -21,8 +21,15 @@ import to.eyed.inferno.models.ThinkingSpec
 data class MemoryView(val summary: ChatMessage?, val recent: List<ChatMessage>) {
     /** Turns as prompt messages, 1:1 with [recent] (assistant turns are content only, never their reasoning). */
     fun prompt(): List<PromptMessage> = recent.map { m ->
-        if (m.role == ChatRepository.ROLE_USER) PromptMessage("user", ContextManager.sanitize(m.content), m.images.map { it.id })
-        else PromptMessage("assistant", m.content)
+        if (m.role == ChatRepository.ROLE_USER) {
+            val fileContext = m.files.joinToString("\\n\\n") { file ->
+                val extracted = file.extractedText
+                if (extracted != null) "[Attached file: ${file.displayName}]\\n$extracted"
+                else "[Attached file: ${file.displayName} · ${file.mimeType} · ${file.sizeBytes} bytes; contents are not text-extractable]"
+            }
+            val content = if (fileContext.isBlank()) m.content else m.content + "\\n\\n" + fileContext
+            PromptMessage("user", ContextManager.sanitize(content), m.images.map { it.id })
+        } else PromptMessage("assistant", m.content)
     }
     companion object {
         /**
