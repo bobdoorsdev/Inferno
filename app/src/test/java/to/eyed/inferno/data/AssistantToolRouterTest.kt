@@ -237,6 +237,13 @@ class AssistantToolRouterTest {
         assertTrue(AssistantToolRouter.processCsv("validate", "name,desc\nGPU,\"broken").startsWith("CSV error:"))
     }
 
+    @Test fun approximateCityIsOnlyRequestedForExplicitLocalContext() {
+        assertTrue(AssistantToolRouter.needsApproximateCity("Find coffee shops near me"))
+        assertTrue(AssistantToolRouter.needsApproximateCity("What is the weather here?"))
+        assertFalse(AssistantToolRouter.needsApproximateCity("What is the weather in São Paulo?"))
+        assertFalse(AssistantToolRouter.needsApproximateCity("Explain how weather forecasts work"))
+    }
+
     @Test fun sourcePanelHidesQueryListAndNumberingButRendersWebsiteFavicon() {
         val notes = AssistantToolRouter.searchNotes(
             listOf(WebSearchResult("Official product page", "https://example.com/product", "Product specification")),
