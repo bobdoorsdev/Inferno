@@ -118,7 +118,7 @@ object AssistantToolRouter {
             Output exactly one JSON object, no Markdown fences, prose, scripts, or simulated results.
             Required fields:
             {"decision":"answer|search","search_queries":[],"image_queries":[],"image_prompt":"","calculation":"","current_time":false,"weather_location":"","unit_conversion":"","date_calculation":"","json_action":"","json_text":"","regex_pattern":"","regex_text":"","regex_flags":"","color_value":"","title":""}
-        """.trimIndent().replace("{{DEVICE_DATE}}", LocalDate.now().toString())
+        """.trimIndent().replace("{{DEVICE_DATE}}", LocalDate.now(java.time.ZoneOffset.ofHours(-3)).toString())
     }
     /** Strictly accepts one JSON object; prose, Markdown fences and simulated output are rejected. */
     fun parse(raw: String): AssistantToolPlan = parseStrict(raw) ?: EMPTY
