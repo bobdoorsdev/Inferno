@@ -114,7 +114,7 @@ private fun StreamingMarkdownBody(text: String, modifier: Modifier, animateStrea
     val split = remember(text) { MarkdownChunker.splitOpenFence(text) }
     val chunks = remember(split.first) { MarkdownChunker.chunks(split.first) }
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        chunks.forEach { rawChunk ->
+        chunks.forEachIndexed { index, rawChunk ->
             key(rawChunk) {
                 val chunk = remember(rawChunk) { formatMarkdownChunk(rawChunk) }
                 if (index == chunks.lastIndex) StreamingMarkdownTail(chunk, animateStreaming)
@@ -317,7 +317,7 @@ fun MonoCodeBlock(code: String, language: String?, modifier: Modifier = Modifier
             .fillMaxWidth()
             .clip(shape)
             .background(Ink.I900)
-            .then(if (showRunner) Modifier else Modifier.border(1.dp, whiteA(0.08f), shape)),
+            .then(if (showPreviewDialog) Modifier else Modifier.border(1.dp, whiteA(0.08f), shape)),
     ) {
         Row(
             Modifier.fillMaxWidth().background(whiteA(0.03f)).padding(start = 18.dp, end = 6.dp, top = 3.dp, bottom = 3.dp),
