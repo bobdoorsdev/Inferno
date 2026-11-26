@@ -308,7 +308,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
         if (text.isBlank() && atts.isEmpty() && files.isEmpty()) return
         fun queue() {
             // Replacing an earlier queued turn must not leave its chat stuck in Queued.
-            pendingSend?.let { old -> setGen(old.target, GenState.Idle); old.files.forEach { c.files.delete(it.id) } }
+            pendingSend?.let { old -> setGen(old.target, GenState.Idle); viewModelScope.launch { old.files.forEach { c.files.delete(it.id) } } }
             val target = activeId.value ?: NO_CHAT
             pendingSend = QueuedSend(target, text, atts, files)
             _pending.value = emptyList(); savePending()
@@ -374,7 +374,11 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
         val id = activeId.value ?: NO_CHAT
         if (gen.value is GenState.Queued) {
             setGen(id, GenState.Idle)
-            if (pendingSend?.target == id) pendingSend = null
+            if (pendingSend?.target == id) {
+                val queuedFiles = pendingSend?.files.orEmpty()
+                pendingSend = null
+                viewModelScope.launch { queuedFiles.forEach { c.files.delete(it.id) } }
+            }
         }
         genJobs.remove(id)?.cancel()
         if (imageBusy.value) c.imageGen.cancel()
