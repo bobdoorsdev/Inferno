@@ -13,7 +13,7 @@ data class Attachment(val id: String, val path: String, val thumbPath: String, v
 data class ChatMessage(val id: String, val role: String, val content: String, val thinking: String?, val createdAt: Long,
     val images: List<Attachment>, val stats: MessageStats?, val orderIndex: Int,
     /** Summary rows only (ContextPolicy.COMPACT): orderIndex of the last message covered (-1 = carried over) and the cumulative count. */
-    val compactedThrough: Int = -1, val compactedCount: Int = 0) {
+    val compactedThrough: Int = -1, val compactedCount: Int = 0, val files: List<FileAttachment> = emptyList()) {
     val isSummary get() = role == ChatRepository.ROLE_SUMMARY
 }
 /** Everything the TurnDetailsSheet shows, persisted per assistant message (no LoadedModel dependency, so old turns and reopened chats have full details). Rows with 0 / null are hidden. */
@@ -35,7 +35,7 @@ data class Conversation(val id: String, val title: String, val createdAt: Long, 
  * The only writer of the chat tables. Attachment files are reference-counted through message_images: every
  * delete path asks the DAO for the remaining refs and lets ImageUtil drop the files at zero.
  */
-class ChatRepository(private val dao: ChatDao, private val imageUtil: ImageUtil) {
+class ChatRepository(private val dao: ChatDao, private val imageUtil: ImageUtil, private val fileStore: FileAttachmentStore? = null) {
     val conversations: Flow<List<Conversation>> = dao.conversations().map { list -> list.map { it.toConversation() } }
 
     /**
@@ -45,6 +45,7 @@ class ChatRepository(private val dao: ChatDao, private val imageUtil: ImageUtil)
      * time the re-attached ids have a reference again and only the truly orphaned ones go.
      */
     private val heldBack = LinkedHashSet<String>()
+    private val heldBackFiles = LinkedHashSet<String>()
 
     fun messages(conversationId: String): Flow<List<ChatMessage>> =
         dao.messages(conversationId).map { rows -> rows.map { it.toChatMessage() } }
@@ -83,11 +84,11 @@ class ChatRepository(private val dao: ChatDao, private val imageUtil: ImageUtil)
         return c.toConversation()
     }
 
-    suspend fun appendUser(conversationId: String, text: String, attachments: List<Attachment>): ChatMessage {
+    suspend fun appendUser(conversationId: String, text: String, attachments: List<Attachment>, files: List<FileAttachment> = emptyList()): ChatMessage {
         val now = System.currentTimeMillis()
         val m = MessageEntity(
             id = UUID.randomUUID().toString(), conversationId = conversationId, orderIndex = dao.maxOrderIndex(conversationId) + 1,
-            role = ROLE_USER, content = text, createdAt = now,
+            role = ROLE_USER, content = text + (fileStore?.encodeMarker(files)?.let { if (it.isBlank()) "" else "\\n\\n$it" } ?: ""), createdAt = now,
         )
         val rows = attachments.distinctBy { it.id }.mapIndexed { i, a -> MessageImageEntity(m.id, a.id, i, a.width, a.height) }
         dao.insertMessage(m, rows)
@@ -145,8 +146,9 @@ class ChatRepository(private val dao: ChatDao, private val imageUtil: ImageUtil)
     suspend fun truncateFrom(conversationId: String, orderIndex: Int) {
         flushHeldBack()
         val ids = dao.imageIdsFrom(conversationId, orderIndex)
+        val fileIds = fileStore?.let { store -> dao.messagesOnce(conversationId).filter { it.message.orderIndex >= orderIndex }.flatMap { store.idsFromContent(it.message.content) } }.orEmpty()
         dao.deleteFrom(conversationId, orderIndex)
-        synchronized(heldBack) { heldBack += ids }
+        synchronized(heldBack) { heldBack += ids; heldBackFiles += fileIds }
     }
 
     suspend fun message(messageId: String): ChatMessage? = dao.messageById(messageId)?.toChatMessage()
@@ -158,15 +160,19 @@ class ChatRepository(private val dao: ChatDao, private val imageUtil: ImageUtil)
 
     suspend fun delete(conversationId: String) {
         val ids = dao.imageIdsFrom(conversationId, 0)
+        val fileIds = fileStore?.let { store -> dao.messagesOnce(conversationId).flatMap { store.idsFromContent(it.message.content) } }.orEmpty()
         dao.deleteConversation(conversationId)     // messages + message_images cascade
         releaseImages(ids)
+        releaseFiles(fileIds)
         flushHeldBack()
     }
 
     suspend fun deleteAll() {
         val ids = dao.allImageIds()
+        val fileIds = fileStore?.let { store -> dao.allMessageContents().flatMap(store::idsFromContent) }.orEmpty()
         dao.deleteAll()
         releaseImages(ids)
+        releaseFiles(fileIds)
         flushHeldBack()
     }
 
@@ -181,6 +187,13 @@ class ChatRepository(private val dao: ChatDao, private val imageUtil: ImageUtil)
     private suspend fun flushHeldBack() {
         val ids = synchronized(heldBack) { heldBack.toList().also { heldBack.clear() } }
         if (ids.isNotEmpty()) releaseImages(ids)
+        val files = synchronized(heldBack) { heldBackFiles.toList().also { heldBackFiles.clear() } }
+        releaseFiles(files)
+    }
+
+    private suspend fun releaseFiles(ids: List<String>) {
+        val store = fileStore ?: return
+        for (id in ids.distinct()) if (dao.fileRefs(id) == 0) store.delete(id)
     }
 
     private fun ConversationEntity.toConversation() = Conversation(id, title, createdAt, updatedAt, pinned, archived, modelId, trimmedBefore)
@@ -193,7 +206,8 @@ class ChatRepository(private val dao: ChatDao, private val imageUtil: ImageUtil)
             templateName = m.templateName, templateSupported = m.templateSupported, finishReason = m.finishReason, modelId = m.modelId,
         ) else null
         val atts = images.sortedBy { it.orderIndex }.map { imageUtil.attachment(it.imageId, it.width, it.height) }
-        return ChatMessage(m.id, m.role, m.content, m.thinking, m.createdAt, atts, stats, m.orderIndex, m.compactedThrough, m.compactedCount)
+        val (content, files) = fileStore?.decodeMarker(m.content) ?: (m.content to emptyList())
+        return ChatMessage(m.id, m.role, content, m.thinking, m.createdAt, atts, stats, m.orderIndex, m.compactedThrough, m.compactedCount, files)
     }
 
     private fun MessageEntity.withStats(s: MessageStats) = copy(
