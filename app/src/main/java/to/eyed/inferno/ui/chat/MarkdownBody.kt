@@ -492,8 +492,8 @@ internal object MarkdownMath {
         if (line.length > MAX_LINE_CHARS) return line
         var value = inlineDisplayDollar.replace(line) { "> **" + formatExpression(it.groupValues[1]) + "**" }
         value = inlineDisplayBracket.replace(value) { "> **" + formatExpression(it.groupValues[1]) + "**" }
-        value = inlineDollar.replace(value) { "**" + formatExpression(it.groupValues[1]) + "**" }
-        value = inlineParen.replace(value) { "**" + formatExpression(it.groupValues[1]) + "**" }
+        value = inlineDollar.replace(value) { formatExpression(it.groupValues[1]) }
+        value = inlineParen.replace(value) { formatExpression(it.groupValues[1]) }
         return value
     }
 
