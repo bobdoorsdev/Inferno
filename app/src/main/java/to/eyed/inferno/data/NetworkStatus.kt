@@ -12,7 +12,7 @@ import kotlinx.coroutines.flow.asStateFlow
  * Android has confirmed that the active Wi-Fi network can reach the public internet.
  */
 class NetworkStatus(context: Context) {
-    private val manager = context.applicationContext.getSystemService(ConnectivityManager::class.java)
+    private val manager = requireNotNull(context.applicationContext.getSystemService(ConnectivityManager::class.java))
     private val _wifiConnected = MutableStateFlow(readValidatedWifi())
     val wifiConnected = _wifiConnected.asStateFlow()
 
