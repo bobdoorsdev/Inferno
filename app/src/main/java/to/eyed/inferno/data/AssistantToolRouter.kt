@@ -58,13 +58,16 @@ object AssistantToolRouter {
             Regex("""[+\-*/%^×÷]|\b(plus|minus|times|multiplied|divided|percent|percentage|square root|fahrenheit|celsius|kilometers|miles|kilograms|pounds)\b""").containsMatchIn(value)
         val bareExpression = Regex("""\d+(?:\.\d+)?\s*[+\-*/%^×÷]\s*\d""").containsMatchIn(value)
         val asksLocalUtility = Regex(
-            """\b(convert|unit conversion|days between|date difference|add \d+ (?:days?|weeks?|months?|years?)|subtract \d+ (?:days?|weeks?|months?|years?)|format this json|pretty.?print json|validate json|test this regex|regex match|regex tester|color code)\b""",
+            """\b(convert|unit conversion|days between|date difference|add \d+ (?:days?|weeks?|months?|years?)|subtract \d+ (?:days?|weeks?|months?|years?)|format(?: this)? json|pretty.?print json|validate json|test this regex|regex match|regex tester|color code)\b""",
             RegexOption.IGNORE_CASE,
         ).containsMatchIn(value) || Regex(
-            """-?\d+(?:\.\d+)?\s*(?:°?[cfk]|km|cm|mm|mi|m|ft|in|yd|kg|g|mg|lb|oz|ml|l|gal|mph|kph|kb|mb|gb|tb|kib|mib|gib)\s+(?:to|in)\s+[a-z°/]+""",
+            """-?\d+(?:\.\d+)?\s*(?:°?[cfk]|km|cm|mm|mi|m|ft|in|yd|kg|g|mg|lb|oz|ml|l|gal|mph|kph|kb|mb|gb|tb|kib|mib|gib|meters?|metres?|centimeters?|centimetres?|millimeters?|millimetres?|kilometers?|kilometres?|miles?|pounds?|ounces?|liters?|litres?|gallons?)\s+(?:to|in)\s+[a-z°/]+""",
             RegexOption.IGNORE_CASE,
         ).containsMatchIn(value) || Regex(
-            """\b(?:#(?:[0-9a-f]{3}|[0-9a-f]{6})|rgb\(|hsl\().{0,60}(?:to|convert|color)\b""",
+            """\b\d{4}-\d{2}-\d{2}\s*[+-]\s*\d+\s*(?:days?|weeks?|months?|years?)\b""",
+            RegexOption.IGNORE_CASE,
+        ).containsMatchIn(value) || Regex(
+            """\b(?:#(?:[0-9a-f]{3}|[0-9a-f]{6})|rgb\(|hsl\(|hsv\().{0,60}(?:to|convert|color|rgb|hex)\b""",
             RegexOption.IGNORE_CASE,
         ).containsMatchIn(value)
         return asksTime || asksMath || bareExpression || asksLocalUtility
@@ -82,7 +85,7 @@ On-device utilities:
 - date_calculation: ISO date differences or adding/subtracting days, weeks, months, or years. Example: "days between 2026-01-01 and 2026-11-26".
 - json_action + json_text: action is format, minify, or validate. Include only the JSON payload, max 16 KB.
 - regex_pattern + regex_text + optional regex_flags: test a regex against supplied text; flags may include i, m, s. Pattern max 256 chars, text max 4 KB.
-- color_value: convert CSS HEX, rgb(), or hsl() to HEX, RGB, and HSL.
+- color_value: convert CSS HEX, rgb(), hsl(), or hsv() to HEX, RGB, HSL, and HSV.
 Image search: choose up to three image_queries when pictures materially improve an answer. For product recommendations (gaming PCs, phones, laptops, GPUs, monitors, etc.), locations, animals, and visual comparisons, search for representative images alongside factual sources. Put exact returned image URLs into the final answer inline beside the paragraph they illustrate, using ![short factual description](exact image URL). Use images selectively; never invent URLs or claim an image is an exact listing/product variant when the source does not support that.
 Image generation: when the user explicitly asks you to create, draw, or generate an image, return a concise image_prompt describing the requested image. Do not set image_prompt for requests that merely discuss image generation or ask for image search.
 Calculator: use for exact arithmetic and expressions. Return only an expression with numbers, parentheses, + - * / % ^. Never guess changing rates.

@@ -116,6 +116,7 @@ class AssistantToolRouterTest {
         assertTrue(AssistantToolRouter.calculateDate("days between 2026-01-01 and 2026-01-03")!!.startsWith("2 days"))
         assertTrue(AssistantToolRouter.calculateDate("2026-01-01 + 7 days")!!.startsWith("2026-01-08"))
         assertNull(AssistantToolRouter.calculateDate("tomorrow"))
+        assertTrue(AssistantToolRouter.shouldRouteLocally("2026-01-01 + 7 days"))
     }
 
     @Test fun localJsonToolValidatesFormatsAndMinifies() {
@@ -139,6 +140,7 @@ class AssistantToolRouterTest {
         assertTrue(orange.contains("HSV(24°, 100%, 100%)"))
         assertTrue(AssistantToolRouter.convertColor("hsl(120, 100%, 50%)")!!.contains("#00FF00"))
         assertTrue(AssistantToolRouter.convertColor("hsv(240, 100%, 100%)")!!.contains("#0000FF"))
+        assertTrue(AssistantToolRouter.shouldRouteLocally("HSV(240, 100%, 100%) to RGB"))
         assertNull(AssistantToolRouter.convertColor("not a color"))
     }
 
