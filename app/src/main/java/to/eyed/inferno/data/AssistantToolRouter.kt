@@ -510,16 +510,28 @@ Return JSON only: {"search_queries":[],"max_sources":5,"image_queries":[],"image
     /** Resolve source markers and surface real image-search results in the answer instead of relying on the model to repeat them. */
     fun enrichAnswer(answer: String, sources: List<WebSearchResult>, images: List<WebImageResult>): String {
         var result = answer
-        // Resolve citations attached to words and grouped references against actual results.
-        val citation = Regex("""\[(\d{1,2}(?:\s*[,;]\s*\d{1,2})*)](?!\s*\()""")
-        result = citation.replace(result) { match ->
-            Regex("""\d{1,2}""").findAll(match.groupValues[1]).mapNotNull { number ->
-                val label = number.value
-                val source = sources.getOrNull(label.toIntOrNull()?.minus(1) ?: -1)
-                if (source == null || !(source.url.startsWith("https://") || source.url.startsWith("http://"))) null
-                else "[" + label + "](" + markdownUrl(source.url) + ")"
-            }.joinToString(", ")
+        // Resolve inline citations outside code fences only; code samples may legitimately contain [1] literals.
+        fun linkCitations(block: String): String {
+            val citation = Regex("""\[(\d{1,2}(?:\s*[,;]\s*\d{1,2})*)](?!\s*\()""")
+            return citation.replace(block) { match ->
+                Regex("""\d{1,2}""").findAll(match.groupValues[1]).mapNotNull { number ->
+                    val label = number.value
+                    val source = sources.getOrNull(label.toIntOrNull()?.minus(1) ?: -1)
+                    if (source == null || !(source.url.startsWith("https://") || source.url.startsWith("http://"))) null
+                    else "[" + label + "](" + markdownUrl(source.url) + ")"
+                }.joinToString(", ").ifBlank { match.value }
+            }
         }
+        val fences = Regex("""(?s)(?:\x60{3,}.*?\x60{3,}|~~~.*?~~~)""")
+        val linked = StringBuilder(result.length + 64)
+        var citationCursor = 0
+        fences.findAll(result).forEach { fence ->
+            linked.append(linkCitations(result.substring(citationCursor, fence.range.first)))
+            linked.append(fence.value)
+            citationCursor = fence.range.last + 1
+        }
+        linked.append(linkCitations(result.substring(citationCursor)))
+        result = linked.toString()
         val missingImages = images.asSequence()
             .filter { it.imageUrl.startsWith("https://") && it.sourceUrl.startsWith("https://") }
             .distinctBy { it.imageUrl }
@@ -528,9 +540,14 @@ Return JSON only: {"search_queries":[],"max_sources":5,"image_queries":[],"image
             .toList()
         if (missingImages.isEmpty()) return result.trimEnd()
 
-        // Put automatic image results beside the paragraph they illustrate instead of appending a detached
-        // image dump. The planner also asks the model to place image URLs inline when it can do so itself.
-        val blocks = result.trim().split(Regex("""\n{2,}""")).filter { it.isNotBlank() }.toMutableList()
+        // Keep code fences as indivisible blocks while selecting the paragraph for each image.
+        val codeBlocks = mutableListOf<String>()
+        val answerWithoutCode = fences.replace(result) { match ->
+            val index = codeBlocks.size
+            codeBlocks += match.value
+            "\u0000INFERNO_CODE_$index\u0000"
+        }
+        val blocks = answerWithoutCode.trim().split(Regex("""\n{2,}""")).filter { it.isNotBlank() }.toMutableList()
         if (blocks.isEmpty()) blocks += ""
         missingImages.forEach { image ->
             val terms = Regex("""[\p{L}\p{N}]{3,}""").findAll(image.title.lowercase(Locale.ROOT))
@@ -550,7 +567,9 @@ Return JSON only: {"search_queries":[],"max_sources":5,"image_queries":[],"image
             }
             blocks.add((best + 1).coerceAtMost(blocks.size), imageMarkdown)
         }
-        return blocks.joinToString("\n\n").trimEnd()
+        return Regex("""\u0000INFERNO_CODE_(\d+)\u0000""").replace(blocks.joinToString("\n\n").trimEnd()) { match ->
+            codeBlocks.getOrNull(match.groupValues[1].toIntOrNull() ?: -1).orEmpty()
+        }
     }
 
     private fun markdownUrl(url: String): String =
