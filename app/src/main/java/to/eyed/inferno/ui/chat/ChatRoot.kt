@@ -154,6 +154,7 @@ fun ChatRoot(appVm: AppViewModel, chatVm: ChatViewModel, onBeforeSend: () -> Uni
     var editId by rememberSaveable { mutableStateOf<String?>(null) }
     var renameId by rememberSaveable { mutableStateOf<String?>(null) }
     var modelSheet by rememberSaveable { mutableStateOf(false) }
+    var aiToolsSheet by rememberSaveable { mutableStateOf(false) }
     var showSavedAnswers by rememberSaveable { mutableStateOf(false) }
     var cameraUri by rememberSaveable { mutableStateOf<String?>(null) }
     var announceId by remember { mutableStateOf<String?>(null) }
@@ -377,6 +378,7 @@ fun ChatRoot(appVm: AppViewModel, chatVm: ChatViewModel, onBeforeSend: () -> Uni
                                         canAttachImages = canAttachImages, cameraAvailable = cameraAvailable, noVisionReason = noVisionReason,
                                         onPickPhotos = pickPhotos, onCapturePhoto = capturePhoto,
                                         onPickFile = { filePicker.launch(arrayOf("*/*")) },
+                                        onOpenTools = { aiToolsSheet = true },
                                         calibrating = loadInProgress && engine is EngineState.Ready, onNoVision = appVm::notice,
                                         gen = gen, engine = engine, disabledReason = disabledReason, imageBusy = imageBusy,
                                         onSend = send, onStop = chatVm::cancel,
@@ -426,6 +428,13 @@ fun ChatRoot(appVm: AppViewModel, chatVm: ChatViewModel, onBeforeSend: () -> Uni
 
     // ---- sheets -----------------------------------------------------------------------------------------------
     if (modelSheet) ModelSheet(appVm, onDismiss = { modelSheet = false }, onOpenManager = { appVm.navigate(Screen.MODELS) })
+    if (aiToolsSheet) AiToolsSheet(
+        onDismiss = { aiToolsSheet = false },
+        onSelect = { prompt ->
+            draft = if (draft.isBlank()) prompt else prompt + "\n\n" + draft.trimStart()
+            aiToolsSheet = false
+        },
+    )
     if (showSavedAnswers) SavedAnswersSheet(
         answers = settings.savedAnswers,
         onDismiss = { showSavedAnswers = false },
