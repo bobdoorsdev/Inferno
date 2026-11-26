@@ -8,7 +8,7 @@ plugins {
 android {
     namespace = "to.eyed.inferno.sd"
     compileSdk {
-        version = release(37)
+        version = release(37) { minorApiLevel = 1 }
     }
     ndkVersion = "28.2.13676358"
 

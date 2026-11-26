@@ -73,6 +73,7 @@ import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Plus
 import com.composables.icons.lucide.Square
 import com.composables.icons.lucide.X
+import com.composables.icons.lucide.Wand
 import to.eyed.inferno.data.Attachment
 import to.eyed.inferno.engine.EngineState
 import to.eyed.inferno.ui.S
@@ -106,6 +107,7 @@ fun InputBar(
     noVisionReason: String?,
     onPickPhotos: () -> Unit,
     onCapturePhoto: () -> Unit,
+    onOpenTools: () -> Unit,
     onNoVision: (String) -> Unit,
     gen: GenState,
     engine: EngineState,
@@ -164,7 +166,7 @@ fun InputBar(
                         },
                 )
                 Row(Modifier.padding(start = 8.dp, end = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    AttachButton(canAttachImages, cameraAvailable, noVisionReason, idle, onPickPhotos, onCapturePhoto, onNoVision)
+                    AttachButton(canAttachImages, cameraAvailable, noVisionReason, onPickPhotos, onCapturePhoto, onOpenTools, onNoVision)
                     Spacer(Modifier.width(2.dp))
                     Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
                         if (thinkingAvailable) ThinkChip(thinkingOn, onToggleThinking)
@@ -227,11 +229,11 @@ private fun ThumbStrip(attachments: List<Attachment>, onRemove: (Int) -> Unit) {
     }
 }
 
-/** Plus with the anchored Camera / Photos menu; without vision an Image glyph explains why on tap. */
+/** Plus menu: Photos/camera when vision is available, AI workflows on every model. */
 @Composable
 private fun AttachButton(
-    canAttachImages: Boolean, cameraAvailable: Boolean, noVisionReason: String?, idle: Boolean,
-    onPickPhotos: () -> Unit, onCapturePhoto: () -> Unit, onNoVision: (String) -> Unit,
+    canAttachImages: Boolean, cameraAvailable: Boolean, noVisionReason: String?,
+    onPickPhotos: () -> Unit, onCapturePhoto: () -> Unit, onOpenTools: () -> Unit, onNoVision: (String) -> Unit,
 ) {
     var open by remember { mutableStateOf(false) }
     val haptics = rememberHaptics()
@@ -241,13 +243,15 @@ private fun AttachButton(
             GlassMenu(expanded = open, onDismiss = { open = false }, minWidth = 168.dp) {
                 MenuActionRow(Lucide.Images, S.photos) { open = false; onPickPhotos() }
                 if (cameraAvailable) MenuActionRow(Lucide.Camera, S.camera) { open = false; onCapturePhoto() }
+                MenuActionRow(Lucide.Wand, "AI tools") { open = false; onOpenTools() }
             }
         } else {
-            GhostIconButton(
-                Lucide.Image, S.attach, enabled = !idle,
-                onClick = { onNoVision(noVisionReason ?: S.noVision) },
-                size = 38.dp, iconSize = 19.dp, tint = Ink.I500,
-            )
+            // AI workflows do not require a vision model, so keep the tools menu available even for text-only models.
+            GhostIconButton(Lucide.Plus, "Open tools", onClick = { haptics.tap(); open = true }, size = 38.dp, iconSize = 21.dp, tint = Ink.I100)
+            GlassMenu(expanded = open, onDismiss = { open = false }, minWidth = 168.dp) {
+                MenuActionRow(Lucide.Wand, "AI tools") { open = false; onOpenTools() }
+                MenuActionRow(Lucide.Image, S.attach) { open = false; onNoVision(noVisionReason ?: S.noVision) }
+            }
         }
     }
 }
