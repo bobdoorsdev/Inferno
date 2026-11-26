@@ -2,6 +2,7 @@ package to.eyed.inferno.data
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
@@ -126,20 +127,19 @@ object AssistantToolRouter {
         val source = raw.trim()
         if (!source.startsWith("{") || !source.endsWith("}")) return null
         val root = runCatching { Json.parseToJsonElement(source) as? JsonObject }.getOrNull() ?: return null
-        val decision = root["decision"]?.jsonPrimitive?.contentOrNull?.lowercase() ?: return null
+        val decision = (root["decision"] as? JsonPrimitive)?.contentOrNull?.lowercase() ?: return null
         if (decision != "answer" && decision != "search") return null
         fun string(key: String, max: Int): String? =
-            root[key]?.jsonPrimitive?.contentOrNull?.trim()?.take(max)?.takeIf(String::isNotEmpty)
+            (root[key] as? JsonPrimitive)?.contentOrNull?.trim()?.take(max)?.takeIf { it.isNotEmpty() }
         fun stringList(key: String, maxItems: Int, maxChars: Int): List<String> =
-            when (val element = root[key]) {
-                is JsonArray -> element.mapNotNull { it.jsonPrimitive.contentOrNull?.trim()?.takeIf(String::isNotEmpty) }
-                else -> emptyList()
-            }.distinct().take(maxItems).map { it.take(maxChars) }
+            (root[key] as? JsonArray).orEmpty()
+                .mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { value -> value.isNotEmpty() } }
+                .distinct().take(maxItems).map { it.take(maxChars) }
 
         return AssistantToolPlan(
             searchQueries = stringList("search_queries", 4, 180),
             calculation = string("calculation", 128),
-            currentTime = root["current_time"]?.jsonPrimitive?.booleanOrNull == true,
+            currentTime = (root["current_time"] as? JsonPrimitive)?.booleanOrNull == true,
             imageQueries = stringList("image_queries", 2, 180),
             title = string("title", 48)?.replace(Regex("""\s+"""), " "),
             imagePrompt = string("image_prompt", 600),
