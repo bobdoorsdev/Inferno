@@ -58,7 +58,7 @@ class WebSearchClient(private val client: OkHttpClient = DEFAULT_CLIENT) {
 
     private fun rankResults(results: List<WebSearchResult>, queries: List<String>): List<WebSearchResult> {
         val ignored = setOf("the", "and", "for", "with", "from", "that", "this", "what", "when", "where", "how", "who", "are", "is", "was", "were", "best", "latest")
-        val terms = queries.flatMap { it.lowercase().split(Regex("""[^\\p{L}\\p{N}]+""")) }
+        val terms = queries.flatMap { it.lowercase().split(Regex("""[^\p{L}\p{N}]+""")) }
             .filter { it.length > 2 && it !in ignored }.distinct()
         return results.distinctBy { canonicalUrl(it.url) }.sortedByDescending { result ->
             val title = result.title.lowercase()

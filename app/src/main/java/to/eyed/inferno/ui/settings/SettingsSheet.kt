@@ -179,7 +179,7 @@ private fun SettingsBody(appVm: AppViewModel, chatVm: ChatViewModel, onOpenBench
         CardDivider()
         ToggleRow(S.streamingAnimations, s.streamingAnimations, appVm::setStreamingAnimations, description = S.streamingAnimationsDesc)
         CardDivider()
-        ToggleRow(S.haptics, s.haptics, description = S.hapticsDesc)
+        ToggleRow(S.haptics, s.haptics, appVm::setHaptics, description = S.hapticsDesc)
         CardDivider()
         val n = models.count { it.isDownloaded }
         SettingRow(S.modelsStorage, S.modelsStorageLine(n, DownloadService.fmt(storage.modelsBytes), storage.partialBytes.takeIf { it > 0 }?.let { DownloadService.fmt(it) })) {

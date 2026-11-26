@@ -166,6 +166,8 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
      * must cancel the job of the chat it was pressed in, not whichever job started last.
      */
     private val genJobs = mutableMapOf<String, Job>()
+    /** Quiet title refinements are detached from the finished response. */
+    private val titleJobs = mutableMapOf<String, Job>()
     /** A turn queued while the model loads, remembered with the chat it was typed in. */
     private data class QueuedSend(val target: String, val text: String, val attachments: List<Attachment>, val files: List<to.eyed.inferno.data.FileAttachment>)
     private var pendingSend: QueuedSend? = null
@@ -217,6 +219,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
     fun pin(id: String, pinned: Boolean) = viewModelScope.launch { c.chats.setPinned(id, pinned) }
     fun archive(id: String, archived: Boolean) = viewModelScope.launch { c.chats.setArchived(id, archived) }
     fun delete(id: String) = viewModelScope.launch {
+        titleJobs.remove(id)?.cancel()
         if (id == activeId.value) handle[KEY_ACTIVE] = null
         stopFull.update { it - id }
         if (genStates.value[id]?.isBusy == true) {
@@ -229,6 +232,8 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
         c.chats.delete(id)
     }
     fun deleteAll() = viewModelScope.launch {
+        titleJobs.values.forEach { it.cancel() }
+        titleJobs.clear()
         pendingSend?.files?.forEach { c.files.delete(it.id) }
         pendingSend = null
         _pendingFiles.value.forEach { c.files.delete(it.id) }
@@ -312,6 +317,8 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
 
     /** Ready/Suspended: run now; Loading: queue one turn (replacing an earlier queued one); Idle: "Choose a model first". */
     fun send(text: String) {
+        titleJobs.values.forEach { it.cancel() }
+        titleJobs.clear()
         val current = gen.value
         if (current.isBusy && current !is GenState.Queued) { appVmRef?.notice(S.stopCurrentAnswer); return }
         if (imageBusy.value) { appVmRef?.notice(S.waitForImageFirst); return }
@@ -661,19 +668,28 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
                 }
             }
             stream.close()
-            // Generate the chat title after the visible answer, so title planning never delays the first token.
-            // It runs only for the first user turn and uses the same local model; no network request is involved.
-            if (history.count { it.role == ChatRepository.ROLE_USER } == 1 && assistantId != null) {
-                val title = try {
-                    chooseTools(history, thinking, detail, allowWeb = false, createTitle = true).title
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (_: Exception) {
-                    null
-                }
-                if (!title.isNullOrBlank()) c.chats.setTitle(conversationId, title)
-            }
+            // Mark the response complete before refining its title in a quiet background task.
             if (genStates.value[conversationId]?.isBusy == true) setGen(conversationId, GenState.Idle)
+            if (history.count { it.role == ChatRepository.ROLE_USER } == 1 &&
+                assistantId != null && ChatRepository.isTitleWorthy(latestUserText)
+            ) {
+                titleJobs.remove(conversationId)?.cancel()
+                titleJobs[conversationId] = viewModelScope.launch {
+                    delay(650)
+                    // The native inference engine is shared; never start naming while another chat is generating.
+                    if (genStates.value.values.any { it.isBusy }) return@launch
+                    val title = try {
+                        chooseTools(history, thinking, detail, allowWeb = false, createTitle = true).title
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        null
+                    }
+                    if (!title.isNullOrBlank() && ChatRepository.isTitleWorthy(title) &&
+                        genStates.value[conversationId]?.isBusy != true
+                    ) c.chats.setTitle(conversationId, title)
+                }
+            }
         } catch (e: CancellationException) {
             // User Stop: keep whatever streamed, marked as stopped.
             stream.close()

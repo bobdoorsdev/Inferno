@@ -243,19 +243,20 @@ class ChatRepository(private val dao: ChatDao, private val imageUtil: ImageUtil,
         fun titleFrom(text: String): String {
             val line = text.lineSequence().map { raw ->
                 raw.trim()
-                    .replace(Regex("""^\\s*[-*#>]+\\s*"""), "")
-                    .replace(Regex("""^(?:hi|hello|hey)\\b[,!?.:\\s-]*""", RegexOption.IGNORE_CASE), "")
-                    .replace(Regex("""^(?:please\\s+)?(?:can|could|would)\\s+you\\s+""", RegexOption.IGNORE_CASE), "")
+                    .replace(Regex("""^\s*[-*#>]+\s*"""), "")
+                    .replace(Regex("""^(?:hi|hello|hey)\b[,!?.:\s-]*""", RegexOption.IGNORE_CASE), "")
+                    .replace(Regex("""^(?:please\s+)?(?:can|could|would)\s+you\s+""", RegexOption.IGNORE_CASE), "")
                     .trim().trimEnd('.', '!', '?', ',', ':', ';')
             }.firstOrNull(::isTitleWorthy) ?: return ""
-            val end = Regex("""[.!?](?:\\s|$)""").find(line)?.range?.first
+            val end = Regex("""[.!?](?:\s|$)""").find(line)?.range?.first
             val sentence = if (end == null) line else line.substring(0, end)
             return if (sentence.length <= TITLE_MAX) sentence else sentence.take(TITLE_MAX).trimEnd() + "…"
         }
 
+
         fun isTitleWorthy(text: String): Boolean {
             val normalized = text.lowercase(java.util.Locale.ROOT)
-                .replace(Regex("""[^\\p{L}\\p{N}]+"""), " ").trim()
+                .replace(Regex("""[^\p{L}\p{N}]+"""), " ").trim()
             if (normalized.isBlank()) return false
             val greetings = setOf(
                 "hi", "hello", "hey", "hi there", "hello there", "hey there", "good morning",

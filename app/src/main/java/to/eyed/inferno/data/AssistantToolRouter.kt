@@ -164,13 +164,13 @@ Return JSON only: {"search_queries":[],"image_queries":[],"image_prompt":"","cal
     fun enrichAnswer(answer: String, sources: List<WebSearchResult>, images: List<WebImageResult>): String {
         var result = answer
         // Resolve citations attached to words and grouped references against actual results.
-        val citation = Regex("""\\[(\\d{1,2}(?:\\s*[,;]\\s*\\d{1,2})*)](?!\\s*\\()""")
+        val citation = Regex("""\[(\d{1,2}(?:\s*[,;]\s*\d{1,2})*)](?!\s*\()""")
         result = citation.replace(result) { match ->
-            Regex("""\\d{1,2}""").findAll(match.groupValues[1]).mapNotNull { number ->
+            Regex("""\d{1,2}""").findAll(match.groupValues[1]).mapNotNull { number ->
                 val label = number.value
                 val source = sources.getOrNull(label.toIntOrNull()?.minus(1) ?: -1)
                 if (source == null || !(source.url.startsWith("https://") || source.url.startsWith("http://"))) null
-                else "[${label}](${markdownUrl(source.url)})"
+                else "[" + label + "](" + markdownUrl(source.url) + ")"
             }.joinToString(", ")
         }
         val missingImages = images.asSequence()
@@ -241,11 +241,11 @@ Return JSON only: {"search_queries":[],"image_queries":[],"image_prompt":"","cal
         if (value.isBlank()) return false
         if (fallbackSearchQuery(value) != null || fallbackImageQuery(value) != null) return true
         val explicitLookup = Regex(
-            """\\b(search|look up|research|find online|verify|check the official|official documentation|sources|citations|references)\\b""",
+            """\b(search|look up|research|find online|verify|check the official|official documentation|sources|citations|references)\b""",
             RegexOption.IGNORE_CASE,
         )
         val changingFacts = Regex(
-            """\\b(who is|who are|where is|where are|when did|when was|when is|how much|how many|how old|does .{1,80} support|is .{1,80} still|which .{1,80} is better|recommend|recommendation|alternatives|alternative|reviews?|specifications|specs)\\b""",
+            """\b(who is|who are|where is|where are|when did|when was|when is|how much|how many|how old|does .{1,80} support|is .{1,80} still|which .{1,80} is better|recommend|recommendation|alternatives|alternative|reviews?|specifications|specs)\b""",
             RegexOption.IGNORE_CASE,
         )
         return explicitLookup.containsMatchIn(value) || changingFacts.containsMatchIn(value)
@@ -254,10 +254,10 @@ Return JSON only: {"search_queries":[],"image_queries":[],"image_prompt":"","cal
     /** Hard fallback: obvious time-sensitive requests still search when a small local planner omits a query. */
     fun fallbackSearchQuery(text: String): String? {
         val value = text.trim()
-        val trigger = Regex("""\\b(latest|newest|current|today|tonight|right now|rn|recent|this week|this month|this year|as of|price|prices|cost|release|released|release date|available|availability|news|weather|forecast|schedule|score|standings|ranking|rankings|review|reviews|compare|comparison|versus|vs|best|top|specification|specifications|specs|official|documentation|support|compatibility|search|look up|find online|who is the current|what happened)\\b""", RegexOption.IGNORE_CASE)
+        val trigger = Regex("""\b(latest|newest|current|today|tonight|right now|rn|recent|this week|this month|this year|as of|price|prices|cost|release|released|release date|available|availability|news|weather|forecast|schedule|score|standings|ranking|rankings|review|reviews|compare|comparison|versus|vs|best|top|specification|specifications|specs|official|documentation|support|compatibility|search|look up|find online|who is the current|what happened)\b""", RegexOption.IGNORE_CASE)
         if (value.isBlank() || !trigger.containsMatchIn(value)) return null
         return value
-            .replace(Regex("""^(?:please\\s+)?(?:can you\\s+)?(?:search(?: the web)?(?: for)?|look up|find online|research)\\s*""", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("""^(?:please\s+)?(?:can you\s+)?(?:search(?: the web)?(?: for)?|look up|find online|research)\s*""", RegexOption.IGNORE_CASE), "")
             .trim().takeIf { it.length >= 2 }?.take(220)
     }
 
