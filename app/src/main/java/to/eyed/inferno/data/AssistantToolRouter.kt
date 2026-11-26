@@ -486,8 +486,13 @@ Return JSON only: {"search_queries":[],"max_sources":5,"image_queries":[],"image
                 results.forEachIndexed { index, result ->
                     val title = result.title.replace("[", "").replace("]", "").replace("\n", " ").take(120)
                     val host = runCatching { java.net.URI(result.url).host?.removePrefix("www.") }.getOrNull().orEmpty()
-                    val icon = result.siteIconUrl ?: host.takeIf { it.isNotBlank() }?.let { "https://www.google.com/s2/favicons?domain=" + it + "&sz=64" }
-                    if (icon != null) append("![__favicon__](").append(icon).append(") ")
+                    val fallbackIcon = host.takeIf { it.isNotBlank() }?.let { "https://www.google.com/s2/favicons?domain=" + it + "&sz=64" }
+                    val icon = result.siteIconUrl ?: fallbackIcon
+                    if (icon != null) {
+                        append("![__favicon__](").append(icon)
+                        fallbackIcon?.takeIf { result.siteIconUrl != null && it != icon }?.let { append(" \"").append(it).append("\"") }
+                        append(") ")
+                    }
                     append("**[").append(title).append("](").append(result.url).append(")**")
                     if (host.isNotBlank()) append(" · ").append(host)
                     if (result.snippet.isNotBlank()) append("\n   ").append(result.snippet)
