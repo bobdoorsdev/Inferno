@@ -376,21 +376,19 @@ Return JSON only: {"search_queries":[],"max_sources":5,"image_queries":[],"image
     }
 
     /** Search evidence and local tools are stored separately so the UI can reopen their own tabs later. */
-    fun searchNotes(results: List<WebSearchResult>, searchQueries: List<String>, images: List<WebImageResult> = emptyList()): String? {
-        if (results.isEmpty() && searchQueries.isEmpty() && images.isEmpty()) return null
+    fun searchNotes(results: List<WebSearchResult>, searchQueries: List<String> = emptyList(), images: List<WebImageResult> = emptyList()): String? {
+        if (results.isEmpty() && images.isEmpty()) return null
         return buildString {
-            if (searchQueries.isNotEmpty()) {
-                append("**Web search**\n")
-                searchQueries.forEach { append("- ").append(it.replace(96.toChar().toString(), "")).append('\n') }
-                append('\n')
-            }
             if (results.isNotEmpty()) {
-                append("**Web sources**\n")
+                append("**Sources**\n")
                 results.forEachIndexed { index, result ->
                     val title = result.title.replace("[", "").replace("]", "").replace("\n", " ").take(120)
                     val host = runCatching { java.net.URI(result.url).host?.removePrefix("www.") }.getOrNull().orEmpty()
-                    append(index + 1).append(". **[").append(title).append("](").append(result.url).append(")**")
+                    val icon = host.takeIf { it.isNotBlank() }?.let { "https://www.google.com/s2/favicons?domain=" + it + "&sz=64" }
+                    if (icon != null) append("![__favicon__](").append(icon).append(") ")
+                    append("**[").append(title).append("](").append(result.url).append(")**")
                     if (host.isNotBlank()) append(" · ").append(host)
+                    append("<!-- INFERNO_CITATION:").append(index + 1).append(":").append(result.url).append(" -->")
                     if (result.snippet.isNotBlank()) append("\n   ").append(result.snippet)
                     append('\n')
                 }
