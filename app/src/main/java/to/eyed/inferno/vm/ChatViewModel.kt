@@ -584,7 +584,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
                         didWork = true
                     }
                 }
-                val pageUrl = pendingPlan.readUrl?.takeIf { it.isNotBlank() && usedPageUrls.add(it) }
+                val pageUrl = pendingPlan.readUrl?.takeIf { settings.webSearchEnabled && it.isNotBlank() && usedPageUrls.add(it) }
                 if (pageUrl != null) {
                     didWork = true
                     _toolStatus.value = S.searchingWeb
