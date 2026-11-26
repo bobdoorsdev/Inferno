@@ -416,14 +416,13 @@ private fun extractCodeArtifacts(answer: String): List<AssistantCodeFile> {
     fence.findAll(answer).forEachIndexed { index, match ->
         val language = match.groupValues[1].lowercase()
         val extension = extensions[language] ?: "txt"
-        val hinted = match.groupValues[2].trim().replace('\\', '/')
-        val safe = hinted.split('/').filter { it.isNotBlank() && it != "." && it != ".." }
+        val hinted = match.groupValues[2].trim()
+        if (hinted.isBlank()) return@forEachIndexed
+        val safe = hinted.replace('\\', '/').split('/')
+            .filter { it.isNotBlank() && it != "." && it != ".." }
             .joinToString("/") { it.replace(Regex("""[^A-Za-z0-9._-]"""), "_") }
-        val path = when {
-            safe.isBlank() -> "file_" + (index + 1).toString().padStart(2, '0') + "." + extension
-            safe.substringAfterLast('/').contains('.') -> safe
-            else -> safe + "." + extension
-        }
+        if (safe.isBlank()) return@forEachIndexed
+        val path = if (safe.substringAfterLast('/').contains('.')) safe else safe + "." + extension
         if (files.none { it.path == path }) files += AssistantCodeFile(path, match.groupValues[3].trimEnd())
     }
     return files
