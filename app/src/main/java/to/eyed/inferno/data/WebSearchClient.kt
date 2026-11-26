@@ -68,12 +68,17 @@ class WebSearchClient(private val client: OkHttpClient = DEFAULT_CLIENT) {
         val rows = runCatching { Json.parseToJsonElement(json).jsonObject["results"]?.jsonArray }.getOrNull().orEmpty()
         rows.mapNotNull { item ->
             val obj = item.jsonObject
-            val image = obj["thumbnail"]?.jsonPrimitive?.contentOrNull
-                ?: obj["image"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+            val thumbnail = obj["thumbnail"]?.jsonPrimitive?.contentOrNull
+            val original = obj["image"]?.jsonPrimitive?.contentOrNull
+            fun usable(url: String?): Boolean {
+                val uri = url?.let { runCatching { Uri.parse(it) }.getOrNull() } ?: return false
+                return uri.scheme == "https" && !uri.host.isNullOrBlank()
+            }
+            val image = thumbnail?.takeIf(::usable) ?: original?.takeIf(::usable) ?: return@mapNotNull null
+            val fallback = original?.takeIf { it != image && usable(it) }
             val source = obj["url"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
             val title = obj["title"]?.jsonPrimitive?.contentOrNull?.take(120).orEmpty().ifBlank { q }
-            val uri = runCatching { Uri.parse(image) }.getOrNull() ?: return@mapNotNull null
-            if (uri.scheme != "https" || uri.host.isNullOrBlank()) null else WebImageResult(title, image, source)
+            WebImageResult(title, image, source, fallback)
         }.distinctBy { it.imageUrl }.take(3)
     }
 

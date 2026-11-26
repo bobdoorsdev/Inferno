@@ -21,7 +21,7 @@ data class AssistantToolPlan(
     val weatherLocation: String? = null,
 )
 data class LocalCalculation(val expression: String, val result: String)
-data class WebImageResult(val title: String, val imageUrl: String, val sourceUrl: String)
+data class WebImageResult(val title: String, val imageUrl: String, val sourceUrl: String, val fallbackImageUrl: String? = null)
 data class AssistantToolNotes(val reasoning: String, val search: String?, val local: String?)
 
 /** The local model chooses tools; arithmetic and clock values are computed on-device. */
@@ -151,7 +151,9 @@ Return JSON only: {"search_queries":[],"image_queries":[],"image_prompt":"","cal
                 append("\n**Images**\n")
                 images.forEach { image ->
                     val title = image.title.replace("[", " ").replace("]", " ").replace("\n", " ").take(100)
-                    append("![").append(title).append("](").append(image.imageUrl).append(")\n")
+                    append("![").append(title).append("](").append(image.imageUrl)
+                    image.fallbackImageUrl?.takeIf { it.isNotBlank() && it != image.imageUrl }?.let { append(" \"").append(it).append("\"") }
+                    append(")\n")
                     append("[Source page](").append(image.sourceUrl).append(")\n")
                 }
             }

@@ -117,7 +117,7 @@ private fun MarkdownChunkView(chunk: String, animated: Boolean = false) {
                 val preceding = chunk.substring(cursor, start)
                 if (preceding.isNotBlank()) MarkdownTextChunk(preceding, animated)
             }
-            MarkdownImageCard(match.groupValues[1], match.groupValues[2])
+            MarkdownImageCard(match.groupValues[1], match.groupValues[2], match.groupValues.getOrNull(3).orEmpty())
             cursor = match.range.last + 1
         }
         if (cursor < chunk.length) {
@@ -127,22 +127,26 @@ private fun MarkdownChunkView(chunk: String, animated: Boolean = false) {
     }
 }
 
-private val MarkdownImagePattern = Regex("""!\[([^\]]*)\]\(((?:https?://|file://)[^)\s]+)(?:\s+"[^"]*")?\)""")
+private val MarkdownImagePattern = Regex("""!\[([^\]]*)\]\(((?:https?://|file://)[^)\s]+)(?:\s+"([^"]*)")?\)""")
 
 @Composable
-private fun MarkdownImageCard(alt: String, url: String) {
+private fun MarkdownImageCard(alt: String, url: String, fallbackUrl: String = "") {
     val uriHandler = LocalUriHandler.current
-    var failed by remember(url) { mutableStateOf(false) }
+    var activeUrl by remember(url, fallbackUrl) { mutableStateOf(url) }
+    var failed by remember(url, fallbackUrl) { mutableStateOf(false) }
     Column(
         Modifier.widthIn(max = 360.dp).fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(5.dp),
     ) {
         if (!failed) {
             AsyncImage(
-                model = url,
+                model = activeUrl,
                 contentDescription = alt.ifBlank { "Search result image" },
                 contentScale = ContentScale.Crop,
-                onError = { failed = true },
+                onError = {
+                    if (activeUrl == url && fallbackUrl.startsWith("https://") && fallbackUrl != url) activeUrl = fallbackUrl
+                    else failed = true
+                },
                 modifier = Modifier.fillMaxWidth().heightIn(max = 240.dp)
                     .clip(RoundedCornerShape(Radii.row))
                     .background(Ink.SurfaceHigh)
@@ -150,7 +154,7 @@ private fun MarkdownImageCard(alt: String, url: String) {
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
                         role = Role.Button,
-                    ) { runCatching { uriHandler.openUri(url) } },
+                    ) { runCatching { uriHandler.openUri(activeUrl) } },
             )
         } else {
             Box(

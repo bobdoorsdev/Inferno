@@ -52,6 +52,15 @@ class AssistantToolRouterTest {
         assertNull(AssistantToolRouter.fallbackImageQuery("Explain how GPUs work"))
     }
 
+    @Test fun searchImageMarkdownKeepsAnOriginalImageFallback() {
+        val notes = AssistantToolRouter.searchNotes(
+            emptyList(), listOf("gaming PCs"),
+            listOf(WebImageResult("Gaming PC", "https://thumb.example/image.jpg", "https://store.example/product", "https://cdn.example/full.jpg")),
+        )
+        assertTrue(notes!!.contains("https://thumb.example/image.jpg"))
+        assertTrue(notes.contains("\"https://cdn.example/full.jpg\""))
+    }
+
     @Test fun weatherLocationIsParsedForThePrivateWeatherTool() {
         val plan = AssistantToolRouter.parse(
             """{"weather_location":"São Paulo, Brazil","current_time":true}"""
