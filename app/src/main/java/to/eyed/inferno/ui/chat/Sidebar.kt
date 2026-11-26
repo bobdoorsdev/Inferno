@@ -51,7 +51,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.composables.icons.lucide.Archive
 import com.composables.icons.lucide.ArchiveRestore
-import com.composables.icons.lucide.Bookmark
 import com.composables.icons.lucide.FileText
 import com.composables.icons.lucide.ChevronDown
 import com.composables.icons.lucide.Gauge
@@ -115,7 +114,6 @@ fun Sidebar(
     searchMatches: Set<String> = emptySet(),
     onSearchQuery: (String) -> Unit = {},
     onExport: (Conversation) -> Unit = {},
-    onOpenSavedAnswers: () -> Unit = {},
 ) {
     var query by rememberSaveable { mutableStateOf("") }
     var archivedOpen by rememberSaveable { mutableStateOf(false) }
@@ -146,7 +144,6 @@ fun Sidebar(
                     NavRow(Lucide.SquarePen, S.newChat, onClick = onNew)
                     NavRow(Lucide.Images, S.gallery, onClick = onGallery)
                     NavRow(Lucide.HardDrive, S.models, subtitle = loadedModelName ?: S.noModelLoaded, onClick = onOpenModels)
-                    NavRow(Lucide.Bookmark, "Saved answers", onClick = onOpenSavedAnswers)
                 }
             }
             if (conversations.isEmpty()) item(key = "empty") {
