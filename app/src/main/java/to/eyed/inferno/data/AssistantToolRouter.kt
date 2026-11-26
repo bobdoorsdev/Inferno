@@ -402,6 +402,44 @@ object AssistantToolRouter {
         }
     }
 
+    /** Detects obvious simulated browser scripts rather than real user-facing research. */
+    fun looksLikeSimulatedSearchOutput(answer: String): Boolean {
+        val lower = answer.lowercase(Locale.ROOT)
+        val explicitSimulation = listOf(
+            "this is a simulation", "simulated search output", "mock search results",
+            "fake browser results", "pretend search", "simulation of a web search",
+        ).any(lower::contains)
+        if (explicitSimulation) return true
+        val codeFence = listOf("\x60\x60\x60lua", "\x60\x60\x60python", "\x60\x60\x60javascript", "\x60\x60\x60js").any(lower::contains)
+        val scriptMarkers = listOf(
+            "local results", "local searchresults", "search_results =", "searchresults =",
+            "http.get(", "http.request(", "requests.get(", "duckduckgo.com", "fetch(",
+        ).any(lower::contains)
+        return codeFence && scriptMarkers
+    }
+
+    /** Safe fallback: display the real returned sources rather than allowing fabricated tool output. */
+    fun rawSearchFallback(
+        results: List<WebSearchResult>,
+        queries: List<String>,
+        feedback: String?,
+    ): String = buildString {
+        append("I rejected the generated response because it looked like simulated search output. ")
+        if (results.isEmpty()) {
+            append(feedback?.takeIf { it.isNotBlank() }
+                ?: "The real web search returned no usable results, so I could not verify the answer.")
+            if (queries.isNotEmpty()) append("\n\nQueries run: ").append(queries.joinToString("; "))
+        } else {
+            append("Here are the real search results returned by the web search tool:\n\n")
+            results.forEachIndexed { index, result ->
+                append("[").append(index + 1).append("] [").append(result.title.ifBlank { result.url }).append("](")
+                    .append(result.url).append(")")
+                if (result.snippet.isNotBlank()) append("\n").append(result.snippet)
+                append("\n\n")
+            }
+        }
+    }
+
     /** Search evidence and local tools are stored separately so the UI can reopen their own tabs later. */
     fun searchNotes(results: List<WebSearchResult>, searchQueries: List<String>, images: List<WebImageResult> = emptyList()): String? {
         if (results.isEmpty() && searchQueries.isEmpty() && images.isEmpty()) return null
