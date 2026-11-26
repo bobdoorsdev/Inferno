@@ -9,7 +9,7 @@ import org.junit.Test
 class AssistantToolRouterTest {
     @Test fun modelCanChooseSearchAndLocalTools() {
         val plan = AssistantToolRouter.parse(
-            """{"search_queries":["latest Android release","Android 17 release"],"calculation":"2 + 2","current_time":true}"""
+            """{"decision":"search","search_queries":["latest Android release","Android 17 release"],"calculation":"2 + 2","current_time":true}"""
         )
         assertEquals(listOf("latest Android release", "Android 17 release"), plan.searchQueries)
         assertEquals("2 + 2", plan.calculation)
@@ -24,20 +24,25 @@ class AssistantToolRouterTest {
         assertTrue(AssistantToolRouter.shouldRouteLocally("How much is 18 * 24?"))
     }
 
-    @Test fun webPlannerRunsOnlyForLikelyLookups() {
-        assertTrue(AssistantToolRouter.shouldConsiderWeb("What is the latest Android release?"))
-        assertTrue(AssistantToolRouter.shouldConsiderWeb("Compare the best local LLM apps this month"))
-        assertTrue(AssistantToolRouter.shouldConsiderWeb("Show me pictures of a red panda"))
-        assertFalse(AssistantToolRouter.shouldConsiderWeb("Explain how a transformer works"))
-        assertFalse(AssistantToolRouter.shouldConsiderWeb("Write a Lua function to select a room"))
+    @Test fun plannerAcceptsModelSelectedSearchOrAnswerDecisions() {
+        val stable = AssistantToolRouter.parseStrict("""{"decision":"answer"}""")
+        assertEquals("answer", stable?.decision)
+        assertTrue(stable?.searchQueries.isNullOrEmpty())
+
+        val current = AssistantToolRouter.parseStrict(
+            """{"decision":"search","search_queries":["2026 FIFA World Cup winner official result"]}"""
+        )
+        assertEquals("search", current?.decision)
+        assertEquals(listOf("2026 FIFA World Cup winner official result"), current?.searchQueries)
     }
 
-    @Test fun stableExplanationsDoNotTriggerSearchButCurrentLookupsDo() {
-        assertFalse(AssistantToolRouter.shouldConsiderWeb("What is the quadratic formula?"))
-        assertFalse(AssistantToolRouter.shouldConsiderWeb("Explain how gravity works"))
-        assertTrue(AssistantToolRouter.shouldConsiderWeb("Search for the official Qwen model documentation"))
-        assertTrue(AssistantToolRouter.shouldConsiderWeb("Is this GPU still supported?"))
-        assertEquals("Qwen model documentation", AssistantToolRouter.fallbackSearchQuery("Search for Qwen model documentation"))
+    @Test fun strictPlannerRejectsProseScriptsAndInvalidDecisions() {
+        assertNull(AssistantToolRouter.parseStrict("I cannot access the internet."))
+        assertNull(AssistantToolRouter.parseStrict("local results = {}"))
+        assertNull(AssistantToolRouter.parseStrict("""{"decision":"maybe"}"""))
+        val malformedOptional = AssistantToolRouter.parseStrict("""{"decision":"search","search_queries":{}}""")
+        assertEquals("search", malformedOptional?.decision)
+        assertTrue(malformedOptional?.searchQueries.isNullOrEmpty())
     }
 
     @Test fun plannerAcceptsImageSearchAndGeneratedTitle() {
