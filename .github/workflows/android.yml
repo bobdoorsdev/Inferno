@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - "chatgpt/**"
+      - "fix/**"
   workflow_dispatch:
 
 permissions:
