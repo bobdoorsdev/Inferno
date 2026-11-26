@@ -297,9 +297,9 @@ class ContextManager(private val engine: PlannerEngine) {
             val parts = listOf(
                 appBackgroundContext(),
                 systemPrompt?.takeIf { it.isNotBlank() },
-                summary?.takeIf { it.isNotBlank() }?.let { "Summary of the earlier conversation (your own notes):\\n$it" },
+                summary?.takeIf { it.isNotBlank() }?.let { "Summary of the earlier conversation (your own notes):\n$it" },
             ).filterNotNull()
-            return parts.joinToString("\\n\\n")
+            return parts.joinToString("\n\n")
         }
         /** Planner gate: a plan is accepted when its estimate stays below this fraction of the budget. */
         const val BUDGET_GATE = 0.92
