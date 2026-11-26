@@ -553,7 +553,7 @@ private fun AssistantMessage(
                         if (codeArtifacts.isNotEmpty()) MenuActionRow(Lucide.Archive, if (codeArtifacts.size == 1) "Download code file" else "Download project ZIP") { moreMenu = false; startCodeExport() }
                     }
                 }
-                if (stats != null && showDetails) GhostIconButton(Lucide.Info, S.details, onClick = { haptics.tap(); onDetails() }, size = 32.dp, iconSize = 15.dp, tint = Ink.I500)
+                if (stats != null && showDetails) AnimatedActionIcon(Lucide.Info, S.details) { haptics.tap(); onDetails() }
                 if (showMeta && stats != null) metaLine(stats, techMeta)?.let { meta ->
                     Spacer(Modifier.size(6.dp))
                     Text(meta, style = Meta, color = Ink.I500)
