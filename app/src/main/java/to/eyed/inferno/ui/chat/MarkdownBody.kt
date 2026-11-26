@@ -78,7 +78,7 @@ import to.eyed.inferno.ui.theme.whiteA
 
 /**
  * Compose-native GFM Markdown with KaTeX math. The library parses incrementally while streaming,
- * retains stable block nodes, suppresses incomplete delimiters, and provides its own selection model.
+ * retains stable block nodes, leaves incomplete delimiters as literal text until they close, and provides selection.
  */
 @Composable
 fun MarkdownBody(text: String, modifier: Modifier = Modifier, streaming: Boolean = false, animateStreaming: Boolean = true) {
@@ -127,7 +127,7 @@ fun MarkdownBody(text: String, modifier: Modifier = Modifier, streaming: Boolean
             style = body,
             theme = theme,
             components = components,
-            streaming = streaming,
+            streaming = false,
         )
     }
 }
