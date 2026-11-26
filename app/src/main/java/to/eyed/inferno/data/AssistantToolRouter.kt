@@ -59,7 +59,7 @@ object AssistantToolRouter {
     }
 
     fun needsApproximateCity(text: String): Boolean =
-        Regex("""\\b(near me|nearby|around me|in my area|here|local weather|weather where i am|my city|where i am)\\b""", RegexOption.IGNORE_CASE)
+        Regex("""\b(near me|nearby|around me|in my area|here|local weather|weather where i am|my city|where i am)\b""", RegexOption.IGNORE_CASE)
             .containsMatchIn(text)
 
     fun shouldRouteLocally(text: String): Boolean {
