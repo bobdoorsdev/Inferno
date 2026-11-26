@@ -40,6 +40,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextMotion
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
@@ -84,7 +85,7 @@ import to.eyed.inferno.ui.theme.whiteA
  * Embedded image links are rendered with Coil at their original position. `TextDirection.Content` keeps RTL readable.
  */
 @Composable
-fun MarkdownBody(text: String, modifier: Modifier = Modifier, streaming: Boolean = false) {
+fun MarkdownBody(text: String, modifier: Modifier = Modifier, streaming: Boolean = false, animateStreaming: Boolean = true) {
     // Parse the live tail with the same safe markdown/math pipeline as completed messages.
     // Previously streaming bypassed it, so headings (###), emphasis (**...**) and formulas were shown literally.
     val formatted = remember(text) { SafeMathMarkdown.sanitize(MarkdownMath.format(text)) }
@@ -92,7 +93,7 @@ fun MarkdownBody(text: String, modifier: Modifier = Modifier, streaming: Boolean
     val chunks = remember(split.first) { MarkdownChunker.chunks(split.first) }
     SelectionContainer {
         Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            chunks.forEachIndexed { index, chunk -> key(index) { if (streaming && index == chunks.lastIndex) StreamingMarkdownTail(chunk) else MarkdownChunkView(chunk) } }
+            chunks.forEachIndexed { index, chunk -> key(index) { if (streaming && index == chunks.lastIndex) StreamingMarkdownTail(chunk, animateStreaming) else MarkdownChunkView(chunk) } }
             split.second?.let { fence ->
                 key("live-code") { MonoCodeBlock(fence.code, fence.language, streaming = streaming) }
             }
@@ -101,10 +102,10 @@ fun MarkdownBody(text: String, modifier: Modifier = Modifier, streaming: Boolean
 }
 
 @Composable
-private fun MarkdownChunkView(chunk: String) {
+private fun MarkdownChunkView(chunk: String, animated: Boolean = false) {
     val matches = remember(chunk) { MarkdownImagePattern.findAll(chunk).toList() }
     if (matches.isEmpty()) {
-        MarkdownTextChunk(chunk)
+        MarkdownTextChunk(chunk, animated)
         return
     }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -113,14 +114,14 @@ private fun MarkdownChunkView(chunk: String) {
             val start = match.range.first
             if (start > cursor) {
                 val preceding = chunk.substring(cursor, start)
-                if (preceding.isNotBlank()) MarkdownTextChunk(preceding)
+                if (preceding.isNotBlank()) MarkdownTextChunk(preceding, animated)
             }
             MarkdownImageCard(match.groupValues[1], match.groupValues[2])
             cursor = match.range.last + 1
         }
         if (cursor < chunk.length) {
             val trailing = chunk.substring(cursor)
-            if (trailing.isNotBlank()) MarkdownTextChunk(trailing)
+            if (trailing.isNotBlank()) MarkdownTextChunk(trailing, animated)
         }
     }
 }
@@ -164,7 +165,7 @@ private fun MarkdownImageCard(alt: String, url: String) {
 }
 
 @Composable
-private fun StreamingMarkdownTail(chunk: String) {
+private fun StreamingMarkdownTail(chunk: String, animateStreaming: Boolean) {
     val lines = remember(chunk) { chunk.split('\n') }
     val opener = remember(lines) { Regex("^(\u0060{3,}|~{3,})([A-Za-z0-9_+.-]*)$").matchEntire(lines.firstOrNull()?.trim().orEmpty()) }
     val closeIndex = remember(lines, opener) {
@@ -175,20 +176,24 @@ private fun StreamingMarkdownTail(chunk: String) {
     if (opener != null && closeIndex > 0) {
         MonoCodeBlock(lines.drop(1).take(closeIndex - 1).joinToString("\n"), opener.groupValues[2], streaming = true)
         val trailing = lines.drop(closeIndex + 1).joinToString("\n")
-        if (trailing.isNotBlank()) MarkdownTextChunk(trailing)
+        if (trailing.isNotBlank()) MarkdownTextChunk(trailing, animateStreaming)
     } else {
         val rendered = remember(chunk) { SafeMathMarkdown.sanitize(MarkdownMath.format(chunk)) }
-        AnimatedContent(
-            targetState = rendered,
-            transitionSpec = { fadeIn(tween(110)) togetherWith fadeOut(tween(55)) },
-            label = "streamingMarkdown",
-        ) { current -> MarkdownChunkView(current) }
+        if (animateStreaming) {
+            AnimatedContent(
+                targetState = rendered,
+                transitionSpec = { fadeIn(tween(110)) togetherWith fadeOut(tween(55)) },
+                label = "streamingMarkdown",
+            ) { current -> MarkdownChunkView(current, animated = true) }
+        } else {
+            MarkdownChunkView(rendered)
+        }
     }
 }
 
 @Composable
-private fun MarkdownTextChunk(chunk: String) {
-    val body = Typography.bodyLarge.copy(color = Ink.I100, textDirection = TextDirection.Content)
+private fun MarkdownTextChunk(chunk: String, animated: Boolean = false) {
+    val body = Typography.bodyLarge.copy(color = Ink.I100, textDirection = TextDirection.Content, textMotion = if (animated) TextMotion.Animated else TextMotion.Static)
     // immediate parses the first composition synchronously (no blank frame) and retainState keeps the
     // previous tree on screen during the async re-parse; without both, each publish flashes the
     // library's placeholder, which reads as violent flicker at streaming rate.
