@@ -20,7 +20,7 @@ import okhttp3.Request
 import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
 
-data class WebSearchResult(val title: String, val url: String, val snippet: String, val siteImageUrl: String? = null)
+data class WebSearchResult(val title: String, val url: String, val snippet: String, val siteImageUrl: String? = null, val siteIconUrl: String? = null)
 
 /** Small model-independent web search adapter. Search runs before local inference and returns cited excerpts. */
 class WebSearchClient(private val client: OkHttpClient = DEFAULT_CLIENT) {
@@ -55,7 +55,7 @@ class WebSearchClient(private val client: OkHttpClient = DEFAULT_CLIENT) {
                 }
             } }.awaitAll()
         val ranked = synchronized(collected) { rankResults(collected, queries).take(maxResults.coerceIn(1, 12)) }
-        ranked.map { result -> async { result.copy(siteImageUrl = fetchPageImage(result.url)) } }.awaitAll()
+        ranked.map { result -> async { val visuals = fetchPageVisuals(result.url); result.copy(siteImageUrl = visuals.first, siteIconUrl = visuals.second) } }.awaitAll()
             .also(onResults)
     }
 
@@ -162,25 +162,34 @@ class WebSearchClient(private val client: OkHttpClient = DEFAULT_CLIENT) {
         "$placeName: ${weatherDescription(code)}, ${value("temperature_2m")} °C, feels like ${value("apparent_temperature")} °C, humidity ${value("relative_humidity_2m")}%, precipitation ${value("precipitation")} mm, wind ${value("wind_speed_10m")} km/h. Local observation time: ${value("time")}."
     }
 
-    /** Extract the publisher's own Open Graph image so product results can show the image from the cited page. */
-    private suspend fun fetchPageImage(pageUrl: String): String? = withContext(Dispatchers.IO) {
+    /** Read both the product image and the real favicon from the publisher HTML in one request. */
+    private suspend fun fetchPageVisuals(pageUrl: String): Pair<String?, String?> = withContext(Dispatchers.IO) {
         runCatching {
             val request = Request.Builder().url(pageUrl).header("User-Agent", USER_AGENT).header("Accept", "text/html").build()
             client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) return@use null
+                if (!response.isSuccessful) return@use null to null
                 val html = response.body?.string()?.take(1_500_000).orEmpty()
-                val tags = Regex("""<meta\b[^>]*>""", RegexOption.IGNORE_CASE).findAll(html)
-                val image = tags.mapNotNull { tag ->
+                fun resolve(raw: String?): String? {
+                    val value = raw?.trim()?.trim('\'', '"')?.takeIf(String::isNotBlank) ?: return null
+                    val absolute = runCatching { java.net.URI(pageUrl).resolve(value).toString() }.getOrDefault(value)
+                    val parsed = Uri.parse(absolute)
+                    return absolute.takeIf { parsed.scheme == "https" && !parsed.host.isNullOrBlank() && it.length < 2_048 }
+                }
+                val metaImage = Regex("""<meta\b[^>]*>""", RegexOption.IGNORE_CASE).findAll(html).mapNotNull { tag ->
                     val raw = tag.value
                     val key = Regex("""(?:property|name)=["'](?:og:image|twitter:image)["']""", RegexOption.IGNORE_CASE)
                     if (!key.containsMatchIn(raw)) return@mapNotNull null
                     Regex("""content=["']([^"']+)["']""", RegexOption.IGNORE_CASE).find(raw)?.groupValues?.get(1)
-                }.firstOrNull() ?: return@use null
-                val absolute = runCatching { java.net.URI(pageUrl).resolve(image).toString() }.getOrDefault(image)
-                val parsed = Uri.parse(absolute)
-                absolute.takeIf { parsed.scheme == "https" && !parsed.host.isNullOrBlank() && it.length < 2_048 }
+                }.firstOrNull()
+                val icon = Regex("""<link\b[^>]*>""", RegexOption.IGNORE_CASE).findAll(html).mapNotNull { tag ->
+                    val raw = tag.value
+                    val rel = Regex("""rel=["']([^"']+)["']""", RegexOption.IGNORE_CASE).find(raw)?.groupValues?.get(1).orEmpty()
+                    if (!Regex("""(?:^|\s)(?:shortcut-)?icon(?:\s|$)|apple-touch-icon""", RegexOption.IGNORE_CASE).containsMatchIn(rel)) return@mapNotNull null
+                    Regex("""href=["']([^"']+)["']""", RegexOption.IGNORE_CASE).find(raw)?.groupValues?.get(1)?.let(::resolve)
+                }.firstOrNull()
+                resolve(metaImage) to icon
             }
-        }.getOrNull()
+        }.getOrNull() ?: (null to null)
     }
 
     /** Fetch and strip a public web page for questions about a specific URL. Private/local targets are rejected. */
