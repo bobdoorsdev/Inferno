@@ -74,6 +74,28 @@ class AssistantToolRouterTest {
         assertFalse(answer.contains("[9]"))
     }
 
+    @Test fun resolvesCitationsAttachedToWordsAndGroupedReferences() {
+        val answer = AssistantToolRouter.enrichAnswer(
+            "Claim[1] follows from these pages [1, 2], but this one is missing[9].",
+            listOf(
+                WebSearchResult("One", "https://one.example", ""),
+                WebSearchResult("Two", "https://two.example", ""),
+            ),
+            emptyList(),
+        )
+        assertTrue(answer.contains("Claim[1](https://one.example)"))
+        assertTrue(answer.contains("[1](https://one.example), [2](https://two.example)"))
+        assertFalse(answer.contains("[9]"))
+    }
+
+    @Test fun greetingOnlyMessagesDoNotBecomeChatTitles() {
+        assertEquals("", ChatRepository.titleFrom("hi"))
+        assertEquals("", ChatRepository.titleFrom("Hello!"))
+        assertEquals("help with Roblox", ChatRepository.titleFrom("Hi, can you help with Roblox?"))
+        assertTrue(ChatRepository.isTitleWorthy("Qwen model comparison"))
+        assertFalse(ChatRepository.isTitleWorthy("Hello"))
+    }
+
     @Test fun preservesImagesAlreadyEmbeddedAsMarkdown() {
         val answer = AssistantToolRouter.enrichAnswer(
             "![Already embedded](https://images.example/cup.jpg)",

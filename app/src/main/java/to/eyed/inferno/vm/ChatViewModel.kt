@@ -925,7 +925,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
         const val MAX_PENDING_FILE_BYTES = 64L * 1024 * 1024
         const val MAX_PROMPT_IMAGES = 8
         const val MAX_TOOL_ROUNDS = 8
-        const val PUBLISH_NS = 120_000_000L
+        const val PUBLISH_NS = 66_000_000L
         const val TPS_NS = 500_000_000L
         const val PERSIST_NS = 2_000_000_000L
         const val PERSIST_TOKENS = 200
