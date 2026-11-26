@@ -11,6 +11,7 @@ import to.eyed.inferno.data.AppPrefs
 import to.eyed.inferno.data.ChatRepository
 import to.eyed.inferno.data.GeneratedImageStoreImpl
 import to.eyed.inferno.data.ImageUtil
+import to.eyed.inferno.data.FileAttachmentStore
 import to.eyed.inferno.data.db.ChatDatabase
 import to.eyed.inferno.engine.ContextManager
 import to.eyed.inferno.engine.CpuTopology
@@ -53,7 +54,8 @@ class AppContainer(app: Application) {
 
     val db: ChatDatabase = ChatDatabase.create(app)
     val images = ImageUtil(app)
-    val chats = ChatRepository(db.dao(), images)
+    val files = FileAttachmentStore(app)
+    val chats = ChatRepository(db.dao(), images, files)
 
     val modelFiles = ModelFiles(app)
     private val okHttp = OkHttpClient.Builder()
