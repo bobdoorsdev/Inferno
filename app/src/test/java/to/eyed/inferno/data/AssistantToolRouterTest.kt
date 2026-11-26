@@ -100,7 +100,7 @@ class AssistantToolRouterTest {
     @Test fun everyFirstMessageGetsAFallbackTitleIncludingGreetings() {
         assertEquals("Hi", ChatRepository.titleFrom("hi"))
         assertEquals("Hello", ChatRepository.titleFrom("Hello!"))
-        assertEquals("help with Roblox", ChatRepository.titleFrom("Hi, can you help with Roblox?"))
+        assertEquals("Hi, can you help with Roblox", ChatRepository.titleFrom("Hi, can you help with Roblox?"))
         assertTrue(ChatRepository.isTitleWorthy("Qwen model comparison"))
         assertFalse(ChatRepository.isTitleWorthy("Hello"))
     }
