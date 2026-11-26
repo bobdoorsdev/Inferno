@@ -60,11 +60,15 @@ import to.eyed.inferno.ui.S
  * live in the SavedStateHandle.
  */
 private val CODE_RUNNER_INSTRUCTIONS = """
-Inferno has an isolated in-app browser preview for HTML, SVG, JavaScript, and CSS.
-IMPORTANT: Do not output HTML/SVG/JavaScript as a default presentation format. Normal answers must be natural Markdown prose, not a web page.
-Use a runnable code fence suffix such as ```html-run or ```svg-run ONLY when the latest user explicitly asks to run, execute, test, or preview browser code. If the user only asks you to write HTML/SVG/JavaScript, use a normal code fence without the -run suffix. Never wrap ordinary explanations, search results, math, tables, or chat replies in HTML.
-The preview is isolated, with network and file access blocked and no Android bridge. Never claim Python, Luau, shell, or another unavailable runtime was executed.
+The user explicitly requested a browser preview. Return only the requested runnable HTML, SVG, JavaScript, or CSS in a matching -run code fence. Do not use HTML for explanations or ordinary chat. This preview is isolated: no network, file access, or Android bridge.
 """.trim()
+
+private fun needsBrowserPreview(text: String): Boolean {
+    val asksToRun = Regex("""\b(run|execute|test|preview|render)\b""", RegexOption.IGNORE_CASE).containsMatchIn(text)
+    val hasBrowserCode = Regex("""(?is)```\s*(html|svg|javascript|js|css)\b""").containsMatchIn(text)
+    val namesBrowser = Regex("""\b(html|svg|javascript|css|browser preview|web page)\b""", RegexOption.IGNORE_CASE).containsMatchIn(text)
+    return asksToRun && (hasBrowserCode || namesBrowser)
+}
 
 class ChatViewModel(private val c: AppContainer, private val handle: SavedStateHandle) : ViewModel() {
     private val appVm: AppViewModel get() = appVmRef ?: error("AppViewModel not bound")
@@ -559,7 +563,8 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
                 val keep = images.map { it.id }.toSet()
                 val messages0 = view.prompt().map { it.copy(imageIds = it.imageIds.filter { id -> id in keep }) }
                 val baseSystem = ContextManager.systemWith(systemPrompt, view.summary?.content)
-                val fullSystem = listOfNotNull(baseSystem, toolContext, CODE_RUNNER_INSTRUCTIONS).joinToString("\n\n").takeIf { it.isNotBlank() }
+                val runnerHints = CODE_RUNNER_INSTRUCTIONS.takeIf { needsBrowserPreview(latestUserText) }
+                val fullSystem = listOfNotNull(baseSystem, toolContext, runnerHints).joinToString("\n\n").takeIf { it.isNotBlank() }
                 return Triple(fullSystem, messages0, images)
             }
             var (system, messages0, images) = parts()
@@ -629,8 +634,9 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
                             stream.reasoningOrNull()?.takeIf { it.isNotBlank() },
                             toolNotes,
                         ).joinToString("\n\n").takeIf { it.isNotBlank() }
-                        if (assistantId == null) assistantId = c.chats.appendAssistant(conversationId, stream.textStr, finalThinking, stats).id
-                        else c.chats.updateAssistant(assistantId, stream.textStr, finalThinking, stats)
+                        val finalAnswer = AssistantToolRouter.enrichAnswer(stream.textStr, finalResults, finalImages)
+                        if (assistantId == null) assistantId = c.chats.appendAssistant(conversationId, finalAnswer, finalThinking, stats).id
+                        else c.chats.updateAssistant(assistantId, finalAnswer, finalThinking, stats)
                         _lastStats.value = ev.stats
                         if (ev.stats.imageEncodeMs > 0 && promptImages.isNotEmpty()) persistEncodeSample(model.id, detail, ev.stats.imageEncodeMs, promptImages)
                         appVm.markFirstTurnOk()
@@ -919,7 +925,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
         const val MAX_PENDING_FILE_BYTES = 64L * 1024 * 1024
         const val MAX_PROMPT_IMAGES = 8
         const val MAX_TOOL_ROUNDS = 8
-        const val PUBLISH_NS = 50_000_000L
+        const val PUBLISH_NS = 66_666_667L
         const val TPS_NS = 500_000_000L
         const val PERSIST_NS = 2_000_000_000L
         const val PERSIST_TOKENS = 200

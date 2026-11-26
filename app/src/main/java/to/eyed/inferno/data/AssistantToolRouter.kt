@@ -53,7 +53,7 @@ object AssistantToolRouter {
         return """
 You are the tool planner for an offline-first assistant. Judge the latest user request and use recent turns to resolve references.
 $webRule$titleRule
-Image search: choose up to three image_queries when pictures materially help. For product recommendations, shopping comparisons, PCs, laptops, phones, monitors, GPUs, and other hardware, search product images as well as factual pages even if the user did not explicitly say "show images". Never search for decorative images.
+Image search: choose up to three image_queries when pictures materially help. For product recommendations and hardware comparisons, search product images as well as factual pages. Never search for decorative images. The app displays returned images directly; do not invent image URLs or claim images were found when none were returned.
 Image generation: when the user explicitly asks you to create, draw, or generate an image, return a concise image_prompt describing the requested image. Do not set image_prompt for requests that merely discuss image generation or ask for image search.
 Calculator: use for exact arithmetic and expressions. Return only an expression with numbers, parentheses, + - * / % ^. Never guess changing rates.
 Device clock: request current_time for now/today or time-relative requests; the app injects local time privately into your context.
@@ -118,7 +118,7 @@ Return JSON only: {"search_queries":[],"image_queries":[],"image_prompt":"","cal
                 }
             }
             if (images.isNotEmpty()) {
-                append("\nOPTIONAL WEB IMAGES — use these only when they directly illustrate the user's request; embed a relevant image with Markdown and keep its source link.\n")
+                append("\nOPTIONAL WEB IMAGE RESULTS — real image URLs returned by image search. The app will render these in the final answer automatically; never invent URLs, counts, licensing, or exclusivity. Use only titles and source-page facts supported here.\n")
                 images.forEach { image ->
                     append("Image: ").append(image.title).append("\nImage URL: ").append(image.imageUrl).append("\nSource page: ").append(image.sourceUrl).append('\n')
                 }
@@ -159,6 +159,41 @@ Return JSON only: {"search_queries":[],"image_queries":[],"image_prompt":"","cal
             }
         }.trim()
     }
+
+    /** Resolve source markers and surface real image-search results in the answer instead of relying on the model to repeat them. */
+    fun enrichAnswer(answer: String, sources: List<WebSearchResult>, images: List<WebImageResult>): String {
+        var result = answer
+        val citation = Regex("""(?<![\w])\[(\d{1,2})](?!\s*\()""")
+        result = citation.replace(result) { match ->
+            val index = match.groupValues[1].toIntOrNull()?.minus(1) ?: -1
+            val source = sources.getOrNull(index)
+            if (source == null || !source.url.startsWith("http")) ""
+            else "[${match.groupValues[1]}](${markdownUrl(source.url)})"
+        }
+        val missingImages = images.asSequence()
+            .filter { it.imageUrl.startsWith("https://") && it.sourceUrl.startsWith("http") }
+            .distinctBy { it.imageUrl }
+            .filterNot { result.contains("](${it.imageUrl}") }
+            .take(3)
+            .toList()
+        if (missingImages.isEmpty()) return result.trimEnd()
+        return buildString {
+            if (result.isNotBlank()) append(result.trimEnd()).append("\n\n")
+            append("**Images**\n")
+            missingImages.forEach { image ->
+                val title = image.title.replace("[", "(").replace("]", ")").replace("\n", " ").take(100)
+                append("![").append(title).append("](").append(markdownUrl(image.imageUrl))
+                image.fallbackImageUrl?.takeIf { it.startsWith("https://") && it != image.imageUrl }?.let {
+                    append(" \"").append(markdownUrl(it)).append("\"")
+                }
+                append(")\n")
+                append("[Image source](").append(markdownUrl(image.sourceUrl)).append(")\n")
+            }
+        }.trimEnd()
+    }
+
+    private fun markdownUrl(url: String): String =
+        url.trim().replace(" ", "%20").replace("(", "%28").replace(")", "%29")
 
     fun notes(
         results: List<WebSearchResult>,
@@ -223,8 +258,10 @@ Return JSON only: {"search_queries":[],"image_queries":[],"image_prompt":"","cal
         val productRequest = Regex("""\b(best|top|recommend|recommended|recommendations|compare|comparison|buy|buying|purchase|shopping|price|prices)\b""", RegexOption.IGNORE_CASE).containsMatchIn(value) &&
             Regex("""\b(gaming\s*pcs?|desktop\s*pcs?|gaming\s*computers?|laptops?|notebooks?|graphics\s*cards?|gpus?|cpus?|processors?|monitors?|phones?|smartphones?|tablets?|consoles?|keyboards?|mice|headphones?|cameras?|televisions?|tvs?)\b""", RegexOption.IGNORE_CASE).containsMatchIn(value)
         if (productRequest) return value.take(180)
-        val trigger = Regex("""\b(show|find|search for|give me|send me).{0,35}\b(image|images|picture|pictures|photo|photos|illustration|visual)\b|\b(what does .+ look like|show me .+ )""", RegexOption.IGNORE_CASE)
-        return value.takeIf { trigger.containsMatchIn(it) }?.take(180)
+        val hasVisual = Regex("""\b(images?|pictures?|photos?|illustrations?|wallpapers?|visuals?)\b""", RegexOption.IGNORE_CASE).containsMatchIn(value)
+        val asksForVisual = Regex("""\b(show|find|search|look for|give me|send me|provide|need|want|free|royalty[- ]free|download)\b""", RegexOption.IGNORE_CASE).containsMatchIn(value)
+        val describesVisualSearch = Regex("""\b(what does .+ look like|show me .+)""", RegexOption.IGNORE_CASE).containsMatchIn(value)
+        return value.takeIf { hasVisual && (asksForVisual || describesVisualSearch) }?.take(180)
     }
 
     fun fallbackWeatherLocation(text: String): String? {

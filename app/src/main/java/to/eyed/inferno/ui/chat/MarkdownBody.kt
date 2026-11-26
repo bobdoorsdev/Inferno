@@ -186,12 +186,13 @@ private fun StreamingMarkdownTail(chunk: String, animateStreaming: Boolean) {
         if (trailing.isNotBlank()) MarkdownTextChunk(trailing, animateStreaming)
     } else {
         val rendered = remember(chunk) { runCatching { SafeMathMarkdown.sanitize(MarkdownMath.format(chunk)) }.getOrDefault(chunk) }
-        val tailFade = remember { Animatable(1f) }
-        LaunchedEffect(chunk, animateStreaming) {
-            if (animateStreaming) {
-                tailFade.snapTo(minOf(tailFade.value, 0.88f))
-                tailFade.animateTo(1f, tween(150, easing = LinearOutSlowInEasing))
-            } else {
+        // Fade once when the live message first appears. Restarting this animation for every
+        // token batch caused opacity to stutter and kept the tail from ever settling at 1f.
+        val tailFade = remember { Animatable(if (animateStreaming) 0.92f else 1f) }
+        LaunchedEffect(animateStreaming) {
+            if (animateStreaming && tailFade.value < 1f) {
+                tailFade.animateTo(1f, tween(180, easing = LinearOutSlowInEasing))
+            } else if (!animateStreaming) {
                 tailFade.snapTo(1f)
             }
         }
@@ -350,92 +351,228 @@ private fun CopyChip(onCopy: () -> Unit) {
 
 /** Offline-friendly LaTeX-to-Unicode formatting; fenced code is passed through byte-for-byte. */
 internal object MarkdownMath {
+    private const val MAX_SOURCE_CHARS = 300_000
+    private const val MAX_LINE_CHARS = 12_000
+    private const val MAX_EXPRESSION_CHARS = 2_048
+
+    private val fenceMarker = Regex("^(\\x60{3,}|~{3,})(.*)$")
+    private val inlineDisplayDollar = Regex("""\$\$(.+?)\$\$""")
+    private val inlineDisplayBracket = Regex("""\\\[(.+?)\\\]""")
+    private val inlineDollar = Regex("""(?<!\$)\$([^$\n]+)\$(?!\$)""")
+    private val inlineParen = Regex("""\\\((.+?)\\\)""")
+    private val simpleFraction = Regex("""\\(?:dfrac|tfrac|cfrac|frac)\s*\{([^{}]{1,512})}\s*\{([^{}]{1,512})}""")
+    private val indexedRoot = Regex("""\\sqrt\s*\[([^]]{1,32})]\s*\{([^{}]{1,512})}""")
+    private val squareRoot = Regex("""\\sqrt\s*\{([^{}]{1,512})}""")
+    private val binomial = Regex("""\\(?:binom|dbinom|tbinom)\s*\{([^{}]{1,128})}\s*\{([^{}]{1,128})}""")
+    private val wrappedCommand = Regex("""\\(mathbb|mathcal|mathfrak|mathscr|mathbf|boldsymbol|mathit|mathrm|mathsf|mathtt|text|textnormal|texttt|operatorname)\s*\{([^{}]*)}""")
+    private val accentCommand = Regex("""\\(bar|overline|underline|hat|widehat|tilde|widetilde|vec|dot|ddot|acute|grave|breve|check)\s*\{([^{}]*)}""")
+    private val overUnder = Regex("""\\(?:overset|stackrel)\s*\{([^{}]+)}\s*\{([^{}]+)}""")
+    private val environment = Regex("""\\(?:begin|end)\s*\{[^{}]+}""")
+    private val ignoredCommands = Regex("""\\(?:left|right|displaystyle|textstyle|scriptstyle|scriptscriptstyle|limits|nolimits|allowbreak|,|;|:|!|quad|qquad|enspace|thinspace)""")
+    private val escapedSymbols = Regex("""\\([A-Za-z]+|,|;|:|!)""")
+    private val inlineSuperscript = Regex("""\^\{([^{}]+)}|\^([A-Za-z0-9])""")
+    private val inlineSubscript = Regex("""_\{([^{}]+)}|_([A-Za-z0-9])""")
+    private val whitespace = Regex("""\s+""")
+
     private val symbols = mapOf(
         "alpha" to "α", "beta" to "β", "gamma" to "γ", "delta" to "δ", "epsilon" to "ε", "varepsilon" to "ϵ",
         "zeta" to "ζ", "eta" to "η", "theta" to "θ", "vartheta" to "ϑ", "iota" to "ι", "kappa" to "κ",
-        "lambda" to "λ", "mu" to "μ", "nu" to "ν", "xi" to "ξ", "omicron" to "ο", "pi" to "π",
+        "varkappa" to "ϰ", "lambda" to "λ", "mu" to "μ", "nu" to "ν", "xi" to "ξ", "omicron" to "ο", "pi" to "π",
         "varpi" to "ϖ", "rho" to "ρ", "varrho" to "ϱ", "sigma" to "σ", "varsigma" to "ς", "tau" to "τ",
         "upsilon" to "υ", "phi" to "φ", "varphi" to "ϕ", "chi" to "χ", "psi" to "ψ", "omega" to "ω",
         "Gamma" to "Γ", "Delta" to "Δ", "Theta" to "Θ", "Lambda" to "Λ", "Xi" to "Ξ", "Pi" to "Π",
         "Sigma" to "Σ", "Upsilon" to "Υ", "Phi" to "Φ", "Psi" to "Ψ", "Omega" to "Ω",
-        "times" to "×", "cdot" to "·", "div" to "÷", "pm" to "±", "mp" to "∓", "neq" to "≠",
-        "ne" to "≠", "le" to "≤", "leq" to "≤", "ge" to "≥", "geq" to "≥", "approx" to "≈",
-        "equiv" to "≡", "sim" to "∼", "simeq" to "≃", "propto" to "∝", "infty" to "∞",
-        "partial" to "∂", "nabla" to "∇", "sum" to "∑", "prod" to "∏", "int" to "∫",
-        "iint" to "∬", "iiint" to "∭", "oint" to "∮", "sqrt" to "√", "angle" to "∠",
-        "degree" to "°", "circ" to "∘", "perp" to "⊥", "parallel" to "∥", "wedge" to "∧",
-        "vee" to "∨", "land" to "∧", "lor" to "∨", "neg" to "¬", "forall" to "∀",
-        "exists" to "∃", "nexists" to "∄", "in" to "∈", "notin" to "∉", "ni" to "∋",
-        "subset" to "⊂", "supset" to "⊃", "subseteq" to "⊆", "supseteq" to "⊇",
-        "cup" to "∪", "cap" to "∩", "setminus" to "∖", "emptyset" to "∅", "varnothing" to "∅",
-        "rightarrow" to "→", "to" to "→", "leftarrow" to "←", "leftrightarrow" to "↔",
-        "Rightarrow" to "⇒", "Leftarrow" to "⇐", "Leftrightarrow" to "⇔", "mapsto" to "↦",
-        "uparrow" to "↑", "downarrow" to "↓", "dots" to "…", "ldots" to "…", "cdots" to "⋯",
-        "vdots" to "⋮", "ddots" to "⋱", "therefore" to "∴", "because" to "∵",
-        "aleph" to "ℵ", "hbar" to "ℏ", "ell" to "ℓ", "Re" to "ℜ", "Im" to "ℑ",
-        "quad" to " ", "qquad" to "  ", "," to " ", ";" to " ", "!" to ""
+        "times" to "×", "cdot" to "·", "ast" to "∗", "star" to "⋆", "bullet" to "•", "div" to "÷",
+        "pm" to "±", "mp" to "∓", "oplus" to "⊕", "ominus" to "⊖", "otimes" to "⊗", "oslash" to "⊘",
+        "odot" to "⊙", "dagger" to "†", "ddagger" to "‡", "amalg" to "⨿", "diamond" to "◇",
+        "neq" to "≠", "ne" to "≠", "le" to "≤", "leq" to "≤", "ge" to "≥", "geq" to "≥",
+        "ll" to "≪", "gg" to "≫", "lesssim" to "≲", "gtrsim" to "≳", "lessapprox" to "⪅", "gtrapprox" to "⪆",
+        "equiv" to "≡", "approx" to "≈", "asymp" to "≍", "sim" to "∼", "simeq" to "≃", "cong" to "≅",
+        "propto" to "∝", "prec" to "≺", "succ" to "≻", "preceq" to "≼", "succeq" to "≽",
+        "infty" to "∞", "partial" to "∂", "nabla" to "∇", "sum" to "∑", "prod" to "∏", "coprod" to "∐",
+        "int" to "∫", "iint" to "∬", "iiint" to "∭", "oint" to "∮", "oiint" to "∯", "oiiint" to "∰",
+        "sqrt" to "√", "angle" to "∠", "measuredangle" to "∡", "degree" to "°", "circ" to "∘",
+        "perp" to "⊥", "parallel" to "∥", "nparallel" to "∦", "wedge" to "∧", "vee" to "∨",
+        "land" to "∧", "lor" to "∨", "neg" to "¬", "forall" to "∀", "exists" to "∃", "nexists" to "∄",
+        "in" to "∈", "notin" to "∉", "ni" to "∋", "subset" to "⊂", "supset" to "⊃",
+        "subseteq" to "⊆", "supseteq" to "⊇", "nsubseteq" to "⊈", "nsupseteq" to "⊉",
+        "cup" to "∪", "cap" to "∩", "uplus" to "⊎", "sqcup" to "⊔", "sqcap" to "⊓",
+        "setminus" to "∖", "smallsetminus" to "∖", "emptyset" to "∅", "varnothing" to "∅",
+        "rightarrow" to "→", "to" to "→", "longrightarrow" to "⟶", "leftarrow" to "←", "longleftarrow" to "⟵",
+        "leftrightarrow" to "↔", "longleftrightarrow" to "⟷", "Rightarrow" to "⇒", "Longrightarrow" to "⟹",
+        "Leftarrow" to "⇐", "Longleftarrow" to "⟸", "Leftrightarrow" to "⇔", "Longleftrightarrow" to "⟺",
+        "mapsto" to "↦", "longmapsto" to "⟼", "uparrow" to "↑", "downarrow" to "↓", "updownarrow" to "↕",
+        "nearrow" to "↗", "searrow" to "↘", "swarrow" to "↙", "nwarrow" to "↖",
+        "hookrightarrow" to "↪", "hookleftarrow" to "↩", "leftharpoonup" to "↼", "leftharpoondown" to "↽",
+        "rightharpoonup" to "⇀", "rightharpoondown" to "⇁", "rightleftharpoons" to "⇌",
+        "twoheadrightarrow" to "↠", "twoheadleftarrow" to "↞", "leadsto" to "⇝", "rightsquigarrow" to "⇝",
+        "dots" to "…", "ldots" to "…", "cdots" to "⋯", "vdots" to "⋮", "ddots" to "⋱",
+        "therefore" to "∴", "because" to "∵", "aleph" to "ℵ", "beth" to "ℶ", "gimel" to "ℷ", "daleth" to "ℸ",
+        "hbar" to "ℏ", "ell" to "ℓ", "Re" to "ℜ", "Im" to "ℑ", "wp" to "℘",
+        "top" to "⊤", "bot" to "⊥", "models" to "⊨", "vdash" to "⊢", "dashv" to "⊣",
+        "langle" to "⟨", "rangle" to "⟩", "lfloor" to "⌊", "rfloor" to "⌋", "lceil" to "⌈", "rceil" to "⌉",
+        "lbrace" to "{", "rbrace" to "}", "lvert" to "|", "rvert" to "|", "lVert" to "‖", "rVert" to "‖",
+        "colon" to ":", "backslash" to "∖", "prime" to "′", "hslash" to "ℏ",
+        "quad" to " ", "qquad" to "  ", "enspace" to " ", "thinspace" to " ", "," to " ", ";" to " ", ":" to " ", "!" to ""
     )
-    private val superscript = mapOf('0' to '⁰', '1' to '¹', '2' to '²', '3' to '³', '4' to '⁴', '5' to '⁵', '6' to '⁶', '7' to '⁷', '8' to '⁸', '9' to '⁹', '+' to '⁺', '-' to '⁻', '=' to '⁼', '(' to '⁽', ')' to '⁾', 'n' to 'ⁿ', 'i' to 'ⁱ')
-    private val subscript = mapOf('0' to '₀', '1' to '₁', '2' to '₂', '3' to '₃', '4' to '₄', '5' to '₅', '6' to '₆', '7' to '₇', '8' to '₈', '9' to '₉', '+' to '₊', '-' to '₋', '=' to '₌', '(' to '₍', ')' to '₎', 'a' to 'ₐ', 'e' to 'ₑ', 'i' to 'ᵢ', 'j' to 'ⱼ', 'k' to 'ₖ', 'n' to 'ₙ', 'x' to 'ₓ')
+    private val superscript = mapOf(
+        '0' to '⁰', '1' to '¹', '2' to '²', '3' to '³', '4' to '⁴', '5' to '⁵', '6' to '⁶', '7' to '⁷', '8' to '⁸', '9' to '⁹',
+        '+' to '⁺', '-' to '⁻', '=' to '⁼', '(' to '⁽', ')' to '⁾', 'n' to 'ⁿ', 'i' to 'ⁱ', 'T' to 'ᵀ', 'k' to 'ᵏ'
+    )
+    private val subscript = mapOf(
+        '0' to '₀', '1' to '₁', '2' to '₂', '3' to '₃', '4' to '₄', '5' to '₅', '6' to '₆', '7' to '₇', '8' to '₈', '9' to '₉',
+        '+' to '₊', '-' to '₋', '=' to '₌', '(' to '₍', ')' to '₎', 'a' to 'ₐ', 'e' to 'ₑ', 'i' to 'ᵢ',
+        'j' to 'ⱼ', 'k' to 'ₖ', 'n' to 'ₙ', 'x' to 'ₓ', 'h' to 'ₕ', 'r' to 'ᵣ', 's' to 'ₛ', 't' to 'ₜ', 'u' to 'ᵤ', 'v' to 'ᵥ'
+    )
+
+    private val doubleStruckUpper = "𝔸𝔹ℂ𝔻𝔼𝔽𝔾ℍ𝕀𝕁𝕂𝕃𝕄ℕ𝕆ℙℚℝ𝕊𝕋𝕌𝕍𝕎𝕏𝕐ℤ"
+    private val doubleStruckLower = "𝕒𝕓𝕔𝕕𝕖𝕗𝕘𝕙𝕚𝕛𝕜𝕝𝕞𝕟𝕠𝕡𝕢𝕣𝕤𝕥𝕦𝕧𝕨𝕩𝕪𝕫"
+    private val scriptUpper = "𝒜ℬ𝒞𝒟ℰℱ𝒢ℋℐ𝒥𝒦ℒℳ𝒩𝒪𝒫𝒬ℛ𝒮𝒯𝒰𝒱𝒲𝒳𝒴𝒵"
+    private val scriptLower = "𝒶𝒷𝒸𝒹ℯ𝒻ℊ𝒽𝒾𝒿𝓀𝓁𝓂𝓃ℴ𝓅𝓆𝓇𝓈𝓉𝓊𝓋𝓌𝓍𝓎𝓏"
+    private val frakturUpper = "𝔄𝔅ℭ𝔇𝔈𝔉𝔊ℌℑ𝔍𝔎𝔏𝔐𝔑𝔒𝔓𝔔ℜ𝔖𝔗𝔘𝔙𝔚𝔛𝔜ℨ"
+    private val frakturLower = "𝔞𝔟𝔠𝔡𝔢𝔣𝔤𝔥𝔦𝔧𝔨𝔩𝔪𝔫𝔬𝔭𝔮𝔯𝔰𝔱𝔲𝔳𝔴𝔵𝔶𝔷"
+    private val boldUpper = "𝐀𝐁𝐂𝐃𝐄𝐅𝐆𝐇𝐈𝐉𝐊𝐋𝐌𝐍𝐎𝐏𝐐𝐑𝐒𝐓𝐔𝐕𝐖𝐗𝐘𝐙"
+    private val boldLower = "𝐚𝐛𝐜𝐝𝐞𝐟𝐠𝐡𝐢𝐣𝐤𝐥𝐦𝐧𝐨𝐩𝐪𝐫𝐬𝐭𝐮𝐯𝐰𝐱𝐲𝐳"
+    private val italicUpper = "𝐴𝐵𝐶𝐷𝐸𝐹𝐺𝐻𝐼𝐽𝐾𝐿𝑀𝑁𝑂𝑃𝑄𝑅𝑆𝑇𝑈𝑉𝑊𝑋𝑌𝑍"
+    private val italicLower = "𝑎𝑏𝑐𝑑𝑒𝑓𝑔ℎ𝑖𝑗𝑘𝑙𝑚𝑛𝑜𝑝𝑞𝑟𝑠𝑡𝑢𝑣𝑤𝑥𝑦𝑧"
+    private val sansUpper = "𝖠𝖡𝖢𝖣𝖤𝖥𝖦𝖧𝖨𝖩𝖪𝖫𝖬𝖭𝖮𝖯𝖰𝖱𝖲𝖳𝖴𝖵𝖶𝖷𝖸𝖹"
+    private val sansLower = "𝖺𝖻𝖼𝖽𝖾𝖿𝗀𝗁𝗂𝗃𝗄𝗅𝗆𝗇𝗈𝗉𝗊𝗋𝗌𝗍𝗎𝗏𝗐𝗑𝗒𝗓"
+    private val monoUpper = "𝙰𝙱𝙲𝙳𝙴𝙵𝙶𝙷𝙸𝙹𝙺𝙻𝙼𝙽𝙾𝙿𝚀𝚁𝚂𝚃𝚄𝚅𝚆𝚇𝚈𝚉"
+    private val monoLower = "𝚊𝚋𝚌𝚍𝚎𝚏𝚐𝚑𝚒𝚓𝚔𝚕𝚖𝚗𝚘𝚙𝚚𝚛𝚜𝚝𝚞𝚟𝚠𝚡𝚢𝚣"
 
     fun format(source: String): String {
-        val out = StringBuilder()
+        if (source.length > MAX_SOURCE_CHARS) return source
+        val out = StringBuilder(source.length + 32)
+        val display = StringBuilder()
         var fence: Char? = null
         var fenceLength = 0
+        var displayEnd: String? = null
         source.lineSequence().forEach { line ->
-            val marker = Regex("^(\\x60{3,}|~{3,})(.*)$").matchEntire(line.trim())
-            if (marker != null && fence == null && (marker.groupValues[1][0] == 126.toChar() || !marker.groupValues[2].contains(96.toChar()))) {
-                fence = marker.groupValues[1][0]
-                fenceLength = marker.groupValues[1].length
+            if (displayEnd != null) {
+                if (line.trim() == displayEnd) {
+                    out.append("> **").append(formatExpression(display.toString())).append("**\n")
+                    display.setLength(0)
+                    displayEnd = null
+                } else display.append(line).append(' ')
+                return@forEach
+            }
+            val marker = fenceMarker.matchEntire(line.trim())
+            if (marker != null && (fence == null || marker.groupValues[1][0] == fence)) {
+                val raw = marker.groupValues[1]
+                if (fence == null && (raw[0] == '~' || !marker.groupValues[2].contains('`'))) {
+                    fence = raw[0]
+                    fenceLength = raw.length
+                } else if (fence != null && raw.length >= fenceLength && marker.groupValues[2].isBlank()) {
+                    fence = null
+                    fenceLength = 0
+                }
                 out.append(line).append('\n')
-            } else if (marker != null && fence != null && marker.groupValues[1][0] == fence && marker.groupValues[1].length >= fenceLength && marker.groupValues[2].isBlank()) {
-                fence = null
-                fenceLength = 0
+                return@forEach
+            }
+            if (fence != null) {
                 out.append(line).append('\n')
-            } else {
-                out.append(if (fence == null) formatLine(line) else line).append('\n')
+                return@forEach
+            }
+            val trimmed = line.trim()
+            when {
+                trimmed == "$$" -> { displayEnd = "$$"; return@forEach }
+                trimmed == "\\[" -> { displayEnd = "\\]"; return@forEach }
+                trimmed.startsWith("$$") && trimmed.length > 4 && trimmed.endsWith("$$") ->
+                    out.append("> **").append(formatExpression(trimmed.substring(2, trimmed.length - 2))).append("**\n")
+                trimmed.startsWith("\\[") && trimmed.endsWith("\\]") && trimmed.length > 4 ->
+                    out.append("> **").append(formatExpression(trimmed.substring(2, trimmed.length - 2))).append("**\n")
+                else -> out.append(formatLine(line)).append('\n')
             }
         }
+        if (displayEnd != null) out.append("> **").append(formatExpression(display.toString())).append("**\n")
         return out.toString().trimEnd('\n')
     }
 
     private fun formatLine(line: String): String {
-        var value = Regex("""\$\$(.+?)\$\$""").replace(line) { "> **" + formatExpression(it.groupValues[1]) + "**" }
-        value = Regex("""\\\[(.+?)\\\]""").replace(value) { "> **" + formatExpression(it.groupValues[1]) + "**" }
-        value = Regex("""(?<!\$)\$([^$\n]+)\$(?!\$)""").replace(value) { formatExpression(it.groupValues[1]) }
-        value = Regex("""\\\((.+?)\\\)""").replace(value) { formatExpression(it.groupValues[1]) }
+        if (line.length > MAX_LINE_CHARS) return line
+        var value = inlineDisplayDollar.replace(line) { "> **" + formatExpression(it.groupValues[1]) + "**" }
+        value = inlineDisplayBracket.replace(value) { "> **" + formatExpression(it.groupValues[1]) + "**" }
+        value = inlineDollar.replace(value) { "**" + formatExpression(it.groupValues[1]) + "**" }
+        value = inlineParen.replace(value) { "**" + formatExpression(it.groupValues[1]) + "**" }
         return value
     }
 
     private fun formatExpression(raw: String): String {
+        if (raw.length > MAX_EXPRESSION_CHARS) return raw
         var value = raw.trim()
-        repeat(4) {
-            value = Regex("""\\frac\s*\{([^{}]+)}\s*\{([^{}]+)}""").replace(value) { "(" + it.groupValues[1] + ")/(" + it.groupValues[2] + ")" }
-            value = Regex("""\\sqrt\s*\{([^{}]+)}""").replace(value) { "√(" + it.groupValues[1] + ")" }
+        repeat(5) {
+            value = binomial.replace(value) { "C(${it.groupValues[1]}, ${it.groupValues[2]})" }
+            value = simpleFraction.replace(value) {
+                val top = it.groupValues[1].trim()
+                val bottom = it.groupValues[2].trim()
+                if (top.matches(Regex("""[A-Za-z0-9]+""")) && bottom.matches(Regex("""[A-Za-z0-9]+"""))) "$top⁄$bottom"
+                else "($top)/($bottom)"
+            }
+            value = indexedRoot.replace(value) { "${mapIndex(it.groupValues[1], superscript, "⁽${it.groupValues[1]}⁾")}√(${it.groupValues[2]})" }
+            value = squareRoot.replace(value) { "√(${it.groupValues[1]})" }
+            value = overUnder.replace(value) { "${it.groupValues[2]}⁽${it.groupValues[1]}⁾" }
         }
-        value = Regex("""\\mathbb\s*\{([RNCQZ])}""").replace(value) {
-            when (it.groupValues[1]) { "R" -> "ℝ"; "N" -> "ℕ"; "C" -> "ℂ"; "Q" -> "ℚ"; else -> "ℤ" }
+        value = wrappedCommand.replace(value) { match ->
+            val command = match.groupValues[1]
+            val content = match.groupValues[2]
+            when (command) {
+                "mathbb" -> styleLetters(content, doubleStruckUpper, doubleStruckLower)
+                "mathcal", "mathscr" -> styleLetters(content, scriptUpper, scriptLower)
+                "mathfrak" -> styleLetters(content, frakturUpper, frakturLower)
+                "mathbf", "boldsymbol" -> styleLetters(content, boldUpper, boldLower)
+                "mathit" -> styleLetters(content, italicUpper, italicLower)
+                "mathsf" -> styleLetters(content, sansUpper, sansLower)
+                "mathtt" -> styleLetters(content, monoUpper, monoLower)
+                else -> content
+            }
         }
-        value = Regex("""\\(?:text|mathrm|mathbf|mathit|operatorname)\s*\{([^{}]*)}""").replace(value) { it.groupValues[1] }
-        value = Regex("""\\(?:bar|overline)\s*\{([^{}]*)}""").replace(value) { it.groupValues[1] + "̄" }
-        value = Regex("""\\hat\s*\{([^{}]*)}""").replace(value) { it.groupValues[1] + "̂" }
-        value = Regex("""\\vec\s*\{([^{}]*)}""").replace(value) { it.groupValues[1] + "⃗" }
-        value = Regex("""\^\{([^{}]+)}""").replace(value) { mapIndex(it.groupValues[1], superscript, "^(" + it.groupValues[1] + ")") }
-        value = Regex("""_\{([^{}]+)}""").replace(value) { mapIndex(it.groupValues[1], subscript, "_(" + it.groupValues[1] + ")") }
-        value = Regex("""\^([A-Za-z0-9])""").replace(value) { mapIndex(it.groupValues[1], superscript, "^(" + it.groupValues[1] + ")") }
-        value = Regex("""_([A-Za-z0-9])""").replace(value) { mapIndex(it.groupValues[1], subscript, "_(" + it.groupValues[1] + ")") }
-        value = Regex("""\\([A-Za-z]+|,|;|!)""").replace(value) { symbols[it.groupValues[1]] ?: it.value.removePrefix("\\") }
-        value = value.replace(Regex("""\\left|\\right|\\displaystyle|\\limits|\\,|\\;"""), "")
-            .replace("""\%""", "%").replace("""\_""", "_")
+        value = accentCommand.replace(value) { match ->
+            val mark = when (match.groupValues[1]) {
+                "bar", "overline" -> "̄"
+                "underline" -> "̲"
+                "hat", "widehat" -> "̂"
+                "tilde", "widetilde" -> "̃"
+                "vec" -> "⃗"
+                "dot" -> "̇"
+                "ddot" -> "̈"
+                "acute" -> "́"
+                "grave" -> "̀"
+                "breve" -> "̆"
+                else -> "̌"
+            }
+            match.groupValues[2] + mark
+        }
+        value = Regex("""\\boxed\s*\{([^{}]*)}""").replace(value) { "⟦${it.groupValues[1]}⟧" }
+        value = Regex("""\\cancel\s*\{([^{}]*)}""").replace(value) { it.groupValues[1] }
+        value = Regex("""\\underbrace\s*\{([^{}]*)}""").replace(value) { it.groupValues[1] }
+        value = environment.replace(value, "")
+        value = inlineSuperscript.replace(value) { mapIndex(it.groupValues[1].ifEmpty { it.groupValues[2] }, superscript, "^( ${it.value.removePrefix("^")} )") }
+        value = inlineSubscript.replace(value) { mapIndex(it.groupValues[1].ifEmpty { it.groupValues[2] }, subscript, "_(${it.value.removePrefix("_")})") }
+        value = escapedSymbols.replace(value) { symbols[it.groupValues[1]] ?: it.groupValues[1] }
+        value = ignoredCommands.replace(value, "")
+        value = value.replace("""\\%""", "%").replace("""\\_""", "_").replace("""\\&""", "&")
             .replace("{", "").replace("}", "")
-            .replace(Regex("""\s+"""), " ").trim()
+        value = whitespace.replace(value, " ").trim()
         return value
+    }
+
+    private fun styleLetters(value: String, upper: String, lower: String): String {
+        val uppers = upper.codePoints().toArray()
+        val lowers = lower.codePoints().toArray()
+        return buildString {
+            value.codePoints().toArray().forEach { point ->
+                when (point) {
+                    in 'A'.code..'Z'.code -> append(String(Character.toChars(uppers[point - 'A'.code])))
+                    in 'a'.code..'z'.code -> append(String(Character.toChars(lowers[point - 'a'.code])))
+                    else -> append(String(Character.toChars(point)))
+                }
+            }
+        }
     }
 
     private fun mapIndex(value: String, table: Map<Char, Char>, fallback: String): String =
         value.map { table[it] ?: it }.joinToString("").let { result -> if (result.any { it !in table.values }) fallback else result }
 }
-
 
 /**
  * Splits markdown into independently renderable chunks on blank lines, keeping fenced code blocks

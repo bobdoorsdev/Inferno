@@ -15,6 +15,7 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -91,6 +92,7 @@ import to.eyed.inferno.ui.theme.Meta
 import to.eyed.inferno.ui.theme.Radii
 import to.eyed.inferno.ui.theme.RowMeta
 import to.eyed.inferno.ui.theme.Typography
+import to.eyed.inferno.ui.theme.whiteA
 import to.eyed.inferno.ui.theme.defaultEffectsSpec
 import to.eyed.inferno.ui.theme.defaultSpatialSpec
 import to.eyed.inferno.ui.theme.fastSpatialSpec
@@ -192,10 +194,10 @@ fun SharedTransitionScope.MessagesList(
             val anchored = summaries.groupBy { it.compactedThrough }
             for (i in turns.indices.reversed()) {
                 val m = turns[i]
-                anchored[m.orderIndex]?.forEach { sm -> item(key = sm.id, contentType = "summary") { SummaryCard(sm, Modifier.animateItem(fadeInSpec = null, fadeOutSpec = null, placementSpec = placement)) } }
+                anchored[m.orderIndex]?.forEach { sm -> item(key = sm.id, contentType = "summary") { SummaryCard(sm, Modifier.animateItem(fadeInSpec = tween(180), fadeOutSpec = tween(120), placementSpec = placement)) } }
                 item(key = m.id, contentType = m.role) {
                     if (m.role == ChatRepository.ROLE_USER) {
-                        UserBubble(m, bubbleMax, imageScope, onOpenImage, onEdit, Modifier.animateItem(fadeInSpec = null, fadeOutSpec = null, placementSpec = placement))
+                        UserBubble(m, bubbleMax, imageScope, onOpenImage, onEdit, Modifier.animateItem(fadeInSpec = tween(180), fadeOutSpec = tween(120), placementSpec = placement))
                     } else {
                         val streamingRow = (live as? Live.Row)?.id == m.id
                         val s = gen as? GenState.Streaming
@@ -215,7 +217,7 @@ fun SharedTransitionScope.MessagesList(
                             onRegenerate = onRegenerate,
                             onBranch = { onBranch(m) },
                             onDetails = { onOpenTurnDetails(m) },
-                            modifier = Modifier.animateItem(fadeInSpec = null, fadeOutSpec = null, placementSpec = placement),
+                            modifier = Modifier.animateItem(fadeInSpec = tween(180), fadeOutSpec = tween(120), placementSpec = placement),
                             showDetails = dev.turnDetails,
                             techMeta = dev.generationStats,
                             liveMeta = if (streamingRow) liveMeta else null,
@@ -226,7 +228,7 @@ fun SharedTransitionScope.MessagesList(
             }
             val turnIndexes = turns.map { it.orderIndex }.toSet()
             summaries.filter { it.compactedThrough !in turnIndexes }.forEach { sm ->
-                item(key = sm.id, contentType = "summary") { SummaryCard(sm, Modifier.animateItem(fadeInSpec = null, fadeOutSpec = null, placementSpec = placement)) }
+                item(key = sm.id, contentType = "summary") { SummaryCard(sm, Modifier.animateItem(fadeInSpec = tween(180), fadeOutSpec = tween(120), placementSpec = placement)) }
             }
         }
     }
@@ -282,44 +284,61 @@ private fun SharedTransitionScope.UserBubble(
     var menu by remember { mutableStateOf(false) }
     Column(modifier.fillMaxWidth(), horizontalAlignment = Alignment.End) {
         if (msg.images.isNotEmpty()) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                msg.images.forEach { att ->
-                    AsyncImage(
-                        model = att.thumbPath,
-                        contentDescription = S.attachedImage,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .size(160.dp)
-                            .sharedBounds(rememberSharedContentState(imageSharedKey(att)), imageScope)
-                            .clip(RoundedCornerShape(Radii.row))
-                            .combinedClickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null,
-                                role = Role.Image,
-                                onClick = { onOpenImage(att) },
-                            ),
-                    )
+            val imageTile = ((maxBubbleWidth - 8.dp) / 2).coerceAtMost(160.dp)
+            Row(
+                Modifier.widthIn(max = maxBubbleWidth).fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                msg.images.forEachIndexed { index, att ->
+                    Box {
+                        AsyncImage(
+                            model = att.thumbPath,
+                            contentDescription = "Attached image ${index + 1}",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .size(imageTile)
+                                .sharedBounds(rememberSharedContentState(imageSharedKey(att)), imageScope)
+                                .clip(RoundedCornerShape(Radii.row))
+                                .border(1.dp, whiteA(0.10f), RoundedCornerShape(Radii.row))
+                                .combinedClickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null,
+                                    role = Role.Image,
+                                    onClick = { onOpenImage(att) },
+                                ),
+                        )
+                        Box(
+                            Modifier.align(Alignment.BottomStart).padding(7.dp)
+                                .clip(RoundedCornerShape(7.dp)).background(Ink.Pitch.copy(alpha = 0.70f))
+                                .padding(horizontal = 7.dp, vertical = 4.dp),
+                        ) {
+                            Text("IMAGE ${index + 1}", style = RowMeta.copy(fontWeight = FontWeight.SemiBold), color = Ink.White)
+                        }
+                    }
                 }
             }
             if (msg.content.isNotBlank()) Spacer(Modifier.height(8.dp))
         }
         if (msg.files.isNotEmpty()) {
-            Column(Modifier.widthIn(max = maxBubbleWidth).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Column(Modifier.widthIn(max = maxBubbleWidth).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                 msg.files.forEach { file ->
+                    val kind = file.displayName.substringAfterLast('.', file.mimeType.substringAfterLast('/')).uppercase().take(6)
                     Row(
-                        Modifier.fillMaxWidth().surfaceHigh(RoundedCornerShape(15.dp)).padding(horizontal = 11.dp, vertical = 9.dp),
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
+                            .background(Ink.SurfaceHigh).border(1.dp, whiteA(0.07f), RoundedCornerShape(16.dp))
+                            .padding(horizontal = 11.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(11.dp),
                     ) {
-                        val kind = file.displayName.substringAfterLast('.', file.mimeType.substringAfterLast('/')).uppercase().take(6)
-                        Box(Modifier.size(36.dp).clip(RoundedCornerShape(10.dp)).background(Ink.I900), contentAlignment = Alignment.Center) {
-                            Text(kind, style = RowMeta, color = Ink.I300, maxLines = 1)
+                        Box(Modifier.size(42.dp).clip(RoundedCornerShape(12.dp)).background(Ink.I900), contentAlignment = Alignment.Center) {
+                            Text(kind, style = RowMeta.copy(fontWeight = FontWeight.SemiBold), color = Ink.I100, maxLines = 1)
                         }
-                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Text(file.displayName, style = Typography.bodySmall.copy(fontWeight = FontWeight.Medium), color = Ink.White, maxLines = 1)
-                            Text("${file.mimeType.substringBefore(';')} · ${android.text.format.Formatter.formatShortFileSize(context, file.sizeBytes)}",
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            Text(file.displayName, style = Typography.bodyMedium.copy(fontWeight = FontWeight.Medium), color = Ink.White, maxLines = 1)
+                            Text("${file.mimeType.substringAfter('/').substringBefore(';').uppercase()} · ${android.text.format.Formatter.formatShortFileSize(context, file.sizeBytes)}",
                                 style = RowMeta, color = Ink.I500, maxLines = 1)
                         }
+                        Icon(Lucide.FileText, null, Modifier.size(17.dp), tint = Ink.I500)
                     }
                 }
             }
@@ -392,9 +411,8 @@ private fun AssistantMessage(
             Spacer(Modifier.height(10.dp))
         }
         if (text.isNotBlank()) MarkdownBody(text, streaming = streaming, animateStreaming = streamingAnimations)
-        if (streaming) Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            BlinkingCaret()
-            if (liveMeta != null) Text(liveMeta, style = Meta, color = Ink.I500)
+        if (streaming && liveMeta != null) {
+            Text(liveMeta, modifier = Modifier.padding(top = 5.dp), style = Meta, color = Ink.I500)
         }
         // TalkBack hears "Answer complete" exactly once, on the Done transition - never per token.
         if (announce) Box(Modifier.size(1.dp).semantics { liveRegion = LiveRegionMode.Polite; contentDescription = S.answerComplete })

@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -43,6 +44,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.foundation.border
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -215,25 +218,30 @@ private fun ComposerNotice(gen: GenState, imageBusy: Boolean) {
 @Composable
 private fun ThumbStrip(attachments: List<Attachment>, onRemove: (Int) -> Unit) {
     val haptics = rememberHaptics()
-    LazyRow(Modifier.padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    val tileShape = RoundedCornerShape(15.dp)
+    LazyRow(Modifier.padding(bottom = 9.dp), horizontalArrangement = Arrangement.spacedBy(9.dp)) {
         items(attachments.size, key = { attachments[it].id }) { i ->
-            Box(Modifier.animateItem()) {
+            Box(Modifier.animateItem().size(88.dp)) {
                 AsyncImage(
                     model = attachments[i].thumbPath,
                     contentDescription = S.attachedImage,
                     contentScale = ContentScale.Crop,
-                    modifier = Modifier.size(64.dp).clip(RoundedCornerShape(Radii.control)).background(Ink.SurfaceHigh),
+                    modifier = Modifier.size(88.dp).clip(tileShape).border(1.dp, whiteA(0.10f), tileShape).background(Ink.SurfaceHigh),
                 )
                 Box(
-                    Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(3.dp)
-                        .size(20.dp)
-                        .clip(CircleShape)
-                        .background(Color.Black.copy(alpha = 0.65f))
+                    Modifier.align(Alignment.BottomStart).padding(6.dp)
+                        .clip(RoundedCornerShape(6.dp)).background(Color.Black.copy(alpha = 0.58f))
+                        .padding(horizontal = 6.dp, vertical = 3.dp),
+                ) {
+                    Text("IMAGE", style = RowMeta.copy(fontWeight = FontWeight.SemiBold), color = Ink.White)
+                }
+                Box(
+                    Modifier.align(Alignment.TopEnd).padding(4.dp).size(24.dp)
+                        .shadow(3.dp, CircleShape).clip(CircleShape)
+                        .background(Color.Black.copy(alpha = 0.72f))
                         .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, role = Role.Button) { haptics.tap(); onRemove(i) },
                     contentAlignment = Alignment.Center,
-                ) { Icon(Lucide.X, S.removeImage, Modifier.size(12.dp), tint = Ink.White) }
+                ) { Icon(Lucide.X, S.removeImage, Modifier.size(13.dp), tint = Ink.White) }
             }
         }
     }
@@ -244,26 +252,27 @@ private fun ThumbStrip(attachments: List<Attachment>, onRemove: (Int) -> Unit) {
 private fun FileStrip(files: List<FileAttachment>, onRemove: (Int) -> Unit) {
     val haptics = rememberHaptics()
     val context = LocalContext.current
-    LazyRow(Modifier.padding(bottom = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    LazyRow(Modifier.padding(bottom = 10.dp), horizontalArrangement = Arrangement.spacedBy(9.dp)) {
         items(files.size, key = { files[it].id }) { index ->
             val file = files[index]
             val kind = file.displayName.substringAfterLast('.', file.mimeType.substringAfterLast('/')).uppercase().take(6)
             Row(
-                Modifier.widthIn(min = 205.dp, max = 270.dp).clip(RoundedCornerShape(15.dp))
-                    .background(Ink.SurfaceHigh).padding(start = 9.dp, end = 7.dp, top = 8.dp, bottom = 8.dp),
+                Modifier.widthIn(min = 224.dp, max = 286.dp).clip(RoundedCornerShape(16.dp))
+                    .background(Ink.SurfaceHigh).border(1.dp, whiteA(0.07f), RoundedCornerShape(16.dp))
+                    .padding(start = 10.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(9.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Box(Modifier.size(38.dp).clip(RoundedCornerShape(11.dp)).background(Ink.I800), contentAlignment = Alignment.Center) {
-                    Text(kind, style = RowMeta, color = Ink.I300, maxLines = 1)
+                Box(Modifier.size(42.dp).clip(RoundedCornerShape(12.dp)).background(Ink.I900), contentAlignment = Alignment.Center) {
+                    Text(kind, style = RowMeta.copy(fontWeight = FontWeight.SemiBold), color = Ink.I100, maxLines = 1)
                 }
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(file.displayName, color = Ink.White, style = Typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text(file.displayName, color = Ink.White, style = Typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
                         maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text("${file.mimeType.substringBefore(';')} · ${android.text.format.Formatter.formatShortFileSize(context, file.sizeBytes)}",
+                    Text("${file.mimeType.substringAfter('/').substringBefore(';').uppercase()} · ${android.text.format.Formatter.formatShortFileSize(context, file.sizeBytes)}",
                         color = Ink.I500, style = RowMeta, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
-                Box(Modifier.size(30.dp).clip(CircleShape).background(whiteA(0.06f)).clickable(
+                Box(Modifier.size(29.dp).clip(CircleShape).background(whiteA(0.07f)).clickable(
                     interactionSource = remember { MutableInteractionSource() }, indication = null, role = Role.Button,
                 ) { haptics.tap(); onRemove(index) }, contentAlignment = Alignment.Center) {
                     Icon(Lucide.X, "Remove ${file.displayName}", Modifier.size(14.dp), tint = Ink.I300)
@@ -378,19 +387,27 @@ private fun SendButton(
 ) {
     val active = enabled && (hasContent || streaming || queued)
     val subdued = loading || calibrating || prefill != null || !active
+    val stopping = streaming || queued
     val interaction = remember { MutableInteractionSource() }
-    val bg by animateColorAsState(if (subdued) Ink.SurfaceHigh else Ink.White, fastEffectsSpec(), label = "sendBg")
-    val restScale by animateFloatAsState(if (active) 1f else 0.94f, fastSpatialSpec(), label = "sendScale")
+    val bg by animateColorAsState(Ink.White.copy(alpha = if (subdued) 0.58f else 1f), fastEffectsSpec(), label = "sendBg")
+    val restScale by animateFloatAsState(if (active) 1f else 0.97f, fastSpatialSpec(), label = "sendScale")
     Box(
-        Modifier.size(38.dp).graphicsLayer { scaleX = restScale; scaleY = restScale }
-            .pressScale(interaction, 0.94f).clip(CircleShape).background(bg)
+        Modifier.size(40.dp).graphicsLayer { scaleX = restScale; scaleY = restScale }
+            .shadow(if (active) 2.dp else 0.dp, CircleShape)
+            .pressScale(interaction, 0.93f).clip(CircleShape).background(bg)
             .clickable(interactionSource = interaction, indication = null, enabled = active, role = Role.Button) {
-                if (streaming || queued) onStop() else onSend()
+                if (stopping) onStop() else onSend()
             },
         contentAlignment = Alignment.Center,
     ) {
-        if (streaming || queued) Icon(Lucide.Square, S.stop, Modifier.size(16.dp), tint = if (subdued) Ink.I500 else Ink.Pitch)
-        else Icon(Lucide.ArrowUp, S.send, Modifier.size(18.dp), tint = if (subdued) Ink.I500 else Ink.Pitch)
+        AnimatedContent(
+            targetState = stopping,
+            transitionSpec = { (fadeIn(tween(130)) + scaleIn(initialScale = 0.82f)) togetherWith (fadeOut(tween(90)) + scaleOut(targetScale = 0.82f)) },
+            label = "sendButtonIcon",
+        ) { isStopping ->
+            if (isStopping) Icon(Lucide.Square, S.stop, Modifier.size(15.dp), tint = Ink.Pitch)
+            else Icon(Lucide.ArrowUp, S.send, Modifier.size(19.dp), tint = Ink.Pitch)
+        }
     }
 }
 

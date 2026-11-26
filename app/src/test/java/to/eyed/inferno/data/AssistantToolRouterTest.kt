@@ -50,6 +50,37 @@ class AssistantToolRouterTest {
         assertEquals("Best gaming PCs online", AssistantToolRouter.fallbackImageQuery("Best gaming PCs online"))
         assertEquals("Compare the best monitors", AssistantToolRouter.fallbackImageQuery("Compare the best monitors"))
         assertNull(AssistantToolRouter.fallbackImageQuery("Explain how GPUs work"))
+        assertEquals("Free royalty-free images of the World Cup", AssistantToolRouter.fallbackImageQuery("Free royalty-free images of the World Cup"))
+    }
+
+    @Test fun finalAnswerMakesCitationsClickableAndActuallyShowsFoundImages() {
+        val answer = AssistantToolRouter.enrichAnswer(
+            "These sources support the summary [1] and [2].",
+            listOf(
+                WebSearchResult("One", "https://one.example/page", ""),
+                WebSearchResult("Two", "https://two.example/page", ""),
+            ),
+            listOf(WebImageResult("World Cup", "https://images.example/cup.jpg", "https://source.example/cup")),
+        )
+        assertTrue(answer.contains("[1](https://one.example/page)"))
+        assertTrue(answer.contains("[2](https://two.example/page)"))
+        assertTrue(answer.contains("![World Cup](https://images.example/cup.jpg)"))
+        assertTrue(answer.contains("[Image source](https://source.example/cup)"))
+    }
+
+    @Test fun removesCitationNumbersWithoutMatchingSources() {
+        val answer = AssistantToolRouter.enrichAnswer("Unsupported markers [1] and [9].", emptyList(), emptyList())
+        assertFalse(answer.contains("[1]"))
+        assertFalse(answer.contains("[9]"))
+    }
+
+    @Test fun preservesImagesAlreadyEmbeddedAsMarkdown() {
+        val answer = AssistantToolRouter.enrichAnswer(
+            "![Already embedded](https://images.example/cup.jpg)",
+            emptyList(),
+            listOf(WebImageResult("World Cup", "https://images.example/cup.jpg", "https://source.example/cup")),
+        )
+        assertEquals(1, answer.windowed(2).count { it == "![" })
     }
 
     @Test fun searchImageMarkdownKeepsAnOriginalImageFallback() {
