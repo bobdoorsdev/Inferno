@@ -115,6 +115,7 @@ fun ChatRoot(appVm: AppViewModel, chatVm: ChatViewModel, onBeforeSend: () -> Uni
     val messages by chatVm.messages.collectAsStateWithLifecycle()
     val gen by chatVm.gen.collectAsStateWithLifecycle()
     val pending by chatVm.pending.collectAsStateWithLifecycle()
+    val pendingFiles by chatVm.pendingFiles.collectAsStateWithLifecycle()
     val usage by chatVm.contextUsage.collectAsStateWithLifecycle()
     val imageBusy by chatVm.imageBusy.collectAsStateWithLifecycle()
     val toolStatus by chatVm.toolStatus.collectAsStateWithLifecycle()
@@ -169,12 +170,8 @@ fun ChatRoot(appVm: AppViewModel, chatVm: ChatViewModel, onBeforeSend: () -> Uni
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(2)) { uris ->
         uris.take(2).forEach { chatVm.attachFromUri(it) }
     }
-    val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) scope.launch {
-            runCatching { readTextAttachment(context, uri) }
-                .onSuccess { block -> draft = if (draft.isBlank()) block else "$draft\n\n$block" }
-                .onFailure { appVm.notice(it.message ?: "Could not read this file") }
-        }
+    val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        uris.forEach(chatVm::attachFileFromUri)
     }
     val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
         val uri = cameraUri
@@ -197,7 +194,7 @@ fun ChatRoot(appVm: AppViewModel, chatVm: ChatViewModel, onBeforeSend: () -> Uni
     var follow by remember { mutableStateOf(true) }
     val send = {
         val text = draft.trim()
-        if (text.isNotEmpty() || pending.isNotEmpty()) {
+        if (text.isNotEmpty() || pending.isNotEmpty() || pendingFiles.isNotEmpty()) {
             onBeforeSend()
             val accepted = !(gen.isBusy && gen !is GenState.Queued) && !imageBusy
             haptics.gestureEnd()
@@ -342,6 +339,7 @@ fun ChatRoot(appVm: AppViewModel, chatVm: ChatViewModel, onBeforeSend: () -> Uni
                                     InputBar(
                                         value = draft, onValueChange = { draft = it },
                                         attachments = pending, onRemoveAttachment = chatVm::removeAttachment,
+                                        files = pendingFiles, onRemoveFile = chatVm::removeFileAttachment,
                                         canAttachImages = canAttachImages, cameraAvailable = cameraAvailable, noVisionReason = noVisionReason,
                                         onPickPhotos = pickPhotos, onCapturePhoto = capturePhoto,
                                         onPickFile = { filePicker.launch(arrayOf("*/*")) },
