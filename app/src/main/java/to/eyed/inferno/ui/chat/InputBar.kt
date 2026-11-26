@@ -166,7 +166,7 @@ fun InputBar(
                         },
                 )
                 Row(Modifier.padding(start = 8.dp, end = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    AttachButton(canAttachImages, cameraAvailable, noVisionReason, idle, onPickPhotos, onCapturePhoto, onOpenTools, onNoVision)
+                    AttachButton(canAttachImages, cameraAvailable, noVisionReason, onPickPhotos, onCapturePhoto, onOpenTools, onNoVision)
                     Spacer(Modifier.width(2.dp))
                     Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
                         if (thinkingAvailable) ThinkChip(thinkingOn, onToggleThinking)
@@ -229,10 +229,10 @@ private fun ThumbStrip(attachments: List<Attachment>, onRemove: (Int) -> Unit) {
     }
 }
 
-/** Plus with the anchored Camera / Photos menu; without vision an Image glyph explains why on tap. */
+/** Plus menu: Photos/camera when vision is available, AI workflows on every model. */
 @Composable
 private fun AttachButton(
-    canAttachImages: Boolean, cameraAvailable: Boolean, noVisionReason: String?, idle: Boolean,
+    canAttachImages: Boolean, cameraAvailable: Boolean, noVisionReason: String?,
     onPickPhotos: () -> Unit, onCapturePhoto: () -> Unit, onOpenTools: () -> Unit, onNoVision: (String) -> Unit,
 ) {
     var open by remember { mutableStateOf(false) }
