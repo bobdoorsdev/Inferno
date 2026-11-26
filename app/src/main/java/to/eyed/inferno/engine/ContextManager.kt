@@ -275,15 +275,31 @@ class ContextManager(private val engine: PlannerEngine) {
         const val COMPACT_KEEP_TURNS = 4
         const val COMPACT_MAX_TOKENS = 512
         const val COMPACT_TEMPERATURE = 0.3f
-        const val COMPACT_INSTRUCTION = "Summarize the conversation so far for your own memory: facts, decisions, user preferences, open tasks. Be concise, bullet points, no preamble."
+        const val COMPACT_INSTRUCTION = "Summarize the conversation so far for your own memory: facts, decisions, user preferences, open tasks, and any explicit response-language instruction that must persist until changed. Be concise, bullet points, no preamble."
         /** STOP shows the blocking notice from this share of the window even before a turn fails to fit. */
         const val STOP_FRACTION = 0.92f
         /** STOP policy: the chat has reached the model's memory limit (usage share, or the next prompt not fitting is checked by the caller). */
         fun contextFull(used: Int, nCtx: Int): Boolean = nCtx > 0 && used >= (STOP_FRACTION * nCtx).toInt()
-        /** The system text the model sees: the user's system prompt plus the latest summary as a memory note. */
-        fun systemWith(systemPrompt: String?, summary: String?): String? {
-            val parts = listOfNotNull(systemPrompt?.takeIf { it.isNotBlank() }, summary?.takeIf { it.isNotBlank() }?.let { "Summary of the earlier conversation (your own notes):\n$it" })
-            return parts.takeIf { it.isNotEmpty() }?.joinToString("\n\n")
+        /** The app's private background context; never recite this unless the request makes it relevant. */
+        private fun appBackgroundContext(): String = """
+            You are an on-device assistant. Private background context:
+            - The user's location is Piumhi, Minas Gerais, Brazil.
+            - The user's local timezone is BRT (UTC−3).
+            - The device language is Brazilian Portuguese; it does not determine the response language.
+            Do not recite the location, timezone, device language, or clock/date unless relevant or explicitly asked.
+            Response-language priority: follow the most recent explicit user instruction about response language, even when it differs from the device language or the language of the latest message. Continue following that instruction on later turns until the user explicitly changes it. Do not infer or impose a language from the device locale.
+            The current device-local date is ${java.time.LocalDate.now(java.time.ZoneId.systemDefault())}. Your training knowledge may be outdated; use available search tools when facts may have changed or when you are uncertain.
+            You may use Markdown and LaTeX ($...$, $...$) when useful.
+        """.trimIndent()
+
+        /** The system text the model sees: app policy, the user's system prompt, and the latest summary. */
+        fun systemWith(systemPrompt: String?, summary: String?): String {
+            val parts = listOf(
+                appBackgroundContext(),
+                systemPrompt?.takeIf { it.isNotBlank() },
+                summary?.takeIf { it.isNotBlank() }?.let { "Summary of the earlier conversation (your own notes):\\n$it" },
+            ).filterNotNull()
+            return parts.joinToString("\\n\\n")
         }
         /** Planner gate: a plan is accepted when its estimate stays below this fraction of the budget. */
         const val BUDGET_GATE = 0.92
