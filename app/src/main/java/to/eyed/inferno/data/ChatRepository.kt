@@ -88,7 +88,7 @@ class ChatRepository(private val dao: ChatDao, private val imageUtil: ImageUtil,
         val now = System.currentTimeMillis()
         val m = MessageEntity(
             id = UUID.randomUUID().toString(), conversationId = conversationId, orderIndex = dao.maxOrderIndex(conversationId) + 1,
-            role = ROLE_USER, content = text + (fileStore?.encodeMarker(files)?.let { if (it.isBlank()) "" else "\\n\\n$it" } ?: ""), createdAt = now,
+            role = ROLE_USER, content = text + (fileStore?.encodeMarker(files)?.let { if (it.isBlank()) "" else "\n\n$it" } ?: ""), createdAt = now,
         )
         val rows = attachments.distinctBy { it.id }.mapIndexed { i, a -> MessageImageEntity(m.id, a.id, i, a.width, a.height) }
         dao.insertMessage(m, rows)
