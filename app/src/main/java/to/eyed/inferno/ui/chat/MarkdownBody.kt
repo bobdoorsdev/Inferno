@@ -119,9 +119,9 @@ private fun formatMarkdownChunk(source: String): String =
 
 private fun linkInlineCitations(source: String, urls: List<String>): String {
     if (urls.isEmpty()) return source
-    val citation = Regex("""(?<!\\!)\\[(\\d{1,2}(?:\\s*[,;]\\s*\\d{1,2})*)](?!\\s*\\()""")
+    val citation = Regex("""(?<!\!)\[(\d{1,2}(?:\s*[,;]\s*\d{1,2})*)](?!\s*\()""")
     return citation.replace(source) { match ->
-        Regex("""\\d{1,2}""").findAll(match.groupValues[1]).mapNotNull { item ->
+        Regex("""\d{1,2}""").findAll(match.groupValues[1]).mapNotNull { item ->
             val index = item.value.toIntOrNull()?.minus(1) ?: return@mapNotNull null
             urls.getOrNull(index)?.takeIf { it.startsWith("https://") || it.startsWith("http://") }
                 ?.let { "[" + item.value + "](" + it + ")" }
