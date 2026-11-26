@@ -55,8 +55,12 @@ class ChatRepository(private val dao: ChatDao, private val imageUtil: ImageUtil,
         val store = fileStore
         for (row in dao.messagesOnce(conversationId)) {
             val message = row.toChatMessage()
-            result += if (store == null || message.files.isEmpty()) message
-            else message.copy(files = message.files.map { file -> file.copy(extractedText = store.extractText(file)) })
+            if (store == null || message.files.isEmpty()) result += message
+            else {
+                val files = ArrayList<FileAttachment>()
+                for (file in message.files) files += file.copy(extractedText = store.extractText(file))
+                result += message.copy(files = files)
+            }
         }
         return result
     }
