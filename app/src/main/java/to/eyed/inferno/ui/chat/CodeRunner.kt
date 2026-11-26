@@ -100,17 +100,20 @@ private fun runnerDocument(source: String, language: String): String {
             """<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">$csp
 <style>body{background:#171717;color:#eee;font:14px monospace;padding:14px}pre{white-space:pre-wrap;overflow-wrap:anywhere}</style></head>
 <body><b>JavaScript output</b><pre id="out"></pre><script>
-const out=document.getElementById('out');console.log=(...v)=>out.textContent+=v.join(' ')+'\\n';
+const out=document.getElementById('out');console.log=(...v)=>out.textContent+=v.join(' ')+'\n';
 try{$safe}catch(e){out.textContent+='Error: '+(e&&e.stack||e)}
 </script></body></html>"""
         }
         "css" -> """<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">$csp
 <style>$source</style></head><body><h2>CSS preview</h2><p>Sample text</p><button>Button</button><div class="preview">Preview element</div></body></html>"""
         else -> {
-            val withPolicy = if (Regex("(?i)<head\\b").containsMatchIn(source)) {
-                Regex("(?i)<head\\b[^>]*>").replaceFirst(source) { it.value + csp }
-            } else "<head>$csp</head>$source"
-            "<!doctype html><html><body style='margin:0'>${withPolicy}</body></html>"
+            when {
+                Regex("(?i)<head\\b").containsMatchIn(source) ->
+                    Regex("(?i)<head\\b[^>]*>").replaceFirst(source) { it.value + csp }
+                Regex("(?i)<html\\b").containsMatchIn(source) ->
+                    Regex("(?i)<html\\b[^>]*>").replaceFirst(source) { it.value + "<head>$csp</head>" }
+                else -> "<!doctype html><html><head>$csp</head><body style='margin:0'>$source</body></html>"
+            }
         }
     }
 }
