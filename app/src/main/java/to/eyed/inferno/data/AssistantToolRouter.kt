@@ -260,7 +260,9 @@ Return JSON only: {"search_queries":[],"image_queries":[],"image_prompt":"","cal
         }
         val hslS = (saturation * 100).roundToInt()
         val hslL = (light * 100).roundToInt()
-        hex + " · RGB(" + r + ", " + g + ", " + b + ") · HSL(" + hue.roundToInt() + ", " + hslS + "%, " + hslL + "%)"
+        val hsvS = if (max == 0.0) 0 else (delta / max * 100).roundToInt()
+        val hsvV = (max * 100).roundToInt()
+        hex + " · RGB(" + r + ", " + g + ", " + b + ") · HSL(" + hue.roundToInt() + ", " + hslS + "%, " + hslL + "%) · HSV(" + hue.roundToInt() + "°, " + hsvS + "%, " + hsvV + "%)"
     }.getOrNull()
 
     private fun parseColor(input: String): IntArray? {

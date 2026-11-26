@@ -136,6 +136,7 @@ class AssistantToolRouterTest {
         assertTrue(orange.contains("#FF6600"))
         assertTrue(orange.contains("RGB(255, 102, 0)"))
         assertTrue(orange.contains("HSL(24, 100%, 50%)"))
+        assertTrue(orange.contains("HSV(24°, 100%, 100%)"))
         assertTrue(AssistantToolRouter.convertColor("hsl(120, 100%, 50%)")!!.contains("#00FF00"))
         assertNull(AssistantToolRouter.convertColor("not a color"))
     }
