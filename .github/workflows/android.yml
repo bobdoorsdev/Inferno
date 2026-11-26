@@ -1,10 +1,13 @@
-name: Android build (tool cancellation fix)
+name: Inferno Android tests and ARM64 APK
 
 on:
   push:
     branches:
       - "chatgpt/**"
       - "fix/**"
+  pull_request:
+    branches:
+      - "chatgpt/**"
   workflow_dispatch:
 
 permissions:
