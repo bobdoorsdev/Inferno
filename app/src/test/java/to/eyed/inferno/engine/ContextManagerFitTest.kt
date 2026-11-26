@@ -4,6 +4,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import to.eyed.inferno.models.LocalModel
@@ -173,9 +174,17 @@ class ContextManagerFitTest {
         assertFalse(ContextManager.contextFull(used = 1883, nCtx = 2048))                   // < 92 %
         assertTrue(ContextManager.contextFull(used = 1884, nCtx = 2048))                    // 0.92 x 2048 = 1884.16 -> 1884
         assertFalse(ContextManager.contextFull(used = 5000, nCtx = 0))                      // no model, never "full"
-        assertEquals("sys\n\nSummary of the earlier conversation (your own notes):\n- notes", ContextManager.systemWith("sys", "- notes"))
-        assertEquals("sys", ContextManager.systemWith("sys", " "))
-        assertNull(ContextManager.systemWith("  ", null))
+        val withSummary = ContextManager.systemWith("sys", "- notes")!!
+        assertTrue(withSummary.startsWith("You are an on-device assistant."))
+        assertTrue(withSummary.contains("Piumhi, Minas Gerais, Brazil"))
+        assertTrue(withSummary.contains("BRT (UTC−3)"))
+        assertTrue(withSummary.endsWith("sys\n\nSummary of the earlier conversation (your own notes):\n- notes"))
+        val withoutSummary = ContextManager.systemWith("sys", " ")!!
+        assertTrue(withoutSummary.contains("Piumhi, Minas Gerais, Brazil"))
+        assertTrue(withoutSummary.endsWith("\nsys"))
+        val backgroundOnly = ContextManager.systemWith("  ", null)
+        assertNotNull(backgroundOnly)
+        assertTrue(backgroundOnly!!.contains("BRT (UTC−3)"))
     }
 
     @Test fun reserveRuleAndSanitizer() {
