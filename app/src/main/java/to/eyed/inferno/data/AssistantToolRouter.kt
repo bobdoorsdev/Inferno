@@ -58,6 +58,10 @@ object AssistantToolRouter {
             Regex("""\b(image|picture|illustration|artwork|wallpaper|logo|imagem|desenho|ilustra[cç][aã]o|arte)\b""").containsMatchIn(value)
     }
 
+    fun needsApproximateCity(text: String): Boolean =
+        Regex("""\\b(near me|nearby|around me|in my area|here|local weather|weather where i am|my city|where i am)\\b""", RegexOption.IGNORE_CASE)
+            .containsMatchIn(text)
+
     fun shouldRouteLocally(text: String): Boolean {
         val value = text.lowercase(Locale.ROOT)
         val asksTime = Regex("""\b(current time|real time|time now|what time is it|what's the time|time right now|what date is it|current date|today's date|date today|what day is it|day of the week|time zone|timezone|how long until|how many days until)\b""").containsMatchIn(value)
