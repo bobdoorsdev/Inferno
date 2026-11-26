@@ -40,8 +40,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -410,6 +413,8 @@ private fun AssistantMessage(
 ) {
     val context = LocalContext.current
     val haptics = rememberHaptics()
+    var followUpDialog by rememberSaveable { mutableStateOf(false) }
+    var followUpDraft by rememberSaveable { mutableStateOf("") }
     Column(modifier.fillMaxWidth()) {
         val activityContent = reasoning.isNotBlank() || !searchNotes.isNullOrBlank() || toolStatus != null
         if (activityContent) {
@@ -429,10 +434,9 @@ private fun AssistantMessage(
         // TalkBack hears "Answer complete" exactly once, on the Done transition - never per token.
         if (announce) Box(Modifier.size(1.dp).semantics { liveRegion = LiveRegionMode.Polite; contentDescription = S.answerComplete })
         AnimatedVisibility(showActions, enter = fadeIn(defaultEffectsSpec()), exit = fadeOut(defaultEffectsSpec())) {
-            var moreMenu by rememberSaveable(text) { mutableStateOf(false) }
             Row(
                 Modifier.padding(top = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 AnimatedCopyButton(S.copyMessage) { copyToClipboard(context, text, "Inferno message") }
@@ -446,15 +450,10 @@ private fun AssistantMessage(
                 }
                 AnimatedActionIcon(Lucide.GitBranch, "Branch from this reply") { haptics.tap(); onBranch() }
                 if (showRegenerate) AnimatedActionIcon(Lucide.RefreshCw, S.regenerate) { haptics.tap(); onRegenerate() }
-                Box {
-                    AnimatedActionIcon(Lucide.ChevronDown, "More answer actions") { haptics.tap(); moreMenu = true }
-                    GlassMenu(expanded = moreMenu, onDismiss = { moreMenu = false }, minWidth = 218.dp) {
-                        MenuActionRow(Lucide.Wand, "Explain step by step") { moreMenu = false; onFollowUp("Explain your previous answer step by step, with clear intermediate steps.") }
-                        MenuActionRow(Lucide.Wand, "Simplify answer") { moreMenu = false; onFollowUp("Rewrite your previous answer in simpler language while preserving the key facts.") }
-                        MenuActionRow(Lucide.NotebookPen, "Extract key points") { moreMenu = false; onFollowUp("Extract the key points from your previous answer as a concise list.") }
-                        MenuActionRow(Lucide.Pencil, "Make more concise") { moreMenu = false; onFollowUp("Rewrite your previous answer more concisely without losing important information.") }
-                        MenuActionRow(Lucide.Pencil, "Expand with detail") { moreMenu = false; onFollowUp("Expand your previous answer with useful details and examples.") }
-                    }
+                AnimatedActionIcon(Lucide.Pencil, "Ask a follow-up") {
+                    haptics.tap()
+                    followUpDraft = ""
+                    followUpDialog = true
                 }
                 if (stats != null && showDetails) GhostIconButton(Lucide.Info, S.details, onClick = { haptics.tap(); onDetails() }, size = 32.dp, iconSize = 15.dp, tint = Ink.I500)
                 if (showMeta && stats != null) metaLine(stats, techMeta)?.let { meta ->
@@ -462,6 +461,37 @@ private fun AssistantMessage(
                     Text(meta, style = Meta, color = Ink.I500)
                 }
             }
+        }
+        if (followUpDialog) {
+            AlertDialog(
+                onDismissRequest = { followUpDialog = false },
+                title = { Text("Ask a follow-up", color = Ink.White) },
+                text = {
+                    OutlinedTextField(
+                        value = followUpDraft,
+                        onValueChange = { followUpDraft = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("Write your question…") },
+                        minLines = 2,
+                        maxLines = 5,
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        enabled = followUpDraft.isNotBlank(),
+                        onClick = {
+                            val question = followUpDraft.trim()
+                            followUpDialog = false
+                            followUpDraft = ""
+                            if (question.isNotEmpty()) onFollowUp(question)
+                        },
+                    ) { Text("Send", color = Ink.White) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { followUpDialog = false }) { Text("Cancel", color = Ink.I300) }
+                },
+                containerColor = Ink.SurfaceHigh,
+            )
         }
     }
 }
@@ -473,13 +503,14 @@ private fun AnimatedCopyButton(label: String, onCopy: () -> Unit) {
     var copied by remember { mutableStateOf(false) }
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
-    val scale by animateFloatAsState(if (pressed) 0.90f else 1f, fastSpatialSpec(), label = "copyPress")
+    val scale by animateFloatAsState(if (pressed) 0.80f else 1f, fastSpatialSpec(), label = "copyPress")
     androidx.compose.runtime.LaunchedEffect(copied) {
         if (copied) { delay(1_050); copied = false }
     }
     Box(
-        Modifier.size(32.dp).graphicsLayer { scaleX = scale; scaleY = scale }
-            .clip(RoundedCornerShape(9.dp)).clickable(interactionSource = interaction, indication = null,
+        Modifier.size(34.dp).graphicsLayer { scaleX = scale; scaleY = scale; rotationZ = if (pressed) -5f else 0f }
+            .clip(RoundedCornerShape(9.dp)).background(Ink.SurfaceHigh.copy(alpha = if (pressed) 0.95f else 0f))
+            .clickable(interactionSource = interaction, indication = null,
                 role = Role.Button) { haptics.tap(); onCopy(); copied = true },
         contentAlignment = Alignment.Center,
     ) {
@@ -503,15 +534,17 @@ private fun AnimatedCopyButton(label: String, onCopy: () -> Unit) {
 private fun AnimatedActionIcon(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
-    val scale by animateFloatAsState(if (pressed) 0.90f else 1f, fastSpatialSpec(), label = "messageActionScale")
-    val alpha by animateFloatAsState(if (pressed) 0.72f else 1f, fastSpatialSpec(), label = "messageActionAlpha")
+    val scale by animateFloatAsState(if (pressed) 0.78f else 1f, fastSpatialSpec(), label = "messageActionScale")
+    val alpha by animateFloatAsState(if (pressed) 0.62f else 1f, fastSpatialSpec(), label = "messageActionAlpha")
+    val rotation by animateFloatAsState(if (pressed) 7f else 0f, fastSpatialSpec(), label = "messageActionRotation
     Box(
-        Modifier.size(32.dp).graphicsLayer { scaleX = scale; scaleY = scale; this.alpha = alpha }
-            .clip(CircleShape).clickable(interactionSource = interaction, indication = null,
+        Modifier.size(36.dp).graphicsLayer { scaleX = scale; scaleY = scale; this.alpha = alpha; rotationZ = rotation }
+            .clip(CircleShape).background(Ink.SurfaceHigh.copy(alpha = if (pressed) 0.85f else 0f))
+            .clickable(interactionSource = interaction, indication = null,
                 role = Role.Button) { onClick() },
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, contentDescription = label, Modifier.size(15.dp), tint = Ink.I500)
+        Icon(icon, contentDescription = label, Modifier.size(17.dp), tint = Ink.I500)
     }
 }
 
