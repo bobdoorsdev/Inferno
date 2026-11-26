@@ -32,6 +32,14 @@ class AssistantToolRouterTest {
         assertFalse(AssistantToolRouter.shouldConsiderWeb("Write a Lua function to select a room"))
     }
 
+    @Test fun stableExplanationsDoNotTriggerSearchButCurrentLookupsDo() {
+        assertFalse(AssistantToolRouter.shouldConsiderWeb("What is the quadratic formula?"))
+        assertFalse(AssistantToolRouter.shouldConsiderWeb("Explain how gravity works"))
+        assertTrue(AssistantToolRouter.shouldConsiderWeb("Search for the official Qwen model documentation"))
+        assertTrue(AssistantToolRouter.shouldConsiderWeb("Is this GPU still supported?"))
+        assertEquals("Qwen model documentation", AssistantToolRouter.fallbackSearchQuery("Search for Qwen model documentation"))
+    }
+
     @Test fun plannerAcceptsImageSearchAndGeneratedTitle() {
         val plan = AssistantToolRouter.parse(
             """{"search_queries":["current release"],"image_queries":["red panda"],"title":"Current Release"}"""

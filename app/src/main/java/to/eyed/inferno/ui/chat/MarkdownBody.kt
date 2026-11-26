@@ -115,7 +115,7 @@ private fun StreamingMarkdownBody(text: String, modifier: Modifier, animateStrea
     val chunks = remember(split.first) { MarkdownChunker.chunks(split.first) }
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         chunks.forEachIndexed { index, rawChunk ->
-            key(rawChunk) {
+            key(index) {
                 val chunk = remember(rawChunk) { formatMarkdownChunk(rawChunk) }
                 if (index == chunks.lastIndex) StreamingMarkdownTail(chunk, animateStreaming)
                 else MarkdownChunkView(chunk)
@@ -525,8 +525,8 @@ internal object MarkdownMath {
 
     private fun formatLine(line: String): String {
         if (line.length > MAX_LINE_CHARS) return line
-        var value = inlineDisplayDollar.replace(line) { "> **" + formatExpression(it.groupValues[1]) + "**" }
-        value = inlineDisplayBracket.replace(value) { "> **" + formatExpression(it.groupValues[1]) + "**" }
+        var value = inlineDisplayDollar.replace(line) { "\n\n**" + formatExpression(it.groupValues[1]) + "**\n\n" }
+        value = inlineDisplayBracket.replace(value) { "\n\n**" + formatExpression(it.groupValues[1]) + "**\n\n" }
         value = inlineDollar.replace(value) { formatExpression(it.groupValues[1]) }
         value = inlineParen.replace(value) { formatExpression(it.groupValues[1]) }
         return value
@@ -608,7 +608,7 @@ internal object MarkdownMath {
                 "frac", "dfrac", "tfrac", "cfrac" -> {
                     val numerator = readArgument()
                     val denominator = readArgument()
-                    "($numerator)/($denominator)"
+                    "($numerator)⁄($denominator)"
                 }
                 "sqrt" -> {
                     val rootIndex = readOptionalIndex()

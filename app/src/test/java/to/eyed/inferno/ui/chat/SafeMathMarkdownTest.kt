@@ -28,7 +28,7 @@ class SafeMathMarkdownTest {
     @Test fun formatsCommonLatexIdentifiersAsReadableUnicode() {
         val formatted = MarkdownMath.format("Value: $\\alpha + \\beta = \\frac{1}{2}$")
         assertTrue(formatted.contains("α + β"))
-        assertTrue(formatted.contains("(1)/(2)"))
+        assertTrue(formatted.contains("(1)⁄(2)"))
         assertFalse(formatted.contains("$"))
     }
 
@@ -54,9 +54,18 @@ class SafeMathMarkdownTest {
     @Test fun nestedQuadraticFormulaRendersAsReadableUnicode() {
         val source = """The solutions are \(x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}\)."""
         val formatted = MarkdownMath.format(source)
-        assertTrue(formatted.contains("x = (-b ± √(b² - 4ac))/(2a)"))
+        assertTrue(formatted.contains("x = (-b ± √(b² - 4ac))⁄(2a)"))
         assertFalse(formatted.contains("\\frac"))
         assertFalse(formatted.contains("\\sqrt"))
+    }
+
+    @Test fun formatsTheFullQuadraticWorkedExampleWithoutBlockQuoteArtifacts() {
+        val source = "Given \$\$x^2 + 3x - 5 = 0\$\$, use \$\$x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}\$\$."
+        val formatted = MarkdownMath.format(source)
+        assertTrue(formatted.contains("x² + 3x - 5 = 0"))
+        assertTrue(formatted.contains("x = (-b ± √(b² - 4ac))⁄(2a)"))
+        assertFalse(formatted.contains("> **"))
+        assertFalse(formatted.contains("\\frac"))
     }
 
     @Test fun rendersGreekIdentifiersAndSubscriptsInTheSameExpression() {
