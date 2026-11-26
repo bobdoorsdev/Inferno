@@ -485,6 +485,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
         try {
             var history = c.chats.messagesOnce(conversationId)
             val latestUserText = history.lastOrNull { it.role == ChatRepository.ROLE_USER }?.content.orEmpty()
+            val coarseCity = c.coarseCity()
             val webIntent = settings.webSearchEnabled
             val imageIntent = AssistantToolRouter.shouldConsiderImageGeneration(latestUserText)
             val shouldRoute = latestUserText.isNotBlank() &&
@@ -494,7 +495,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
             _toolSourceUrls.value = emptyList()
             val toolPlan = if (shouldRoute) {
                 try {
-                    chooseTools(history, thinking, detail, webIntent, imageIntent && history.count { it.role == ChatRepository.ROLE_USER } == 1)
+                    chooseTools(history, thinking, detail, webIntent, imageIntent && history.count { it.role == ChatRepository.ROLE_USER } == 1, coarseCity = coarseCity)
                 } catch (e: CancellationException) {
                     throw e
                 } catch (_: Exception) {
@@ -540,6 +541,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
             val localToolResults = mutableListOf<to.eyed.inferno.data.LocalToolResult>()
             val usedLocalTasks = linkedSetOf<String>()
             val usedWeatherLocations = linkedSetOf<String>()
+            val usedPageUrls = linkedSetOf<String>()
             val usedSearchQueries = linkedSetOf<String>()
             val usedImageQueries = linkedSetOf<String>()
             val visibleSearchQueries = linkedSetOf<String>()
@@ -576,6 +578,17 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
                         localToolResults += result
                         didWork = true
                     }
+                }
+                val pageUrl = pendingPlan.readUrl?.takeIf { it.isNotBlank() && usedPageUrls.add(it) }
+                if (pageUrl != null) {
+                    didWork = true
+                    _toolStatus.value = S.searchingWeb
+                    try {
+                        val page = webSearchClient.readPage(pageUrl)
+                        if (page != null) localToolResults += to.eyed.inferno.data.LocalToolResult("Web page reader", pageUrl, page)
+                        else appVmRef?.notice("Could not read that public web page.")
+                    } catch (e: CancellationException) { throw e }
+                    catch (_: Exception) { appVmRef?.notice("Could not read that public web page.") }
                 }
                 if (roundSearch.isNotEmpty() || roundImages.isNotEmpty()) {
                     didWork = true
@@ -633,10 +646,10 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
                 _toolSearchNotes.value = AssistantToolRouter.searchNotes(distinctResults, visibleSearchQueries.toList(), distinctImages)
                 _toolStatus.value = null
                 val observation = AssistantToolRouter.promptContext(
-                    distinctResults, calculation, localTime, distinctImages, weather, localToolResults,
+                    distinctResults, calculation, localTime, distinctImages, weather, localToolResults, coarseCity,
                 )
                 if (round == MAX_TOOL_ROUNDS - 1 || !didWork) break
-                val next = chooseTools(history, thinking, detail, allowWeb = webIntent, createTitle = false, priorToolResults = observation)
+                val next = chooseTools(history, thinking, detail, allowWeb = webIntent, createTitle = false, priorToolResults = observation, coarseCity = coarseCity)
                 if (next == AssistantToolPlan()) break
                 pendingPlan = next
             }
@@ -644,7 +657,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
             val finalResults = webResults.distinctBy { it.url }
             val finalImages = webImages.distinctBy { it.imageUrl }
             val toolContext = AssistantToolRouter.promptContext(
-                finalResults, calculation, localTime, finalImages, weather, localToolResults,
+                finalResults, calculation, localTime, finalImages, weather, localToolResults, coarseCity,
             )
             toolNotes = AssistantToolRouter.notes(
                 finalResults, calculation, localTime, visibleSearchQueries.toList(), finalImages, localToolResults,
@@ -822,10 +835,11 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
         allowWeb: Boolean,
         createTitle: Boolean,
         priorToolResults: String? = null,
+        coarseCity: String? = null,
     ): AssistantToolPlan {
         val recent = history.filterNot { it.isSummary }.takeLast(3)
         val toolMessages = buildList {
-            add(PromptMessage("system", AssistantToolRouter.prompt(allowWeb, createTitle)))
+            add(PromptMessage("system", AssistantToolRouter.prompt(allowWeb, createTitle, coarseCity)))
             recent.forEachIndexed { index, message ->
                 val limit = if (index == recent.lastIndex) 520 else 100
                 add(PromptMessage(message.role, if (index == recent.lastIndex) message.content.take(limit) else message.content.takeLast(limit)))
