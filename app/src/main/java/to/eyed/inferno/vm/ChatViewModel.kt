@@ -61,7 +61,7 @@ import to.eyed.inferno.ui.S
  */
 private val CODE_RUNNER_INSTRUCTIONS = """
 Inferno has a sandboxed in-app browser runner for HTML, SVG, JavaScript, and CSS only.
-If the user explicitly asks you to run, execute, test, or preview one of those formats, return the complete runnable source in one fenced code block and add the word "run" after its language, for example ```html run or ```svg run. Inferno will open the isolated preview automatically. The runner has no network or file access and no Android bridge. Never claim Python, Luau, shell, or other code was executed; those runtimes are not available.
+If the user explicitly asks you to run, execute, test, or preview one of those formats, return the complete runnable source in one fenced code block and use a single-token language suffix, for example ```html-run or ```svg-run. Inferno will open the isolated preview automatically. The runner has no network or file access and no Android bridge. Never claim Python, Luau, shell, or other code was executed; those runtimes are not available.
 """.trim()
 
 class ChatViewModel(private val c: AppContainer, private val handle: SavedStateHandle) : ViewModel() {
