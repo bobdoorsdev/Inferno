@@ -48,6 +48,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.combine
 import to.eyed.inferno.AppContainer
 import to.eyed.inferno.engine.EngineState
 import to.eyed.inferno.models.DownloadService
@@ -121,19 +122,25 @@ fun InfernoRoot(container: AppContainer, appVm: AppViewModel, chatVm: ChatViewMo
         // Model Ready -> one Confirm, only on a load completing (Loading -> Ready) and only while RESUMED.
         // Keyed on the transition, not on `is Ready`: every turn goes Ready -> Generating -> Ready and ChatRoot
         // already plays the Done confirm.
-        LaunchedEffect(appVm.engine) {
-            var prev: EngineState = appVm.engine.value
-            appVm.engine.collect { s ->
-                if (s is EngineState.Ready && prev is EngineState.Loading && lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
-                    haptics.confirm()
-                    modelReady = true
-                    readyNoticeJob?.cancel()
-                    readyNoticeJob = noticeScope.launch {
-                        delay(1_800)
-                        modelReady = false
+        LaunchedEffect(appVm.engine, appVm.loadInProgress) {
+            var previous: EngineState = appVm.engine.value
+            var readyAwaitingCalibration = false
+            combine(appVm.engine, appVm.loadInProgress) { state, calibrating -> state to calibrating }.collect { (state, calibrating) ->
+                if (state is EngineState.Loading) readyAwaitingCalibration = true
+                if (state is EngineState.Error || state is EngineState.Idle) readyAwaitingCalibration = false
+                if (state is EngineState.Ready && readyAwaitingCalibration && !calibrating) {
+                    readyAwaitingCalibration = false
+                    if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+                        haptics.confirm()
+                        modelReady = true
+                        readyNoticeJob?.cancel()
+                        readyNoticeJob = noticeScope.launch {
+                            delay(1_800)
+                            modelReady = false
+                        }
                     }
                 }
-                prev = s
+                previous = state
             }
         }
 
