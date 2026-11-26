@@ -45,6 +45,7 @@ interface ChatDao {
 
     // ---- queries needed by ChatRepository ----
     @Query("SELECT * FROM conversations WHERE id = :id") suspend fun conversation(id: String): ConversationEntity?
+    @Query("SELECT DISTINCT conversationId FROM messages WHERE content LIKE '%' || :query || '%' OR thinking LIKE '%' || :query || '%'") suspend fun searchConversationIds(query: String): List<String>
     @Query("UPDATE conversations SET updatedAt = :at WHERE id = :id") suspend fun touch(id: String, at: Long)
     @Query("UPDATE conversations SET modelId = :modelId, updatedAt = :at WHERE id = :id") suspend fun setModel(id: String, modelId: String?, at: Long)
 

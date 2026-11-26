@@ -481,6 +481,8 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
             var localTime: String? = null
             var weather: String? = null
             val calculated = linkedSetOf<String>()
+            val localToolResults = mutableListOf<to.eyed.inferno.data.LocalToolResult>()
+            val usedLocalTasks = linkedSetOf<String>()
             val usedWeatherLocations = linkedSetOf<String>()
             val usedSearchQueries = linkedSetOf<String>()
             val usedImageQueries = linkedSetOf<String>()
@@ -515,6 +517,13 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
                 if (pendingPlan.currentTime && localTime == null) {
                     localTime = AssistantToolRouter.currentTime()
                     didWork = true
+                }
+                AssistantToolRouter.runLocalUtilities(pendingPlan).forEach { result ->
+                    val key = result.tool + ":" + result.request
+                    if (usedLocalTasks.add(key)) {
+                        localToolResults += result
+                        didWork = true
+                    }
                 }
                 if (roundSearch.isNotEmpty()) {
                     didWork = true
@@ -555,7 +564,9 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
                 val distinctImages = webImages.distinctBy { it.imageUrl }
                 _toolSearchNotes.value = AssistantToolRouter.searchNotes(distinctResults, visibleSearchQueries.toList(), distinctImages)
                 _toolStatus.value = null
-                val observation = AssistantToolRouter.promptContext(distinctResults, calculation, localTime, distinctImages, weather)
+                val observation = AssistantToolRouter.promptContext(
+                    distinctResults, calculation, localTime, distinctImages, weather, localToolResults,
+                )
                 if (round == MAX_TOOL_ROUNDS - 1 || !didWork) break
                 val next = chooseTools(history, thinking, detail, allowWeb = webIntent, createTitle = false, priorToolResults = observation)
                 if (next == AssistantToolPlan()) break
@@ -564,8 +575,12 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
             _toolStatus.value = null
             val finalResults = webResults.distinctBy { it.url }
             val finalImages = webImages.distinctBy { it.imageUrl }
-            val toolContext = AssistantToolRouter.promptContext(finalResults, calculation, localTime, finalImages, weather)
-            toolNotes = AssistantToolRouter.notes(finalResults, calculation, localTime, visibleSearchQueries.toList(), finalImages)
+            val toolContext = AssistantToolRouter.promptContext(
+                finalResults, calculation, localTime, finalImages, weather, localToolResults,
+            )
+            toolNotes = AssistantToolRouter.notes(
+                finalResults, calculation, localTime, visibleSearchQueries.toList(), finalImages, localToolResults,
+            )
             val conv = conversations.value.firstOrNull { it.id == conversationId }
             val nCtx = loaded.context.nCtx
             val reserve = c.contextManager.reserveFor(params, nCtx, thinkingOn)

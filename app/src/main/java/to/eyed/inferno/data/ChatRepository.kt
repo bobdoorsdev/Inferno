@@ -165,6 +165,12 @@ class ChatRepository(private val dao: ChatDao, private val imageUtil: ImageUtil,
     }
 
     suspend fun message(messageId: String): ChatMessage? = dao.messageById(messageId)?.toChatMessage()
+    suspend fun conversation(id: String): Conversation? = dao.conversation(id)?.toConversation()
+    suspend fun searchConversationIds(query: String): Set<String> {
+        val term = query.trim().take(100)
+        if (term.length < 2) return emptySet()
+        return dao.searchConversationIds(term).toSet()
+    }
 
     suspend fun setTitle(conversationId: String, title: String) = dao.rename(conversationId, title.trim(), System.currentTimeMillis())
     suspend fun setPinned(id: String, pinned: Boolean) = dao.setPinned(id, pinned)

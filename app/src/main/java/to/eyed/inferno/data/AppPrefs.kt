@@ -22,6 +22,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import to.eyed.inferno.engine.Calibration
 import to.eyed.inferno.engine.GenerationParams
@@ -29,6 +31,15 @@ import to.eyed.inferno.imagegen.EtaStore
 import to.eyed.inferno.models.DownloadPrefs
 import to.eyed.inferno.models.ImageDetail
 import java.io.IOException
+
+@Serializable
+data class SavedAnswer(
+    val id: String,
+    val conversationId: String,
+    val title: String,
+    val content: String,
+    val createdAt: Long,
+)
 
 enum class KvCachePref { AUTO, F16, Q8_0, Q4_0 }
 /**
@@ -77,6 +88,7 @@ data class SettingsState(
     val streamingAnimations: Boolean = true,
     val haptics: Boolean = true,
     val webSearchEnabled: Boolean = true,        // always available; the intent planner decides when a lookup is useful
+    val savedAnswers: List<SavedAnswer> = emptyList(),
     // downloads
     val allowMeteredDownloads: Boolean = false, // Settings > Storage; when false a metered network requires a per-download confirm
     val notificationsAsked: Boolean = false,    // POST_NOTIFICATIONS was requested once (5.6 Root.kt); never asked again
@@ -159,7 +171,8 @@ class AppPrefs(
     suspend fun setImageDetail(d: ImageDetail) = update { it.copy(imageDetail = d) }
     suspend fun setStreamingAnimations(v: Boolean) = update { it.copy(streamingAnimations = v) }
     suspend fun setHaptics(v: Boolean) = update { it.copy(haptics = v) }
-    suspend fun setWebSearchEnabled(v: Boolean) = update { it.copy(webSearchEnabled = v) }
+    suspend fun setWebSearchEnabled(v: Boolean) = update { it.copy(webSearchEnabled = true) }
+    suspend fun setSavedAnswers(values: List<SavedAnswer>) = update { it.copy(savedAnswers = values.distinctBy { a -> a.id }.take(100)) }
     override suspend fun setAllowMeteredDownloads(allow: Boolean) = update { it.copy(allowMeteredDownloads = allow) }
     suspend fun setNotificationsAsked(v: Boolean) = update { it.copy(notificationsAsked = v) }
     override suspend fun setSelectedModel(id: String?) = update { it.copy(selectedModelId = id) }
@@ -208,6 +221,7 @@ private object K {
     val streamingAnimations = booleanPreferencesKey("streamingAnimations")
     val haptics = booleanPreferencesKey("haptics")
     val webSearchEnabled = booleanPreferencesKey("webSearchEnabled")
+    val savedAnswers = stringPreferencesKey("savedAnswers")
     val allowMeteredDownloads = booleanPreferencesKey("allowMeteredDownloads")
     val notificationsAsked = booleanPreferencesKey("notificationsAsked")
     val selectedModelId = stringPreferencesKey("selectedModelId")
@@ -254,6 +268,7 @@ internal fun Preferences.toState(): SettingsState {
         streamingAnimations = this[K.streamingAnimations] ?: d.streamingAnimations,
         haptics = this[K.haptics] ?: d.haptics,
         webSearchEnabled = true,
+        savedAnswers = decode(this[K.savedAnswers], d.savedAnswers),
         allowMeteredDownloads = this[K.allowMeteredDownloads] ?: d.allowMeteredDownloads,
         notificationsAsked = this[K.notificationsAsked] ?: d.notificationsAsked,
         selectedModelId = this[K.selectedModelId],
@@ -300,6 +315,7 @@ internal fun MutablePreferences.write(s: SettingsState) {
     this[K.streamingAnimations] = s.streamingAnimations
     this[K.haptics] = s.haptics
     this[K.webSearchEnabled] = true
+    this[K.savedAnswers] = json.encodeToString(ListSerializer(SavedAnswer.serializer()), s.savedAnswers)
     this[K.allowMeteredDownloads] = s.allowMeteredDownloads
     this[K.notificationsAsked] = s.notificationsAsked
     setOrRemove(K.selectedModelId, s.selectedModelId)

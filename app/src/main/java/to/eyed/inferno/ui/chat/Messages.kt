@@ -14,13 +14,10 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
-import android.content.Context
 import android.content.Intent
-import android.speech.tts.TextToSpeech
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -34,6 +31,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.animateContentSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -46,7 +44,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -76,6 +73,8 @@ import com.composables.icons.lucide.FileText
 import com.composables.icons.lucide.Info
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.GitBranch
+import com.composables.icons.lucide.Bookmark
+import com.composables.icons.lucide.Wand
 import com.composables.icons.lucide.NotebookPen
 import com.composables.icons.lucide.Pencil
 import com.composables.icons.lucide.RefreshCw
@@ -160,11 +159,11 @@ fun SharedTransitionScope.MessagesList(
     toolStatus: String? = null,
     toolSearchNotes: String? = null,
     streamingAnimations: Boolean = true,
+    savedAnswerIds: Set<String> = emptySet(),
+    onSaveAnswer: (ChatMessage) -> Unit = {},
     onFollowUp: (String) -> Unit = {},
 ) {
     val context = LocalContext.current
-    val speech = remember(context) { MessageSpeechController(context) }
-    DisposableEffect(speech) { onDispose { speech.release() } }
     val live = liveFor(messages, gen)
     val liveMeta = (gen as? GenState.Streaming)?.takeIf { dev.tokenCounter && it.tokens > 0 }?.let { S.liveTokens(it.tokens, String.format(Locale.US, "%.1f", it.tokPerSec)) }
     val lastAssistantId = messages.lastOrNull { it.role == ChatRepository.ROLE_ASSISTANT }?.id
@@ -229,8 +228,8 @@ fun SharedTransitionScope.MessagesList(
                             onRegenerate = onRegenerate,
                             onBranch = { onBranch(m) },
                             onDetails = { onOpenTurnDetails(m) },
-                            speech = speech,
-                            showQuickActions = m.id == lastAssistantId,
+                            saved = m.id in savedAnswerIds,
+                            onToggleSaved = { onSaveAnswer(m) },
                             onFollowUp = onFollowUp,
                             modifier = Modifier.animateItem(fadeInSpec = tween(180), fadeOutSpec = tween(120), placementSpec = placement),
                             showDetails = dev.turnDetails,
@@ -364,6 +363,7 @@ private fun SharedTransitionScope.UserBubble(
                 Modifier
                     .widthIn(max = maxBubbleWidth)
                     .surfaceHigh(RoundedCornerShape(Radii.card))
+                    .animateContentSize(tween(135))
                     .combinedClickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
@@ -410,8 +410,8 @@ private fun AssistantMessage(
     liveMeta: String? = null,
     searchNotes: String? = null,
     toolStatus: String? = null,
-    speech: MessageSpeechController? = null,
-    showQuickActions: Boolean = false,
+    saved: Boolean = false,
+    onToggleSaved: () -> Unit = {},
     onFollowUp: (String) -> Unit = {},
 ) {
     val context = LocalContext.current
@@ -429,6 +429,9 @@ private fun AssistantMessage(
             Spacer(Modifier.height(10.dp))
         }
         if (text.isNotBlank()) MarkdownBody(text, streaming = streaming, animateStreaming = streamingAnimations)
+        if (!streaming && stats?.finishReason == "CANCELLED") {
+            Text("Stopped...", modifier = Modifier.padding(top = 5.dp), style = Typography.labelSmall, color = Ink.I500)
+        }
         if (streaming && liveMeta != null) {
             Text(liveMeta, modifier = Modifier.padding(top = 5.dp), style = Meta, color = Ink.I500)
         }
@@ -438,7 +441,6 @@ private fun AssistantMessage(
             Column {
                 Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
                     AnimatedCopyButton(S.copyMessage) { copyToClipboard(context, text, "Inferno message") }
-                    AnimatedActionIcon(Lucide.Volume2, "Read aloud") { haptics.tap(); speech?.speak(text) }
                     AnimatedActionIcon(Lucide.Share2, "Share response") {
                         haptics.tap()
                         val intent = Intent(Intent.ACTION_SEND).apply {
@@ -448,6 +450,7 @@ private fun AssistantMessage(
                         runCatching { context.startActivity(Intent.createChooser(intent, "Share response")) }
                     }
                     AnimatedActionIcon(Lucide.GitBranch, "Branch from this reply") { haptics.tap(); onBranch() }
+                    AnimatedActionIcon(Lucide.Bookmark, if (saved) "Remove saved answer" else "Save answer") { haptics.tap(); onToggleSaved() }
                     if (showRegenerate) AnimatedActionIcon(Lucide.RefreshCw, S.regenerate) { haptics.tap(); onRegenerate() }
                     if (stats != null && showDetails) GhostIconButton(Lucide.Info, S.details, onClick = { haptics.tap(); onDetails() }, size = 32.dp, iconSize = 15.dp, tint = Ink.I500)
                     if (showMeta && stats != null) metaLine(stats, techMeta)?.let { meta ->
@@ -457,79 +460,17 @@ private fun AssistantMessage(
                 }
             }
         }
-        AnimatedVisibility(showActions && showQuickActions, enter = fadeIn(defaultEffectsSpec()), exit = fadeOut(defaultEffectsSpec())) {
-            Row(
-                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(top = 3.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                QuickFollowUpChip("Explain simply") { onFollowUp("Explain your previous answer more simply, keeping the important details.") }
-                QuickFollowUpChip("Summarize") { onFollowUp("Summarize your previous answer in a few clear points.") }
-                QuickFollowUpChip("Give an example") { onFollowUp("Give a concrete example that illustrates your previous answer.") }
+        var moreMenu by rememberSaveable(text) { mutableStateOf(false) }
+        Box {
+            AnimatedActionIcon(Lucide.ChevronDown, "More answer actions") { moreMenu = true }
+            GlassMenu(expanded = moreMenu, onDismiss = { moreMenu = false }, minWidth = 218.dp) {
+                MenuActionRow(Lucide.Wand, "Explain step by step") { moreMenu = false; onFollowUp("Explain your previous answer step by step, with clear intermediate steps.") }
+                MenuActionRow(Lucide.Wand, "Simplify answer") { moreMenu = false; onFollowUp("Rewrite your previous answer in simpler language while preserving the key facts.") }
+                MenuActionRow(Lucide.NotebookPen, "Extract key points") { moreMenu = false; onFollowUp("Extract the key points from your previous answer as a concise list.") }
+                MenuActionRow(Lucide.Pencil, "Make more concise") { moreMenu = false; onFollowUp("Rewrite your previous answer more concisely without losing important information.") }
+                MenuActionRow(Lucide.Pencil, "Expand with detail") { moreMenu = false; onFollowUp("Expand your previous answer with useful details and examples.") }
             }
         }
-    }
-}
-
-@Composable
-private fun QuickFollowUpChip(label: String, onClick: () -> Unit) {
-    val haptics = rememberHaptics()
-    Box(
-        Modifier.clip(RoundedCornerShape(16.dp))
-            .background(Ink.SurfaceHigh)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                role = Role.Button,
-            ) { haptics.tap(); onClick() }
-            .padding(horizontal = 11.dp, vertical = 7.dp),
-    ) {
-        Text(label, style = Typography.labelSmall, color = Ink.I300, maxLines = 1)
-    }
-}
-
-/** A single lifecycle-owned Android TTS engine shared by the message list. */
-private class MessageSpeechController(context: Context) {
-    @Volatile private var ready = false
-    @Volatile private var pending: String? = null
-    private var engine: TextToSpeech? = null
-
-    init {
-        engine = TextToSpeech(context.applicationContext) { status ->
-            if (status == TextToSpeech.SUCCESS) {
-                val current = engine
-                if (current != null) {
-                    ready = current.setLanguage(Locale.getDefault()) >= TextToSpeech.LANG_AVAILABLE
-                    val queued = pending
-                    pending = null
-                    if (ready && queued != null) speak(queued)
-                }
-            }
-        }
-    }
-
-    fun speak(markdown: String) {
-        val plain = markdown
-            .replace(Regex("""(?s)\x60{3,}[^\n]*\n?(.*?)\x60{3,}"""), "$1")
-            .replace(Regex("""!?\[([^\]]+)]\((?:https?://[^)]+)\)"""), "$1")
-            .replace("**", "").replace("__", "").replace("~~", "")
-            .replace(Regex("""\s+"""), " ").trim()
-        if (plain.isBlank()) return
-        val current = engine ?: return
-        if (!ready) {
-            pending = plain
-            return
-        }
-        current.speak(plain, TextToSpeech.QUEUE_FLUSH, null, "inferno-answer")
-    }
-
-    fun release() {
-        pending = null
-        ready = false
-        engine?.stop()
-        engine?.shutdown()
-        engine = null
-    }
 }
 
 /** Copy icon smoothly morphs into a checkmark without showing a text label. */

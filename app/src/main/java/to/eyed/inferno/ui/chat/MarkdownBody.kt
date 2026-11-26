@@ -1,6 +1,8 @@
 package to.eyed.inferno.ui.chat
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -115,10 +117,22 @@ private fun StreamingMarkdownBody(text: String, modifier: Modifier, animateStrea
     val chunks = remember(split.first) { MarkdownChunker.chunks(split.first) }
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         chunks.forEachIndexed { index, rawChunk ->
-            key(index) {
-                val chunk = remember(rawChunk) { formatMarkdownChunk(rawChunk) }
-                if (index == chunks.lastIndex) StreamingMarkdownTail(chunk, animateStreaming)
-                else MarkdownChunkView(chunk)
+            if (index == chunks.lastIndex) {
+                // The active paragraph stays stable and unanimated while tokens arrive.
+                key("stream-tail") {
+                    val chunk = remember(rawChunk) { formatMarkdownChunk(rawChunk) }
+                    StreamingMarkdownTail(chunk, animateStreaming)
+                }
+            } else {
+                // A paragraph only enters this branch after its terminating blank line arrives.
+                // Its content key gives it one entrance animation, never one animation per token.
+                key(rawChunk) {
+                    val chunk = remember(rawChunk) { formatMarkdownChunk(rawChunk) }
+                    AnimatedVisibility(
+                        visible = true,
+                        enter = fadeIn(tween(115)) + expandVertically(tween(115)),
+                    ) { MarkdownChunkView(chunk) }
+                }
             }
         }
         split.second?.let { fence ->
@@ -309,18 +323,18 @@ fun MonoCodeBlock(code: String, language: String?, modifier: Modifier = Modifier
     val info = language?.trim()?.lowercase().orEmpty()
     val runLanguage = info.removeSuffix("-run").substringBefore(' ')
     val autoRun = info.endsWith(" run") || info.endsWith("-run")
-    var showPreviewDialog by remember { mutableStateOf(false) }
-    LaunchedEffect(streaming, autoRun, code) { if (autoRun && !streaming) showPreviewDialog = true }
+    var showPreview by remember(code, language) { mutableStateOf(false) }
+    LaunchedEffect(streaming, autoRun, code) { if (autoRun && !streaming) showPreview = true }
     val runnable = runLanguage in setOf("html", "htm", "svg", "xml", "javascript", "js", "css")
     Column(
         modifier
             .fillMaxWidth()
             .clip(shape)
             .background(Ink.I900)
-            .then(if (showPreviewDialog) Modifier else Modifier.border(1.dp, whiteA(0.08f), shape)),
+            .border(1.dp, whiteA(0.08f), shape),
     ) {
         Row(
-            Modifier.fillMaxWidth().background(whiteA(0.03f)).padding(start = 18.dp, end = 6.dp, top = 3.dp, bottom = 3.dp),
+            Modifier.fillMaxWidth().background(whiteA(0.03f)).padding(start = 18.dp, end = 10.dp, top = 3.dp, bottom = 3.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
@@ -329,17 +343,24 @@ fun MonoCodeBlock(code: String, language: String?, modifier: Modifier = Modifier
                 color = Ink.I500,
                 modifier = Modifier.weight(1f),
             )
-            if (runnable && !streaming) CodeRunChip(showingPreview = showPreviewDialog) { showPreviewDialog = !showPreviewDialog }
+            if (runnable && !streaming) CodeRunChip(showingPreview = showPreview) { showPreview = !showPreview }
             CopyChip(onCopy = { copyToClipboard(context, trimmed, "Code") })
         }
         Hairline()
-        Box(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
-            val highlighted = if (streaming) AnnotatedString(trimmed) else highlightCode(trimmed, language)
-            Text(highlighted, style = MonoBody.copy(color = CodePalette.Text), softWrap = false,
-                modifier = Modifier.padding(start = 18.dp, end = 14.dp, top = 14.dp, bottom = 14.dp))
-        }
-        if (showPreviewDialog) {
-            CodeRunnerDialog(code = trimmed, language = runLanguage, onDismiss = { showPreviewDialog = false })
+        AnimatedContent(
+            targetState = showPreview,
+            transitionSpec = { fadeIn(tween(120)) togetherWith fadeOut(tween(90)) },
+            label = "codePreviewInline",
+        ) { preview ->
+            if (preview) {
+                CodeRunnerInline(code = trimmed, language = runLanguage, modifier = Modifier.fillMaxWidth())
+            } else {
+                Box(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+                    val highlighted = if (streaming) AnnotatedString(trimmed) else highlightCode(trimmed, language)
+                    Text(highlighted, style = MonoBody.copy(color = CodePalette.Text), softWrap = false,
+                        modifier = Modifier.padding(start = 18.dp, end = 14.dp, top = 14.dp, bottom = 14.dp))
+                }
+            }
         }
     }
 }
@@ -348,9 +369,9 @@ fun MonoCodeBlock(code: String, language: String?, modifier: Modifier = Modifier
 @Composable
 private fun CodeRunChip(showingPreview: Boolean, onRun: () -> Unit) {
     Row(
-        Modifier.padding(end = 3.dp).clip(RoundedCornerShape(8.dp)).background(whiteA(0.06f))
+        Modifier.padding(end = 3.dp).heightIn(min = 27.dp).clip(RoundedCornerShape(8.dp)).background(whiteA(0.06f))
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, role = Role.Button, onClick = onRun)
-            .padding(horizontal = 7.dp, vertical = 5.dp),
+            .padding(horizontal = 7.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(5.dp),
     ) {
@@ -366,7 +387,7 @@ private fun CopyChip(onCopy: () -> Unit) {
     val haptics = rememberHaptics()
     LaunchedEffect(copied) { if (copied) { delay(1_100); copied = false } }
     Box(
-        Modifier.size(27.dp).clip(RoundedCornerShape(8.dp)).background(whiteA(0.06f))
+        Modifier.size(width = 27.dp, height = 27.dp).clip(RoundedCornerShape(8.dp)).background(whiteA(0.06f))
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, role = Role.Button) {
                 haptics.tap(); onCopy(); copied = true
             },
@@ -529,6 +550,16 @@ internal object MarkdownMath {
         value = inlineDisplayBracket.replace(value) { "\n\n**" + formatExpression(it.groupValues[1]) + "**\n\n" }
         value = inlineDollar.replace(value) { formatExpression(it.groupValues[1]) }
         value = inlineParen.replace(value) { formatExpression(it.groupValues[1]) }
+        // Some local models omit delimiters and emit plain x^2 / x_1 notation in prose.
+        value = Regex("""(?<![\\w\\\\])([A-Za-zΑ-Ωα-ω])\\^([0-9]+|[A-Za-z])""").replace(value) { m ->
+            m.groupValues[1] + mapIndex(m.groupValues[2], superscript, "^" + m.groupValues[2])
+        }
+        value = Regex("""(?<![\\w\\\\])([A-Za-zΑ-Ωα-ω])_([0-9]+|[A-Za-z])""").replace(value) { m ->
+            m.groupValues[1] + mapIndex(m.groupValues[2], subscript, "_" + m.groupValues[2])
+        }
+        // Strip unmatched math delimiters (but not currency such as $25).
+        value = value.replace(Regex("""(?<!\\\\)\\$(?=[A-Za-z\\\\(])"""), "")
+            .replace(Regex("""(?<=[A-Za-z0-9)}])\\$(?=\\s|[.,;:!?)]|$)"""), "")
         return value
     }
 

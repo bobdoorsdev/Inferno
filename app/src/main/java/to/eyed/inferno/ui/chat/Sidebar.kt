@@ -51,6 +51,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.composables.icons.lucide.Archive
 import com.composables.icons.lucide.ArchiveRestore
+import com.composables.icons.lucide.Bookmark
+import com.composables.icons.lucide.FileText
 import com.composables.icons.lucide.ChevronDown
 import com.composables.icons.lucide.Gauge
 import com.composables.icons.lucide.HardDrive
@@ -110,11 +112,17 @@ fun Sidebar(
     modifier: Modifier = Modifier,
     /** Developer mode: the Benchmark row in the footer. */
     showBenchmark: Boolean = false,
+    searchMatches: Set<String> = emptySet(),
+    onSearchQuery: (String) -> Unit = {},
+    onExport: (Conversation) -> Unit = {},
+    onOpenSavedAnswers: () -> Unit = {},
 ) {
     var query by rememberSaveable { mutableStateOf("") }
     var archivedOpen by rememberSaveable { mutableStateOf(false) }
-    val filtered = remember(conversations, query) {
-        if (query.isBlank()) conversations else conversations.filter { it.displayTitle.contains(query.trim(), ignoreCase = true) }
+    val filtered = remember(conversations, query, searchMatches) {
+        if (query.isBlank()) conversations else conversations.filter {
+            it.displayTitle.contains(query.trim(), ignoreCase = true) || it.id in searchMatches
+        }
     }
     val groups = remember(filtered) { groupConversations(filtered) }
 
@@ -130,7 +138,7 @@ fun Sidebar(
         } else {
             Spacer(Modifier.height(10.dp))
         }
-        SearchPill(query, { query = it }, Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
+        SearchPill(query, { value -> query = value; onSearchQuery(value) }, Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
         // The destinations scroll with the chat list so a short window (phone landscape) still reaches every chat.
         LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)) {
             item(key = "nav", contentType = "nav") {
@@ -138,6 +146,7 @@ fun Sidebar(
                     NavRow(Lucide.SquarePen, S.newChat, onClick = onNew)
                     NavRow(Lucide.Images, S.gallery, onClick = onGallery)
                     NavRow(Lucide.HardDrive, S.models, subtitle = loadedModelName ?: S.noModelLoaded, onClick = onOpenModels)
+                    NavRow(Lucide.Bookmark, "Saved answers", onClick = onOpenSavedAnswers)
                 }
             }
             if (conversations.isEmpty()) item(key = "empty") {
@@ -150,7 +159,7 @@ fun Sidebar(
                 item(key = "h-$label", contentType = "header") { GroupHeader(label, Modifier.animateItem()) }
                 list.forEach { c ->
                     item(key = "c-${c.id}", contentType = "row") {
-                        ThreadRow(c, c.id == activeId, c.id in busyIds, onSelect, onRename, onPin, onArchive, onDelete, Modifier.animateItem())
+                        ThreadRow(c, c.id == activeId, c.id in busyIds, onSelect, onRename, onPin, onArchive, onDelete, onExport, Modifier.animateItem())
                     }
                 }
             }
@@ -174,7 +183,7 @@ fun Sidebar(
                 }
                 if (archivedOpen) archived.forEach { c ->
                     item(key = "a-${c.id}", contentType = "row") {
-                        ThreadRow(c, c.id == activeId, c.id in busyIds, onSelect, onRename, onPin, onArchive, onDelete, Modifier.animateItem())
+                        ThreadRow(c, c.id == activeId, c.id in busyIds, onSelect, onRename, onPin, onArchive, onDelete, onExport, Modifier.animateItem())
                     }
                 }
             }
@@ -258,6 +267,7 @@ private fun ThreadRow(
     onPin: (String, Boolean) -> Unit,
     onArchive: (String, Boolean) -> Unit,
     onDelete: (String) -> Unit,
+    onExport: (Conversation) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val haptics = rememberHaptics()
@@ -267,7 +277,7 @@ private fun ThreadRow(
             Modifier
                 .fillMaxWidth()
                 .padding(vertical = 1.dp)
-                .clip(RoundedCornerShape(Radii.row))
+                .clip(RoundedCornerShape(if (active) 12.dp else Radii.row))
                 .background(if (active) Ink.Surface else Color.Transparent)
                 .combinedClickable(
                     interactionSource = remember { MutableInteractionSource() },
@@ -297,6 +307,7 @@ private fun ThreadRow(
         }
         GlassMenu(expanded = menu, onDismiss = { menu = false }) {
             MenuActionRow(Lucide.Pencil, S.rename) { menu = false; onRename(conv) }
+            MenuActionRow(Lucide.FileText, "Export as Markdown") { menu = false; onExport(conv) }
             MenuActionRow(Lucide.Pin, if (conv.pinned) S.unpin else S.pin) { menu = false; onPin(conv.id, !conv.pinned) }
             MenuActionRow(if (conv.archived) Lucide.ArchiveRestore else Lucide.Archive, if (conv.archived) S.unarchive else S.archive) { menu = false; onArchive(conv.id, !conv.archived) }
             MenuConfirmRow(Lucide.Trash2, S.delete, onConfirm = { menu = false; onDelete(conv.id) })
