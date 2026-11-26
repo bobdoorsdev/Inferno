@@ -466,8 +466,16 @@ private fun CodeRunChip(showingPreview: Boolean, onRun: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(5.dp),
     ) {
-        Icon(if (showingPreview) Lucide.Code else Lucide.Play, contentDescription = if (showingPreview) "Show code" else "Preview code", Modifier.size(13.dp), tint = Ink.I100)
-        Text(if (showingPreview) "Code" else "Preview", style = Typography.labelSmall, color = Ink.I100)
+        AnimatedContent(
+            targetState = showingPreview,
+            transitionSpec = { (fadeIn(tween(145)) + scaleIn(initialScale = 0.92f)) togetherWith (fadeOut(tween(90)) + scaleOut(targetScale = 0.96f)) },
+            label = "previewCodeToggle",
+        ) { preview ->
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                Icon(if (preview) Lucide.Code else Lucide.Play, contentDescription = if (preview) "Show code" else "Preview code", Modifier.size(13.dp), tint = Ink.I100)
+                Text(if (preview) "Code" else "Preview", style = Typography.labelSmall, color = Ink.I100)
+            }
+        }
     }
 }
 
