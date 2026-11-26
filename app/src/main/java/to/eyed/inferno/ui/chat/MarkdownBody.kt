@@ -165,6 +165,23 @@ internal fun normalizeMarkdownForRenderer(source: String, streaming: Boolean = f
 }
 
 private fun escapeCurrencyOutsideCode(line: String): String {
+    fun amountEnd(start: Int): Int? {
+        if (start >= line.length || line[start] != '$' || start + 1 >= line.length || !line[start + 1].isDigit()) return null
+        var end = start + 1
+        while (end < line.length && (line[end].isDigit() || line[end] == ',' || line[end] == '.')) end++
+        val boundary = end == line.length || line[end].isWhitespace() || line[end] in ",;:!?)]}"
+        return end.takeIf { boundary }
+    }
+
+    fun nextUnescapedDollar(from: Int): Int? {
+        var index = from
+        while (index < line.length) {
+            if (line[index] == '$' && (index == 0 || line[index - 1] != '\\')) return index
+            index++
+        }
+        return null
+    }
+
     val out = StringBuilder(line.length + 8)
     var i = 0
     var codeTicks = 0
@@ -178,16 +195,19 @@ private fun escapeCurrencyOutsideCode(line: String): String {
             i = end
             continue
         }
-        if (codeTicks == 0 && line[i] == '$' && (i == 0 || line[i - 1] != '\\') &&
-            i + 1 < line.length && line[i + 1].isDigit()
-        ) {
-            var end = i + 1
-            while (end < line.length && (line[end].isDigit() || line[end] == ',' || line[end] == '.')) end++
-            val boundary = end == line.length || line[end].isWhitespace() || line[end] in ",;:!?)]}"
-            if (boundary) {
-                out.append("\\$")
-                i++
-                continue
+        if (codeTicks == 0 && line[i] == '$' && (i == 0 || line[i - 1] != '\\')) {
+            val end = amountEnd(i)
+            if (end != null) {
+                val nextDollar = nextUnescapedDollar(end)
+                val nextIsAnotherAmount = nextDollar != null && amountEnd(nextDollar) != null
+                // A paired closing delimiter means this may be genuine math, e.g. $5 + x$.
+                // Two dollar tokens that each start an amount are currency, e.g. $5 and $10.
+                val isCurrency = nextIsAnotherAmount || nextDollar == null
+                if (isCurrency) {
+                    out.append("\\$")
+                    i++
+                    continue
+                }
             }
         }
         out.append(line[i])
@@ -195,7 +215,6 @@ private fun escapeCurrencyOutsideCode(line: String): String {
     }
     return out.toString()
 }
-
 @Composable
 private fun BetterMarkdownTable(table: MarkdownBlock.Table) {
     val rows = listOf(table.header) + table.rows
