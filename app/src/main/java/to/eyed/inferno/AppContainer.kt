@@ -46,6 +46,9 @@ import java.util.concurrent.TimeUnit
 class AppContainer(app: Application) {
     val appScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
+    fun hasCoarseLocationPermission(): Boolean =
+        app.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+
     /** Approximate city only. Reads cached Android coarse location; never uses IP geolocation or exposes coordinates. */
     suspend fun coarseCity(): String? = withContext(Dispatchers.IO) {
         runCatching {
