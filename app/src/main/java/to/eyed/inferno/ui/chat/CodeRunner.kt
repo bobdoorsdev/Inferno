@@ -161,7 +161,7 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere}a{color:#a9c7ff}
     return when (language) {
         "svg", "xml" -> {
             val body = if (source.trimStart().startsWith("<svg", ignoreCase = true)) {
-                source.replaceFirst(Regex("(?i)<svg\\b")) { it.value + " style='display:block;max-width:100%;height:auto'" }
+                source
             } else "<pre style='white-space:pre-wrap;color:#ddd;margin:0'>${escapeHtml(source)}</pre>"
             "<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=5'>$csp$baseStyle</head><body>$body</body></html>"
         }
