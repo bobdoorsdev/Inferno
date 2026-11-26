@@ -96,7 +96,7 @@ class ChatRepository(private val dao: ChatDao, private val imageUtil: ImageUtil,
         if (conv != null && conv.title.isBlank() && text.isNotBlank()) dao.rename(conversationId, titleFrom(text), now)
         else dao.touch(conversationId, now)
         flushHeldBack()     // after the insert: ids re-attached by an edit have their reference back
-        return MessageWithImages(m, rows).toChatMessage()
+        return MessageWithImages(m, rows).toChatMessage().copy(files = files)
     }
 
     /** Creates the assistant row at the FIRST token with finishReason = null (== streaming / interrupted); ChatViewModel updates it every 2 s or 200 tokens. */
