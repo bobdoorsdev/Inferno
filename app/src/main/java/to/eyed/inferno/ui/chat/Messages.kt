@@ -438,39 +438,42 @@ private fun AssistantMessage(
         // TalkBack hears "Answer complete" exactly once, on the Done transition - never per token.
         if (announce) Box(Modifier.size(1.dp).semantics { liveRegion = LiveRegionMode.Polite; contentDescription = S.answerComplete })
         AnimatedVisibility(showActions, enter = fadeIn(defaultEffectsSpec()), exit = fadeOut(defaultEffectsSpec())) {
-            Column {
-                Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
-                    AnimatedCopyButton(S.copyMessage) { copyToClipboard(context, text, "Inferno message") }
-                    AnimatedActionIcon(Lucide.Share2, "Share response") {
-                        haptics.tap()
-                        val intent = Intent(Intent.ACTION_SEND).apply {
-                            type = "text/plain"
-                            putExtra(Intent.EXTRA_TEXT, text)
-                        }
-                        runCatching { context.startActivity(Intent.createChooser(intent, "Share response")) }
+            var moreMenu by rememberSaveable(text) { mutableStateOf(false) }
+            Row(
+                Modifier.padding(top = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                AnimatedCopyButton(S.copyMessage) { copyToClipboard(context, text, "Inferno message") }
+                AnimatedActionIcon(Lucide.Share2, "Share response") {
+                    haptics.tap()
+                    val intent = Intent(Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(Intent.EXTRA_TEXT, text)
                     }
-                    AnimatedActionIcon(Lucide.GitBranch, "Branch from this reply") { haptics.tap(); onBranch() }
-                    AnimatedActionIcon(Lucide.Bookmark, if (saved) "Remove saved answer" else "Save answer") { haptics.tap(); onToggleSaved() }
-                    if (showRegenerate) AnimatedActionIcon(Lucide.RefreshCw, S.regenerate) { haptics.tap(); onRegenerate() }
-                    if (stats != null && showDetails) GhostIconButton(Lucide.Info, S.details, onClick = { haptics.tap(); onDetails() }, size = 32.dp, iconSize = 15.dp, tint = Ink.I500)
-                    if (showMeta && stats != null) metaLine(stats, techMeta)?.let { meta ->
-                        Spacer(Modifier.size(6.dp))
-                        Text(meta, style = Meta, color = Ink.I500)
+                    runCatching { context.startActivity(Intent.createChooser(intent, "Share response")) }
+                }
+                AnimatedActionIcon(Lucide.GitBranch, "Branch from this reply") { haptics.tap(); onBranch() }
+                AnimatedActionIcon(Lucide.Bookmark, if (saved) "Remove saved answer" else "Save answer") { haptics.tap(); onToggleSaved() }
+                if (showRegenerate) AnimatedActionIcon(Lucide.RefreshCw, S.regenerate) { haptics.tap(); onRegenerate() }
+                Box {
+                    AnimatedActionIcon(Lucide.ChevronDown, "More answer actions") { haptics.tap(); moreMenu = true }
+                    GlassMenu(expanded = moreMenu, onDismiss = { moreMenu = false }, minWidth = 218.dp) {
+                        MenuActionRow(Lucide.Wand, "Explain step by step") { moreMenu = false; onFollowUp("Explain your previous answer step by step, with clear intermediate steps.") }
+                        MenuActionRow(Lucide.Wand, "Simplify answer") { moreMenu = false; onFollowUp("Rewrite your previous answer in simpler language while preserving the key facts.") }
+                        MenuActionRow(Lucide.NotebookPen, "Extract key points") { moreMenu = false; onFollowUp("Extract the key points from your previous answer as a concise list.") }
+                        MenuActionRow(Lucide.Pencil, "Make more concise") { moreMenu = false; onFollowUp("Rewrite your previous answer more concisely without losing important information.") }
+                        MenuActionRow(Lucide.Pencil, "Expand with detail") { moreMenu = false; onFollowUp("Expand your previous answer with useful details and examples.") }
                     }
+                }
+                if (stats != null && showDetails) GhostIconButton(Lucide.Info, S.details, onClick = { haptics.tap(); onDetails() }, size = 32.dp, iconSize = 15.dp, tint = Ink.I500)
+                if (showMeta && stats != null) metaLine(stats, techMeta)?.let { meta ->
+                    Spacer(Modifier.size(6.dp))
+                    Text(meta, style = Meta, color = Ink.I500)
                 }
             }
         }
-        var moreMenu by rememberSaveable(text) { mutableStateOf(false) }
-        Box {
-            AnimatedActionIcon(Lucide.ChevronDown, "More answer actions") { moreMenu = true }
-            GlassMenu(expanded = moreMenu, onDismiss = { moreMenu = false }, minWidth = 218.dp) {
-                MenuActionRow(Lucide.Wand, "Explain step by step") { moreMenu = false; onFollowUp("Explain your previous answer step by step, with clear intermediate steps.") }
-                MenuActionRow(Lucide.Wand, "Simplify answer") { moreMenu = false; onFollowUp("Rewrite your previous answer in simpler language while preserving the key facts.") }
-                MenuActionRow(Lucide.NotebookPen, "Extract key points") { moreMenu = false; onFollowUp("Extract the key points from your previous answer as a concise list.") }
-                MenuActionRow(Lucide.Pencil, "Make more concise") { moreMenu = false; onFollowUp("Rewrite your previous answer more concisely without losing important information.") }
-                MenuActionRow(Lucide.Pencil, "Expand with detail") { moreMenu = false; onFollowUp("Expand your previous answer with useful details and examples.") }
-            }
-        }
+    }
 }
 
 /** Copy icon smoothly morphs into a checkmark without showing a text label. */

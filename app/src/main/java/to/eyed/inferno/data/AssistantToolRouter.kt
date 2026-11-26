@@ -384,25 +384,36 @@ Return JSON only: {"search_queries":[],"image_queries":[],"image_prompt":"","cal
             }.joinToString(", ")
         }
         val missingImages = images.asSequence()
-            .filter { it.imageUrl.startsWith("https://") && it.sourceUrl.startsWith("http") }
+            .filter { it.imageUrl.startsWith("https://") && it.sourceUrl.startsWith("https://") }
             .distinctBy { it.imageUrl }
-            .filterNot { result.contains("](${it.imageUrl}") }
-            .take(3)
+            .filterNot { result.contains("](" + markdownUrl(it.imageUrl)) }
+            .take(2)
             .toList()
         if (missingImages.isEmpty()) return result.trimEnd()
-        return buildString {
-            if (result.isNotBlank()) append(result.trimEnd()).append("\n\n")
-            append("**Images**\n")
-            missingImages.forEach { image ->
-                val title = image.title.replace("[", "(").replace("]", ")").replace("\n", " ").take(100)
+
+        // Put automatic image results beside the paragraph they illustrate instead of appending a detached
+        // image dump. The planner also asks the model to place image URLs inline when it can do so itself.
+        val blocks = result.trim().split(Regex("""\n{2,}""")).filter { it.isNotBlank() }.toMutableList()
+        if (blocks.isEmpty()) blocks += ""
+        missingImages.forEach { image ->
+            val terms = Regex("""[\p{L}\p{N}]{3,}""").findAll(image.title.lowercase(Locale.ROOT))
+                .map { it.value }.distinct().toList()
+            val best = blocks.indices.maxByOrNull { index ->
+                val paragraph = blocks[index].lowercase(Locale.ROOT)
+                terms.count(paragraph::contains)
+            } ?: 0
+            val title = image.title.replace("[", "(").replace("]", ")").replace("\n", " ").take(100)
+            val imageMarkdown = buildString {
                 append("![").append(title).append("](").append(markdownUrl(image.imageUrl))
                 image.fallbackImageUrl?.takeIf { it.startsWith("https://") && it != image.imageUrl }?.let {
                     append(" \"").append(markdownUrl(it)).append("\"")
                 }
-                append(")\n")
-                append("[Image source](").append(markdownUrl(image.sourceUrl)).append(")\n")
+                append(")")
+                append("\n[Image source](").append(markdownUrl(image.sourceUrl)).append(")")
             }
-        }.trimEnd()
+            blocks.add((best + 1).coerceAtMost(blocks.size), imageMarkdown)
+        }
+        return blocks.joinToString("\n\n").trimEnd()
     }
 
     private fun markdownUrl(url: String): String =

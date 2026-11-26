@@ -63,6 +63,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.window.core.layout.WindowSizeClass
@@ -471,7 +473,7 @@ private fun SavedAnswersSheet(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
-                            Icon(Bookmark, null, Modifier.size(16.dp), tint = Ink.I300)
+                            Icon(Lucide.Bookmark, null, Modifier.size(16.dp), tint = Ink.I300)
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                                 Text(answer.title, style = Typography.bodyMedium.copy(fontWeight = FontWeight.Medium), color = Ink.White, maxLines = 1)
                                 Text(answer.content, style = Typography.bodySmall, color = Ink.I500, maxLines = 2, overflow = TextOverflow.Ellipsis)

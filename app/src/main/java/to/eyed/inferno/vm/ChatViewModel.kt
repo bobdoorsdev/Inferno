@@ -685,24 +685,39 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
             stream.close()
             // Mark the response complete before refining its title in a quiet background task.
             if (genStates.value[conversationId]?.isBusy == true) setGen(conversationId, GenState.Idle)
-            if (history.count { it.role == ChatRepository.ROLE_USER } == 1 &&
-                assistantId != null && ChatRepository.isTitleWorthy(latestUserText)
-            ) {
-                titleJobs.remove(conversationId)?.cancel()
-                titleJobs[conversationId] = viewModelScope.launch {
-                    delay(650)
-                    // The native inference engine is shared; never start naming while another chat is generating.
-                    if (genStates.value.values.any { it.isBusy }) return@launch
-                    val title = try {
-                        chooseTools(history, thinking, detail, allowWeb = false, createTitle = true).title
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (_: Exception) {
-                        null
+            val firstSubstantive = history.firstOrNull {
+                it.role == ChatRepository.ROLE_USER && ChatRepository.isTitleWorthy(it.content)
+            }
+            if (firstSubstantive != null && assistantId != null) {
+                val fallbackTitle = ChatRepository.titleFrom(firstSubstantive.content)
+                val existingTitle = c.chats.conversation(conversationId)?.title.orEmpty()
+                // A deterministic fallback means every substantive chat gets a title even if a tiny model
+                // cannot perform the optional naming pass. A manually renamed chat is never overwritten.
+                if (existingTitle.isBlank()) c.chats.setTitle(conversationId, fallbackTitle)
+                if (existingTitle.isBlank() || existingTitle == fallbackTitle) {
+                    titleJobs.remove(conversationId)?.cancel()
+                    titleJobs[conversationId] = viewModelScope.launch {
+                        delay(650)
+                        // Wait for later messages to finish; send() may cancel and reschedule this same task.
+                        var waitedMs = 0
+                        while (genStates.value.values.any { it.isBusy } && waitedMs < 120_000) {
+                            delay(250)
+                            waitedMs += 250
+                        }
+                        if (genStates.value.values.any { it.isBusy }) return@launch
+                        val generated = try {
+                            chooseTools(listOf(firstSubstantive), thinking, detail, allowWeb = false, createTitle = true).title
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (_: Exception) {
+                            null
+                        }
+                        val title = generated?.takeIf { ChatRepository.isTitleWorthy(it) }
+                        if (!title.isNullOrBlank() && genStates.value[conversationId]?.isBusy != true) {
+                            val current = c.chats.conversation(conversationId)?.title.orEmpty()
+                            if (current == fallbackTitle || current.isBlank()) c.chats.setTitle(conversationId, title)
+                        }
                     }
-                    if (!title.isNullOrBlank() && ChatRepository.isTitleWorthy(title) &&
-                        genStates.value[conversationId]?.isBusy != true
-                    ) c.chats.setTitle(conversationId, title)
                 }
             }
         } catch (e: CancellationException) {
