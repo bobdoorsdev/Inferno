@@ -536,7 +536,7 @@ private fun AnimatedActionIcon(icon: androidx.compose.ui.graphics.vector.ImageVe
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(if (pressed) 0.78f else 1f, fastSpatialSpec(), label = "messageActionScale")
     val alpha by animateFloatAsState(if (pressed) 0.62f else 1f, fastSpatialSpec(), label = "messageActionAlpha")
-    val rotation by animateFloatAsState(if (pressed) 7f else 0f, fastSpatialSpec(), label = "messageActionRotation
+    val rotation by animateFloatAsState(if (pressed) 7f else 0f, fastSpatialSpec(), label = "messageActionRotation")
     Box(
         Modifier.size(36.dp).graphicsLayer { scaleX = scale; scaleY = scale; this.alpha = alpha; rotationZ = rotation }
             .clip(CircleShape).background(Ink.SurfaceHigh.copy(alpha = if (pressed) 0.85f else 0f))
