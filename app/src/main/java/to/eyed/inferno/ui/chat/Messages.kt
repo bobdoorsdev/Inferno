@@ -64,6 +64,7 @@ import coil3.compose.AsyncImage
 import com.composables.icons.lucide.ChevronDown
 import com.composables.icons.lucide.Check
 import com.composables.icons.lucide.Copy
+import com.composables.icons.lucide.FileText
 import com.composables.icons.lucide.Info
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.GitBranch
@@ -297,6 +298,25 @@ private fun SharedTransitionScope.UserBubble(
                                 onClick = { onOpenImage(att) },
                             ),
                     )
+                }
+            }
+            if (msg.content.isNotBlank()) Spacer(Modifier.height(8.dp))
+        }
+        if (msg.files.isNotEmpty()) {
+            Column(Modifier.widthIn(max = maxBubbleWidth).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                msg.files.forEach { file ->
+                    Row(
+                        Modifier.fillMaxWidth().surfaceHigh(RoundedCornerShape(Radii.row)).padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(9.dp),
+                    ) {
+                        Icon(Lucide.FileText, null, Modifier.size(17.dp), tint = Ink.I300)
+                        Column(Modifier.weight(1f)) {
+                            Text(file.displayName, style = Typography.bodySmall.copy(fontWeight = FontWeight.Medium), color = Ink.White, maxLines = 1)
+                            Text("${file.mimeType} · ${android.text.format.Formatter.formatShortFileSize(context, file.sizeBytes)}",
+                                style = RowMeta, color = Ink.I500, maxLines = 1)
+                        }
+                    }
                 }
             }
             if (msg.content.isNotBlank()) Spacer(Modifier.height(8.dp))
