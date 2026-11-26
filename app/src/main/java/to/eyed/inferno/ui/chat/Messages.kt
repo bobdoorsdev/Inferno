@@ -73,7 +73,6 @@ import com.composables.icons.lucide.FileText
 import com.composables.icons.lucide.Info
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.GitBranch
-import com.composables.icons.lucide.Bookmark
 import com.composables.icons.lucide.Wand
 import com.composables.icons.lucide.NotebookPen
 import com.composables.icons.lucide.Pencil
@@ -159,8 +158,6 @@ fun SharedTransitionScope.MessagesList(
     toolStatus: String? = null,
     toolSearchNotes: String? = null,
     streamingAnimations: Boolean = true,
-    savedAnswerIds: Set<String> = emptySet(),
-    onSaveAnswer: (ChatMessage) -> Unit = {},
     onFollowUp: (String) -> Unit = {},
 ) {
     val context = LocalContext.current
@@ -228,8 +225,6 @@ fun SharedTransitionScope.MessagesList(
                             onRegenerate = onRegenerate,
                             onBranch = { onBranch(m) },
                             onDetails = { onOpenTurnDetails(m) },
-                            saved = m.id in savedAnswerIds,
-                            onToggleSaved = { onSaveAnswer(m) },
                             onFollowUp = onFollowUp,
                             modifier = Modifier.animateItem(fadeInSpec = tween(180), fadeOutSpec = tween(120), placementSpec = placement),
                             showDetails = dev.turnDetails,
@@ -410,8 +405,6 @@ private fun AssistantMessage(
     liveMeta: String? = null,
     searchNotes: String? = null,
     toolStatus: String? = null,
-    saved: Boolean = false,
-    onToggleSaved: () -> Unit = {},
     onFollowUp: (String) -> Unit = {},
 ) {
     val context = LocalContext.current
@@ -429,9 +422,6 @@ private fun AssistantMessage(
             Spacer(Modifier.height(10.dp))
         }
         if (text.isNotBlank()) MarkdownBody(text, streaming = streaming, animateStreaming = streamingAnimations)
-        if (!streaming && stats?.finishReason == "CANCELLED") {
-            Text("Stopped...", modifier = Modifier.padding(top = 5.dp), style = Typography.labelSmall, color = Ink.I500)
-        }
         if (streaming && liveMeta != null) {
             Text(liveMeta, modifier = Modifier.padding(top = 5.dp), style = Meta, color = Ink.I500)
         }
@@ -454,7 +444,6 @@ private fun AssistantMessage(
                     runCatching { context.startActivity(Intent.createChooser(intent, "Share response")) }
                 }
                 AnimatedActionIcon(Lucide.GitBranch, "Branch from this reply") { haptics.tap(); onBranch() }
-                AnimatedActionIcon(Lucide.Bookmark, if (saved) "Remove saved answer" else "Save answer") { haptics.tap(); onToggleSaved() }
                 if (showRegenerate) AnimatedActionIcon(Lucide.RefreshCw, S.regenerate) { haptics.tap(); onRegenerate() }
                 Box {
                     AnimatedActionIcon(Lucide.ChevronDown, "More answer actions") { haptics.tap(); moreMenu = true }
@@ -542,7 +531,7 @@ internal fun metaLine(s: MessageStats, tech: Boolean = true): String? {
     }
     when {
         s.finishReason == null -> parts += S.interrupted
-        s.finishReason == "CANCELLED" -> parts += S.stopped
+        s.finishReason == "CANCELLED" -> parts += "Stopped..."
         s.finishReason == "ERROR" -> parts += S.failed.lowercase()
     }
     return parts.takeIf { it.isNotEmpty() }?.joinToString(" · ")
