@@ -192,15 +192,18 @@ private fun MarkdownChunkView(chunk: String, animated: Boolean = false) {
             }
             if (match.groupValues[1] == "__favicon__") {
                 val lineEnd = chunk.indexOf('\n', match.range.last + 1).let { if (it < 0) chunk.length else it }
+                val fallbackIcon = match.groupValues.getOrNull(3).orEmpty()
+                var activeIcon by remember(match.groupValues[2], fallbackIcon) { mutableStateOf(match.groupValues[2]) }
                 Row(
                     Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     AsyncImage(
-                        model = match.groupValues[2],
+                        model = activeIcon,
                         contentDescription = "Website icon",
                         contentScale = ContentScale.Fit,
+                        onError = { if (fallbackIcon.isNotBlank() && activeIcon != fallbackIcon) activeIcon = fallbackIcon },
                         modifier = Modifier.size(18.dp).clip(RoundedCornerShape(4.dp)),
                     )
                     val sourceLine = chunk.substring(match.range.last + 1, lineEnd).trim()
