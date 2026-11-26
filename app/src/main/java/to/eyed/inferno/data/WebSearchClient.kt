@@ -167,7 +167,7 @@ class WebSearchClient(private val client: OkHttpClient = DEFAULT_CLIENT) {
         runCatching {
             val request = Request.Builder().url(pageUrl).header("User-Agent", USER_AGENT).header("Accept", "text/html").build()
             client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) return@use null to null
+                if (!response.isSuccessful) return@use Pair(null, null)
                 val html = response.body?.string()?.take(1_500_000).orEmpty()
                 fun resolve(raw: String?): String? {
                     val value = raw?.trim()?.trim('\'', '"')?.takeIf(String::isNotBlank) ?: return null
