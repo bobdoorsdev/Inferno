@@ -177,6 +177,8 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
     val toolStatus: StateFlow<String?> = _toolStatus.asStateFlow()
     private val _toolSearchNotes = MutableStateFlow<String?>(null)
     val toolSearchNotes: StateFlow<String?> = _toolSearchNotes.asStateFlow()
+    private val _toolSourceUrls = MutableStateFlow<List<String>>(emptyList())
+    val toolSourceUrls: StateFlow<List<String>> = _toolSourceUrls.asStateFlow()
 
     /** Wall time of the last model switch: assistant turns older than it carry a stale kvUsed (5.5 contextUsage). */
     private var modelSwitchAt = 0L
@@ -489,6 +491,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
                 (webIntent || imageIntent || AssistantToolRouter.shouldRouteLocally(latestUserText))
             _toolStatus.value = null
             _toolSearchNotes.value = null
+            _toolSourceUrls.value = emptyList()
             val toolPlan = if (shouldRoute) {
                 try {
                     chooseTools(history, thinking, detail, webIntent, imageIntent && history.count { it.role == ChatRepository.ROLE_USER } == 1)
@@ -600,6 +603,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
                             }
                             val foundSources = sourceTask.await()
                             webResults += foundSources
+                            _toolSourceUrls.value = webResults.distinctBy { it.url }.map { it.url }
                             webImages += foundSources.mapNotNull { source ->
                                 source.siteImageUrl?.let { imageUrl ->
                                     to.eyed.inferno.data.WebImageResult(source.title, imageUrl, source.url)
@@ -797,6 +801,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
         } finally {
             _toolStatus.value = null
             _toolSearchNotes.value = null
+            _toolSourceUrls.value = emptyList()
             // Every orderly end of the turn (Done, Error, NeedsTruncation, Stop, exception) reached Kotlin, so the
             // native side did not die: disarm the crash-loop guard. Only a real process death leaves it set.
             // markFirstTurnOk launches on appVm.viewModelScope and is a no-op when the guard is already clear.
