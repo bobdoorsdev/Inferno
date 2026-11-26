@@ -236,10 +236,33 @@ class ChatRepository(private val dao: ChatDao, private val imageUtil: ImageUtil,
         const val ROLE_SUMMARY = "summary"
         const val TITLE_MAX = 48
 
-        /** Title rule: first non-blank line of the first user message, trimmed to 48 chars + "…". */
+        /**
+         * Titles are derived from the user's actual topic. Greeting-only turns remain untitled;
+         * the asynchronous planner can then name the chat when a substantive request arrives.
+         */
         fun titleFrom(text: String): String {
-            val line = text.lineSequence().map { it.trim() }.firstOrNull { it.isNotEmpty() } ?: return ""
-            return if (line.length <= TITLE_MAX) line else line.take(TITLE_MAX).trimEnd() + "…"
+            val line = text.lineSequence().map { raw ->
+                raw.trim()
+                    .replace(Regex("""^\\s*[-*#>]+\\s*"""), "")
+                    .replace(Regex("""^(?:hi|hello|hey)\\b[,!?.:\\s-]*""", RegexOption.IGNORE_CASE), "")
+                    .replace(Regex("""^(?:please\\s+)?(?:can|could|would)\\s+you\\s+""", RegexOption.IGNORE_CASE), "")
+                    .trim().trimEnd('.', '!', '?', ',', ':', ';')
+            }.firstOrNull(::isTitleWorthy) ?: return ""
+            val end = Regex("""[.!?](?:\\s|$)""").find(line)?.range?.first
+            val sentence = if (end == null) line else line.substring(0, end)
+            return if (sentence.length <= TITLE_MAX) sentence else sentence.take(TITLE_MAX).trimEnd() + "…"
+        }
+
+        fun isTitleWorthy(text: String): Boolean {
+            val normalized = text.lowercase(java.util.Locale.ROOT)
+                .replace(Regex("""[^\\p{L}\\p{N}]+"""), " ").trim()
+            if (normalized.isBlank()) return false
+            val greetings = setOf(
+                "hi", "hello", "hey", "hi there", "hello there", "hey there", "good morning",
+                "good afternoon", "good evening", "how are you", "what is up", "whats up",
+                "yo", "sup", "thanks", "thank you", "ok", "okay", "got it", "cool", "nice",
+            )
+            return normalized !in greetings && normalized.split(' ').count { it.length > 1 } >= 2
         }
     }
 }

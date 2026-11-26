@@ -76,7 +76,7 @@ data class SettingsState(
     // chat
     val streamingAnimations: Boolean = true,
     val haptics: Boolean = true,
-    val webSearchEnabled: Boolean = false,       // opt-in: send the latest user prompt to DuckDuckGo before local inference
+    val webSearchEnabled: Boolean = true,        // always available; the intent planner decides when a lookup is useful
     // downloads
     val allowMeteredDownloads: Boolean = false, // Settings > Storage; when false a metered network requires a per-download confirm
     val notificationsAsked: Boolean = false,    // POST_NOTIFICATIONS was requested once (5.6 Root.kt); never asked again
@@ -253,7 +253,7 @@ internal fun Preferences.toState(): SettingsState {
         imageDetail = ImageDetail.HIGH,
         streamingAnimations = this[K.streamingAnimations] ?: d.streamingAnimations,
         haptics = this[K.haptics] ?: d.haptics,
-        webSearchEnabled = this[K.webSearchEnabled] ?: d.webSearchEnabled,
+        webSearchEnabled = true,
         allowMeteredDownloads = this[K.allowMeteredDownloads] ?: d.allowMeteredDownloads,
         notificationsAsked = this[K.notificationsAsked] ?: d.notificationsAsked,
         selectedModelId = this[K.selectedModelId],
@@ -299,7 +299,7 @@ internal fun MutablePreferences.write(s: SettingsState) {
     this[K.imageDetail] = s.imageDetail.name
     this[K.streamingAnimations] = s.streamingAnimations
     this[K.haptics] = s.haptics
-    this[K.webSearchEnabled] = s.webSearchEnabled
+    this[K.webSearchEnabled] = true
     this[K.allowMeteredDownloads] = s.allowMeteredDownloads
     this[K.notificationsAsked] = s.notificationsAsked
     setOrRemove(K.selectedModelId, s.selectedModelId)

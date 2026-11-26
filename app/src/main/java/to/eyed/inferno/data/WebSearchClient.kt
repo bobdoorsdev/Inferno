@@ -24,19 +24,61 @@ data class WebSearchResult(val title: String, val url: String, val snippet: Stri
 
 /** Small model-independent web search adapter. Search runs before local inference and returns cited excerpts. */
 class WebSearchClient(private val client: OkHttpClient = DEFAULT_CLIENT) {
-    suspend fun searchAll(queries: List<String>): List<WebSearchResult> = coroutineScope {
+    /**
+     * Search focused queries concurrently and publish each completed batch immediately.
+     * The activity panel can show useful sources while slower queries are still running.
+     */
+    suspend fun searchAll(
+        queries: List<String>,
+        onResults: (List<WebSearchResult>) -> Unit = {},
+    ): List<WebSearchResult> = coroutineScope {
+        val collected = mutableListOf<WebSearchResult>()
         queries.map(String::trim).filter { it.length >= 2 }.distinct().take(4)
             .map { query -> async {
-                try {
+                val found = try {
                     search(query)
                 } catch (e: CancellationException) {
                     throw e
                 } catch (_: Exception) {
                     emptyList()
                 }
-            } }
-            .awaitAll().flatten().distinctBy { it.url }.take(8)
+                if (found.isNotEmpty()) {
+                    val snapshot = synchronized(collected) {
+                        val seen = collected.map { canonicalUrl(it.url) }.toMutableSet()
+                        found.forEach { result ->
+                            if (seen.add(canonicalUrl(result.url))) collected.add(result)
+                        }
+                        rankResults(collected, queries).take(8)
+                    }
+                    onResults(snapshot)
+                }
+            } }.awaitAll()
+        synchronized(collected) { rankResults(collected, queries).take(8) }
     }
+
+    private fun rankResults(results: List<WebSearchResult>, queries: List<String>): List<WebSearchResult> {
+        val ignored = setOf("the", "and", "for", "with", "from", "that", "this", "what", "when", "where", "how", "who", "are", "is", "was", "were", "best", "latest")
+        val terms = queries.flatMap { it.lowercase().split(Regex("""[^\\p{L}\\p{N}]+""")) }
+            .filter { it.length > 2 && it !in ignored }.distinct()
+        return results.distinctBy { canonicalUrl(it.url) }.sortedByDescending { result ->
+            val title = result.title.lowercase()
+            val snippet = result.snippet.lowercase()
+            terms.sumOf { term -> (if (title.contains(term)) 4 else 0) + (if (snippet.contains(term)) 1 else 0) }
+        }
+    }
+
+    private fun canonicalUrl(value: String): String = runCatching {
+        val uri = Uri.parse(value)
+        val tracking = setOf("fbclid", "gclid", "ref", "ref_src", "source")
+        val builder = uri.buildUpon().clearQuery().fragment(null)
+        uri.queryParameterNames.filterNot { key ->
+            val lower = key.lowercase()
+            lower.startsWith("utm_") || lower in tracking
+        }.forEach { key ->
+            uri.getQueryParameters(key).forEach { builder.appendQueryParameter(key, it) }
+        }
+        builder.build().toString().trimEnd('/')
+    }.getOrDefault(value.substringBefore('#').trimEnd('/'))
 
     /** Optional image lookup. Results are never mixed into factual web citations. */
     suspend fun searchImages(query: String): List<WebImageResult> = withContext(Dispatchers.IO) {

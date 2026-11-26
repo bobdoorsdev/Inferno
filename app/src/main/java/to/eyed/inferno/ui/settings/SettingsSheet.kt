@@ -179,9 +179,7 @@ private fun SettingsBody(appVm: AppViewModel, chatVm: ChatViewModel, onOpenBench
         CardDivider()
         ToggleRow(S.streamingAnimations, s.streamingAnimations, appVm::setStreamingAnimations, description = S.streamingAnimationsDesc)
         CardDivider()
-        ToggleRow("Web search", s.webSearchEnabled, appVm::setWebSearchEnabled, description = "Let the assistant search the web for current information and show its search activity separately from the answer.")
-        CardDivider()
-        ToggleRow(S.haptics, s.haptics, appVm::setHaptics, description = S.hapticsDesc)
+        ToggleRow(S.haptics, s.haptics, description = S.hapticsDesc)
         CardDivider()
         val n = models.count { it.isDownloaded }
         SettingRow(S.modelsStorage, S.modelsStorageLine(n, DownloadService.fmt(storage.modelsBytes), storage.partialBytes.takeIf { it > 0 }?.let { DownloadService.fmt(it) })) {

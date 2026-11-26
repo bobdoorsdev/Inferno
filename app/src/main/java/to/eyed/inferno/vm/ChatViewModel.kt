@@ -513,18 +513,28 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
                     didWork = true
                     visibleSearchQueries += roundSearch
                     _toolStatus.value = S.searchingWeb
-                    try { webResults += webSearchClient.searchAll(roundSearch) }
-                    catch (e: CancellationException) { throw e }
+                    _toolSearchNotes.value = AssistantToolRouter.searchNotes(webResults.toList(), visibleSearchQueries.toList(), webImages.toList())
+                    try {
+                        webResults += webSearchClient.searchAll(roundSearch) { partial ->
+                            _toolSearchNotes.value = AssistantToolRouter.searchNotes(
+                                (webResults.toList() + partial).distinctBy { it.url },
+                                visibleSearchQueries.toList(),
+                                webImages.toList(),
+                            )
+                        }
+                    } catch (e: CancellationException) { throw e }
                     catch (_: Exception) { appVmRef?.notice(S.webSearchFailed) }
                 }
                 if (roundImages.isNotEmpty()) {
                     didWork = true
                     visibleSearchQueries += roundImages.map { "Images: $it" }
                     _toolStatus.value = S.searchingWeb
+                    _toolSearchNotes.value = AssistantToolRouter.searchNotes(webResults.toList(), visibleSearchQueries.toList(), webImages.toList())
                     for (query in roundImages) {
                         try { webImages += webSearchClient.searchImages(query) }
                         catch (e: CancellationException) { throw e }
                         catch (_: Exception) { Unit }
+                        _toolSearchNotes.value = AssistantToolRouter.searchNotes(webResults.toList(), visibleSearchQueries.toList(), webImages.toList())
                     }
                 }
                 if (requestedWeather != null) {

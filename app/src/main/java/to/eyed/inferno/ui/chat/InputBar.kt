@@ -299,26 +299,24 @@ private fun AttachButton(
         ) {
             Icon(Lucide.Plus, if (open) "Close attachments" else S.attach, Modifier.size(21.dp), tint = Ink.I100)
         }
-        GlassMenu(expanded = open, onDismiss = { open = false }, offset = DpOffset(0.dp, (-10).dp), minWidth = 258.dp) {
-            Column(Modifier.widthIn(min = 258.dp).padding(9.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        GlassMenu(expanded = open, onDismiss = { open = false }, offset = DpOffset(0.dp, (-10).dp), minWidth = 242.dp) {
+            Column(Modifier.widthIn(min = 242.dp).padding(8.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 Text("Add to message", style = Typography.titleSmall, color = Ink.White,
-                    modifier = Modifier.padding(start = 9.dp, top = 5.dp))
-                Text("Attach files or bring in media", style = Typography.bodySmall, color = Ink.I500,
-                    modifier = Modifier.padding(start = 9.dp, bottom = 5.dp))
-                AttachmentMenuItem(Lucide.FileText, "Choose files", "Any file type · multiple files", enabled = !idle) {
-                    open = false; onPickFile()
-                }
-                AttachmentMenuItem(Lucide.Images, S.photos, "Select photos from your device", enabled = canAttachImages && !idle) {
+                    modifier = Modifier.padding(start = 8.dp, top = 4.dp, bottom = 3.dp))
+                AttachmentMenuItem(Lucide.Images, "Photos", "Choose from your library", enabled = canAttachImages && !idle) {
                     open = false
                     if (canAttachImages) onPickPhotos() else onNoVision(noVisionReason ?: S.noVision)
                 }
-                if (cameraAvailable) AttachmentMenuItem(Lucide.Camera, S.camera, "Take a new photo", enabled = canAttachImages && !idle) {
+                if (cameraAvailable) AttachmentMenuItem(Lucide.Camera, "Camera", "Take a new photo", enabled = canAttachImages && !idle) {
                     open = false
                     if (canAttachImages) onCapturePhoto() else onNoVision(noVisionReason ?: S.noVision)
                 }
+                AttachmentMenuItem(Lucide.FileText, "Files", "Documents, PDFs, and code", enabled = !idle) {
+                    open = false; onPickFile()
+                }
                 if (!canAttachImages) {
                     Text(noVisionReason ?: S.noVision, style = Typography.bodySmall, color = Ink.I500,
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp))
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 7.dp))
                 }
             }
         }
@@ -340,12 +338,12 @@ private fun AttachmentMenuItem(
             .clickable(
                 interactionSource = remember { MutableInteractionSource() }, indication = null,
                 enabled = enabled, role = Role.Button, onClick = { haptics.tap(); onClick() },
-            ).padding(horizontal = 10.dp, vertical = 9.dp),
+            ).padding(horizontal = 9.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(11.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Box(Modifier.size(38.dp).clip(RoundedCornerShape(11.dp)).background(Ink.I800), contentAlignment = Alignment.Center) {
-            Icon(icon, null, Modifier.size(18.dp), tint = if (enabled) Ink.White else Ink.I500)
+        Box(Modifier.size(32.dp).clip(RoundedCornerShape(10.dp)).background(Ink.I800), contentAlignment = Alignment.Center) {
+            Icon(icon, null, Modifier.size(17.dp), tint = if (enabled) Ink.White else Ink.I500)
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(label, style = Typography.bodyMedium.copy(fontWeight = FontWeight.Medium), color = if (enabled) Ink.White else Ink.I500)
@@ -386,7 +384,7 @@ private fun SendButton(
     prefill: GenState.Prefill?, calibrating: Boolean, onSend: () -> Unit, onStop: () -> Unit,
 ) {
     val active = enabled && (hasContent || streaming || queued)
-    val subdued = loading || calibrating || prefill != null || !active
+    val subdued = loading || calibrating || (!stopping && (prefill != null || !active))
     val stopping = streaming || queued
     val interaction = remember { MutableInteractionSource() }
     val bg by animateColorAsState(Ink.White.copy(alpha = if (subdued) 0.62f else 1f), fastEffectsSpec(), label = "sendBg")

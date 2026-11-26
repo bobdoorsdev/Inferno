@@ -48,8 +48,8 @@ object AssistantToolRouter {
     }
 
     fun prompt(allowWeb: Boolean, createTitle: Boolean = false): String {
-        val webRule = if (allowWeb) "Search the web for current facts, news, latest releases, prices, schedules, weather, obscure facts, and explicit lookup requests. Do not search stable knowledge or creative tasks. Never skip an obviously current lookup. Choose up to four focused queries. For weather requests with a named place, also set weather_location so the app can fetch current conditions directly. " else "Web search is disabled; never request web, image, or weather search. "
-        val titleRule = if (createTitle) "Also create a concise, natural 2–6 word chat title from the first user request. " else "Set title to an empty string. "
+        val webRule = if (allowWeb) "Use web search when an answer depends on changing facts or the user asks to search, verify, compare current options, find reviews, prices, availability, schedules, recent releases, news, or official documentation. Do not search stable explanations, calculations, greetings, or creative tasks. For broad requests, split research into up to four focused queries covering distinct subtopics; include relevant model, version, region, and date context, avoid duplicate wording, prefer official sources for specifications and announcements, and use independent testing for performance and reviews. Never invent results or citations. For weather requests with a named place, also set weather_location so the app can fetch current conditions directly. " else "Web search is disabled; never request web, image, or weather search. "
+        val titleRule = if (createTitle) "Create a concise 2–6 word title for the user's substantive first request, not the assistant's greeting or response. Return an empty title for greetings, acknowledgements, and small talk. " else "Set title to an empty string. "
         return """
 You are the tool planner for an offline-first assistant. Judge the latest user request and use recent turns to resolve references.
 $webRule$titleRule
@@ -163,12 +163,15 @@ Return JSON only: {"search_queries":[],"image_queries":[],"image_prompt":"","cal
     /** Resolve source markers and surface real image-search results in the answer instead of relying on the model to repeat them. */
     fun enrichAnswer(answer: String, sources: List<WebSearchResult>, images: List<WebImageResult>): String {
         var result = answer
-        val citation = Regex("""(?<![\w])\[(\d{1,2})](?!\s*\()""")
+        // Resolve citations attached to words and grouped references against actual results.
+        val citation = Regex("""\\[(\\d{1,2}(?:\\s*[,;]\\s*\\d{1,2})*)](?!\\s*\\()""")
         result = citation.replace(result) { match ->
-            val index = match.groupValues[1].toIntOrNull()?.minus(1) ?: -1
-            val source = sources.getOrNull(index)
-            if (source == null || !source.url.startsWith("http")) ""
-            else "[${match.groupValues[1]}](${markdownUrl(source.url)})"
+            Regex("""\\d{1,2}""").findAll(match.groupValues[1]).mapNotNull { number ->
+                val label = number.value
+                val source = sources.getOrNull(label.toIntOrNull()?.minus(1) ?: -1)
+                if (source == null || !(source.url.startsWith("https://") || source.url.startsWith("http://"))) null
+                else "[${label}](${markdownUrl(source.url)})"
+            }.joinToString(", ")
         }
         val missingImages = images.asSequence()
             .filter { it.imageUrl.startsWith("https://") && it.sourceUrl.startsWith("http") }
@@ -237,18 +240,25 @@ Return JSON only: {"search_queries":[],"image_queries":[],"image_prompt":"","cal
         val value = text.trim()
         if (value.isBlank()) return false
         if (fallbackSearchQuery(value) != null || fallbackImageQuery(value) != null) return true
-        val informational = Regex(
-            """\b(who is|who are|what is|what are|where is|where are|when did|when was|when is|how much|how many|how old|does .{1,80} support|is .{1,80} still|which .{1,80} is better|recommend|recommendation|alternatives|alternative)\b""",
+        val explicitLookup = Regex(
+            """\\b(search|look up|research|find online|verify|check the official|official documentation|sources|citations|references)\\b""",
             RegexOption.IGNORE_CASE,
         )
-        return informational.containsMatchIn(value)
+        val changingFacts = Regex(
+            """\\b(who is|who are|where is|where are|when did|when was|when is|how much|how many|how old|does .{1,80} support|is .{1,80} still|which .{1,80} is better|recommend|recommendation|alternatives|alternative|reviews?|specifications|specs)\\b""",
+            RegexOption.IGNORE_CASE,
+        )
+        return explicitLookup.containsMatchIn(value) || changingFacts.containsMatchIn(value)
     }
 
     /** Hard fallback: obvious time-sensitive requests still search when a small local planner omits a query. */
     fun fallbackSearchQuery(text: String): String? {
         val value = text.trim()
-        val trigger = Regex("""\b(latest|newest|current|today|tonight|right now|rn|recent|this week|this month|this year|as of|price|prices|cost|release|released|available|availability|news|weather|schedule|score|standings|ranking|rankings|review|reviews|compare|best|top|search|look up|find online|who is the current|what happened)\b""", RegexOption.IGNORE_CASE)
-        return value.takeIf { it.isNotBlank() && trigger.containsMatchIn(it) }?.take(240)
+        val trigger = Regex("""\\b(latest|newest|current|today|tonight|right now|rn|recent|this week|this month|this year|as of|price|prices|cost|release|released|release date|available|availability|news|weather|forecast|schedule|score|standings|ranking|rankings|review|reviews|compare|comparison|versus|vs|best|top|specification|specifications|specs|official|documentation|support|compatibility|search|look up|find online|who is the current|what happened)\\b""", RegexOption.IGNORE_CASE)
+        if (value.isBlank() || !trigger.containsMatchIn(value)) return null
+        return value
+            .replace(Regex("""^(?:please\\s+)?(?:can you\\s+)?(?:search(?: the web)?(?: for)?|look up|find online|research)\\s*""", RegexOption.IGNORE_CASE), "")
+            .trim().takeIf { it.length >= 2 }?.take(220)
     }
 
     /** Only request images when the user asks to see a subject or the prompt is explicitly visual. */
