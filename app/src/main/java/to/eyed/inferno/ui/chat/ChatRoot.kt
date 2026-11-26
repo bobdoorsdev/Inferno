@@ -136,6 +136,7 @@ fun ChatRoot(appVm: AppViewModel, chatVm: ChatViewModel, onBeforeSend: () -> Uni
     val imageBusy by chatVm.imageBusy.collectAsStateWithLifecycle()
     val toolStatus by chatVm.toolStatus.collectAsStateWithLifecycle()
     val toolSearchNotes by chatVm.toolSearchNotes.collectAsStateWithLifecycle()
+    val toolSourceUrls by chatVm.toolSourceUrls.collectAsStateWithLifecycle()
     val loadInProgress by appVm.loadInProgress.collectAsStateWithLifecycle()
     val conversations by chatVm.conversations.collectAsStateWithLifecycle()
     val activeId by chatVm.activeId.collectAsStateWithLifecycle()
@@ -154,7 +155,6 @@ fun ChatRoot(appVm: AppViewModel, chatVm: ChatViewModel, onBeforeSend: () -> Uni
     var editId by rememberSaveable { mutableStateOf<String?>(null) }
     var renameId by rememberSaveable { mutableStateOf<String?>(null) }
     var modelSheet by rememberSaveable { mutableStateOf(false) }
-    var aiToolsSheet by rememberSaveable { mutableStateOf(false) }
     var showSavedAnswers by rememberSaveable { mutableStateOf(false) }
     var cameraUri by rememberSaveable { mutableStateOf<String?>(null) }
     var announceId by remember { mutableStateOf<String?>(null) }
@@ -349,7 +349,7 @@ fun ChatRoot(appVm: AppViewModel, chatVm: ChatViewModel, onBeforeSend: () -> Uni
                                 // The composer starts with a 32 dp gradient; the last turn rests 8 dp into it, so it never fades yet still scrolls under.
                                 bottomInset = if (composerHeight == 0) 132.dp else with(LocalDensity.current) { composerHeight.toDp() } - 8.dp,
                                 dev = ChatDevFlags(generationStats = settings.devGenerationStats, turnDetails = settings.devTurnDetails, tokenCounter = settings.devTokenCounter, tokenWords = settings.powerUser),
-                                toolStatus = toolStatus, toolSearchNotes = toolSearchNotes,
+                                toolStatus = toolStatus, toolSearchNotes = toolSearchNotes, citationUrls = toolSourceUrls,
                                 streamingAnimations = settings.streamingAnimations,
                                 savedAnswerIds = settings.savedAnswers.map { it.id }.toSet(),
                                 onSaveAnswer = chatVm::toggleSavedAnswer,
@@ -378,7 +378,6 @@ fun ChatRoot(appVm: AppViewModel, chatVm: ChatViewModel, onBeforeSend: () -> Uni
                                         canAttachImages = canAttachImages, cameraAvailable = cameraAvailable, noVisionReason = noVisionReason,
                                         onPickPhotos = pickPhotos, onCapturePhoto = capturePhoto,
                                         onPickFile = { filePicker.launch(arrayOf("*/*")) },
-                                        onOpenTools = { aiToolsSheet = true },
                                         calibrating = loadInProgress && engine is EngineState.Ready, onNoVision = appVm::notice,
                                         gen = gen, engine = engine, disabledReason = disabledReason, imageBusy = imageBusy,
                                         onSend = send, onStop = chatVm::cancel,
@@ -428,13 +427,7 @@ fun ChatRoot(appVm: AppViewModel, chatVm: ChatViewModel, onBeforeSend: () -> Uni
 
     // ---- sheets -----------------------------------------------------------------------------------------------
     if (modelSheet) ModelSheet(appVm, onDismiss = { modelSheet = false }, onOpenManager = { appVm.navigate(Screen.MODELS) })
-    if (aiToolsSheet) AiToolsSheet(
-        onDismiss = { aiToolsSheet = false },
-        onSelect = { prompt ->
-            draft = if (draft.isBlank()) prompt else prompt + "\n\n" + draft.trimStart()
-            aiToolsSheet = false
-        },
-    )
+
     if (showSavedAnswers) SavedAnswersSheet(
         answers = settings.savedAnswers,
         onDismiss = { showSavedAnswers = false },
