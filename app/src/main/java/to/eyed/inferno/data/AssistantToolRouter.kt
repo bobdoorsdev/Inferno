@@ -17,6 +17,7 @@ data class AssistantToolPlan(
     val currentTime: Boolean = false,
     val imageQueries: List<String> = emptyList(),
     val title: String? = null,
+    val imagePrompt: String? = null,
 )
 data class LocalCalculation(val expression: String, val result: String)
 data class WebImageResult(val title: String, val imageUrl: String, val sourceUrl: String)
@@ -28,6 +29,12 @@ object AssistantToolRouter {
     const val SEARCH_MARKER = "<!-- INFERNO_SEARCH -->"
     const val LOCAL_MARKER = "<!-- INFERNO_LOCAL -->"
     val EMPTY = AssistantToolPlan()
+
+    fun shouldConsiderImageGeneration(text: String): Boolean {
+        val value = text.lowercase(Locale.ROOT)
+        return Regex("""\b(generate|create|draw|make|render|crie|gere|desenhe|fa[cç]a)\b""").containsMatchIn(value) &&
+            Regex("""\b(image|picture|illustration|artwork|wallpaper|logo|imagem|desenho|ilustra[cç][aã]o|arte)\b""").containsMatchIn(value)
+    }
 
     fun shouldRouteLocally(text: String): Boolean {
         val value = text.lowercase(Locale.ROOT)
@@ -46,10 +53,11 @@ object AssistantToolRouter {
 You are the tool planner for an offline-first assistant. Judge the latest user request and use recent turns to resolve references.
 $webRule$titleRule
 Image search: choose up to two image_queries only when actual pictures materially help answer the request or the user asks to see images. Never search for decorative images.
+Image generation: when the user explicitly asks you to create, draw, or generate an image, return a concise image_prompt describing the requested image. Do not set image_prompt for requests that merely discuss image generation or ask for image search.
 Calculator: use for exact arithmetic or unit conversion. Return only an expression with numbers, parentheses, + - * / % ^. Never guess changing rates.
 Device clock: current local date, time, and time zone. Use only for now/today or time-relative requests.
 Do not use tools when a direct answer is enough. Never invent results.
-Return JSON only: {"search_queries":[],"image_queries":[],"calculation":"","current_time":false,"title":""}
+Return JSON only: {"search_queries":[],"image_queries":[],"image_prompt":"","calculation":"","current_time":false,"title":""}
 """.trim()
     }
 
@@ -69,7 +77,8 @@ Return JSON only: {"search_queries":[],"image_queries":[],"calculation":"","curr
         val calculation = root["calculation"]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() && it.length <= 128 }
         val currentTime = root["current_time"]?.jsonPrimitive?.booleanOrNull == true
         val title = root["title"]?.jsonPrimitive?.contentOrNull?.trim()?.replace(Regex("""\s+"""), " ")?.take(48)?.takeIf { it.isNotEmpty() }
-        return AssistantToolPlan(queries, calculation, currentTime, imageQueries, title)
+        val imagePrompt = root["image_prompt"]?.jsonPrimitive?.contentOrNull?.trim()?.take(600)?.takeIf { it.isNotEmpty() }
+        return AssistantToolPlan(queries, calculation, currentTime, imageQueries, title, imagePrompt)
     }
 
     fun calculate(expression: String): LocalCalculation? = runCatching {
