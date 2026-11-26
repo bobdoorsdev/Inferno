@@ -10,6 +10,7 @@ import android.content.Context
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import to.eyed.inferno.data.AppPrefs
 import to.eyed.inferno.data.ChatRepository
@@ -46,19 +47,21 @@ class AppContainer(app: Application) {
     val appScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     /** Approximate city only. Reads cached Android coarse location; never uses IP geolocation or exposes coordinates. */
-    fun coarseCity(): String? = runCatching {
-        if (app.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) return null
-        val manager = app.getSystemService(LocationManager::class.java) ?: return null
-        val location = runCatching { manager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER) }
-            .getOrNull() ?: runCatching { manager.getLastKnownLocation(LocationManager.PASSIVE_PROVIDER) }.getOrNull()
-            ?: return null
-        if (!Geocoder.isPresent()) return null
-        @Suppress("DEPRECATION")
-        val address = Geocoder(app, java.util.Locale.getDefault())
-            .getFromLocation(location.latitude, location.longitude, 1)?.firstOrNull() ?: return null
-        listOfNotNull(address.locality ?: address.subAdminArea, address.adminArea, address.countryName)
-            .distinct().filter(String::isNotBlank).joinToString(", ").takeIf(String::isNotBlank)
-    }.getOrNull()
+    suspend fun coarseCity(): String? = withContext(Dispatchers.IO) {
+        runCatching {
+            if (app.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) return@runCatching null
+            val manager = app.getSystemService(LocationManager::class.java) ?: return@runCatching null
+            val location = runCatching { manager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER) }
+                .getOrNull() ?: runCatching { manager.getLastKnownLocation(LocationManager.PASSIVE_PROVIDER) }.getOrNull()
+                ?: return@runCatching null
+            if (!Geocoder.isPresent()) return@runCatching null
+            @Suppress("DEPRECATION")
+            val address = Geocoder(app, java.util.Locale.getDefault())
+                .getFromLocation(location.latitude, location.longitude, 1)?.firstOrNull() ?: return@runCatching null
+            listOfNotNull(address.locality ?: address.subAdminArea, address.adminArea, address.countryName)
+                .distinct().filter(String::isNotBlank).joinToString(", ").takeIf(String::isNotBlank)
+        }.getOrNull()
+    }
 
     val cpu = CpuTopology(app)
     /** dotprod + fp16: the .so files are built with -march=armv8.2-a+dotprod+fp16 and would SIGILL without them. */
