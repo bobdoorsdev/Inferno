@@ -549,7 +549,7 @@ private fun AssistantMessage(
                         MenuActionRow(Lucide.Lightbulb, "Give a concrete example") { moreMenu = false; onFollowUp("Add a realistic worked example that demonstrates the key points in your previous answer.") }
                         MenuActionRow(Lucide.Table, "Compare alternatives") { moreMenu = false; onFollowUp("Compare the practical alternatives mentioned or implied in your previous answer in a clear decision table.") }
                         MenuActionRow(Lucide.FileDown, "Export answer as Markdown") { moreMenu = false; startMarkdownExport() }
-                        if (codeArtifacts.isNotEmpty()) MenuActionRow(Lucide.Archive, if (codeArtifacts.size == 1) "Download code file" else "Download project ZIP") { moreMenu = false; startCodeExport() }
+                        if (codeArtifacts.isNotEmpty()) MenuActionRow(Lucide.Archive, if (codeArtifacts.size == 1) "Download generated file" else "Download project ZIP") { moreMenu = false; startCodeExport() }
                     }
                 }
                 if (stats != null && showDetails) AnimatedActionIcon(Lucide.Info, S.details) { haptics.tap(); onDetails() }
