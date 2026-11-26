@@ -557,11 +557,11 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
             // Re-plan after every batch so the model can request follow-up searches/tools. The fixed
             // round ceiling prevents a malformed planner response from creating an unbounded loop.
             for (round in 0 until MAX_TOOL_ROUNDS) {
-                val roundSearch = if (settings.webSearchEnabled) {
+                val roundSearch = if (settings.webSearchEnabled && pendingPlan.maxSources > 0) {
                     pendingPlan.searchQueries.map { it.trim() }
                         .filter { it.length >= 2 && usedSearchQueries.add(it.lowercase()) }.take(8)
                 } else emptyList()
-                val roundImages = if (settings.webSearchEnabled) {
+                val roundImages = if (settings.webSearchEnabled && pendingPlan.maxSources > 0) {
                     pendingPlan.imageQueries.map { it.trim() }
                         .filter { it.length >= 2 && usedImageQueries.add(it.lowercase()) }.take(4)
                 } else emptyList()
