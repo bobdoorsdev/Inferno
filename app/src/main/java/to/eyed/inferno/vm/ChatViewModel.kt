@@ -24,6 +24,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import to.eyed.inferno.AppContainer
+import to.eyed.inferno.imagegen.ImageGenParams
+import to.eyed.inferno.imagegen.ImageGenUiState
+import to.eyed.inferno.imagegen.ImageSizePreset
+import to.eyed.inferno.models.ImageModelCatalog
+import android.net.Uri
+import java.io.File
 import to.eyed.inferno.data.AssistantToolPlan
 import to.eyed.inferno.data.AssistantToolRouter
 import to.eyed.inferno.data.Attachment
@@ -334,6 +340,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
             if (pendingSend?.target == id) pendingSend = null
         }
         genJobs.remove(id)?.cancel()
+        if (imageBusy.value) c.imageGen.cancel()
     }
 
     private fun canStart(): Boolean {
@@ -364,19 +371,52 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
             var history = c.chats.messagesOnce(conversationId)
             val latestUserText = history.lastOrNull { it.role == ChatRepository.ROLE_USER }?.content.orEmpty()
             val webIntent = settings.webSearchEnabled && AssistantToolRouter.shouldConsiderWeb(latestUserText)
+            val imageIntent = AssistantToolRouter.shouldConsiderImageGeneration(latestUserText)
             val shouldRoute = latestUserText.isNotBlank() &&
-                (webIntent || AssistantToolRouter.shouldRouteLocally(latestUserText))
+                (webIntent || imageIntent || AssistantToolRouter.shouldRouteLocally(latestUserText))
             _toolStatus.value = null
             _toolSearchNotes.value = null
             val toolPlan = if (shouldRoute) {
                 try {
-                    chooseTools(history, thinking, detail, webIntent, false)
+                    chooseTools(history, thinking, detail, webIntent, imageIntent && history.count { it.role == ChatRepository.ROLE_USER } == 1)
                 } catch (e: CancellationException) {
                     throw e
                 } catch (_: Exception) {
                     AssistantToolPlan()
                 }
             } else AssistantToolPlan()
+            val imagePrompt = toolPlan.imagePrompt
+            if (imageIntent && !imagePrompt.isNullOrBlank()) {
+                val selectedImage = settings.selectedImageModelId?.let(c.imageGen::modelById)
+                    ?.takeIf(c.imageGen::isDownloaded)
+                    ?: ImageModelCatalog.models.firstOrNull(c.imageGen::isDownloaded)
+                if (selectedImage != null) {
+                    toolPlan.title?.let { c.chats.setTitle(conversationId, it) }
+                    setGen(conversationId, GenState.Thinking("Generating image", 0f, 0L))
+                    val imageJob = c.imageGen.generate(ImageGenParams(selectedImage.id, imagePrompt, ImageSizePreset.S512))
+                    if (imageJob != null) {
+                        try {
+                            imageJob.join()
+                        } catch (e: CancellationException) {
+                            c.imageGen.cancelAndJoin()
+                            throw e
+                        }
+                        when (val result = c.imageGen.state.value) {
+                            is ImageGenUiState.Done -> {
+                                val uri = Uri.fromFile(File(result.record.path))
+                                c.chats.appendAssistant(conversationId, "![Generated image]($uri)", "Generated with ${selectedImage.name}", null)
+                            }
+                            is ImageGenUiState.Error -> c.chats.appendAssistant(conversationId, result.message, null, null)
+                            else -> appVmRef?.notice("Image generation did not return an image")
+                        }
+                        stream.close()
+                        setGen(conversationId, GenState.Idle)
+                        return
+                    }
+                } else {
+                    appVmRef?.notice("Download an image-generation model first. The text model will answer normally.")
+                }
+            }
             val calculation = toolPlan.calculation?.let(AssistantToolRouter::calculate)
             val localTime = if (toolPlan.currentTime) AssistantToolRouter.currentTime() else null
             val fallbackQuery = if (settings.webSearchEnabled) AssistantToolRouter.fallbackSearchQuery(latestUserText) else null
