@@ -390,7 +390,7 @@ private fun SendButton(
     val bg by animateColorAsState(Ink.White.copy(alpha = if (subdued) 0.62f else 1f), fastEffectsSpec(), label = "sendBg")
     Box(
         Modifier.size(36.dp)
-            .pressScale(interaction, 0.92f)
+            .pressScale(interaction, 0.82f)
             .clip(CircleShape)
             .background(bg)
             .clickable(interactionSource = interaction, indication = null, enabled = active, role = Role.Button) {
