@@ -15,6 +15,11 @@ class MarkdownBodyTest {
         assertEquals(expected, normalizeMarkdownForRenderer("Prices: \$5 and \$10"))
     }
 
+    @Test fun numberLeadingMathIsNotMistakenForCurrency() {
+        assertEquals("\$5 + x\$", normalizeMarkdownForRenderer("\$5 + x\$"))
+        assertEquals("\$\$5 + x\$\$", normalizeMarkdownForRenderer("\$\$5 + x\$\$"))
+    }
+
     @Test fun mathInsideInlineAndFencedCodeIsPreservedLiterally() {
         val fence = "\u0060\u0060\u0060kotlin"
         val source = listOf(
