@@ -183,6 +183,35 @@ class WebSearchClient(private val client: OkHttpClient = DEFAULT_CLIENT) {
         }.getOrNull()
     }
 
+    /** Fetch and strip a public web page for questions about a specific URL. Private/local targets are rejected. */
+    suspend fun readPage(value: String): String? = withContext(Dispatchers.IO) {
+        runCatching {
+            val uri = Uri.parse(value.trim())
+            val host = uri.host?.lowercase() ?: return@runCatching null
+            fun privateHost(name: String): Boolean {
+                if (name == "localhost" || name.endsWith(".local") || name == "0.0.0.0") return true
+                val address = java.net.InetAddress.getByName(name)
+                return address.isAnyLocalAddress || address.isLoopbackAddress || address.isLinkLocalAddress ||
+                    address.isSiteLocalAddress || address.isMulticastAddress
+            }
+            require(uri.scheme == "https" || uri.scheme == "http") { "Only HTTP(S) URLs can be read." }
+            require(!privateHost(host)) { "Local and private network URLs are not allowed." }
+            val request = Request.Builder().url(value.trim()).header("User-Agent", USER_AGENT).header("Accept", "text/html").build()
+            client.newCall(request).execute().use { response ->
+                require(response.isSuccessful) { "Page returned HTTP " + response.code }
+                val finalHost = response.request.url.host
+                require(!privateHost(finalHost)) { "Redirect to a local or private host was blocked." }
+                val html = response.body?.string()?.take(1_500_000).orEmpty()
+                val title = Regex("""<title[^>]*>(.*?)</title>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+                    .find(html)?.groupValues?.get(1)?.let(::clean).orEmpty()
+                val body = Regex("""<body\b[^>]*>(.*?)</body>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+                    .find(html)?.groupValues?.get(1) ?: html
+                val text = clean(body).take(14_000)
+                if (text.isBlank()) null else (if (title.isBlank()) "" else title + "\n") + "URL: " + response.request.url + "\n\n" + text
+            }
+        }.getOrNull()
+    }
+
     suspend fun search(query: String): List<WebSearchResult> = withContext(Dispatchers.IO) {
         val q = query.trim().take(MAX_QUERY_CHARS)
         if (q.length < 2) return@withContext emptyList()
