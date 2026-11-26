@@ -270,6 +270,12 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
     fun attachFileFromUri(uri: Uri) = viewModelScope.launch {
         if (_pendingFiles.value.size >= MAX_FILES) { appVmRef?.notice("You can attach up to $MAX_FILES files"); return@launch }
         runCatching { c.files.importFile(uri) }.onSuccess { file ->
+            val pendingBytes = _pendingFiles.value.sumOf { it.sizeBytes }
+            if (pendingBytes + file.sizeBytes > MAX_PENDING_FILE_BYTES) {
+                c.files.delete(file.id)
+                appVmRef?.notice("Combined file attachments are limited to 64 MB")
+                return@onSuccess
+            }
             if (_pendingFiles.value.none { it.id == file.id } && _pendingFiles.value.size < MAX_FILES) {
                 _pendingFiles.update { it + file }
                 savePendingFiles()
@@ -859,6 +865,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
         const val NO_CHAT = ""
         const val MAX_ATTACHMENTS = 2
         const val MAX_FILES = 10
+        const val MAX_PENDING_FILE_BYTES = 64L * 1024 * 1024
         const val MAX_PROMPT_IMAGES = 8
         const val PUBLISH_NS = 50_000_000L
         const val TPS_NS = 500_000_000L
