@@ -1,10 +1,9 @@
 package to.eyed.inferno.ui.chat
 
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -35,6 +34,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.graphics.Color
@@ -184,11 +184,18 @@ private fun StreamingMarkdownTail(chunk: String, animateStreaming: Boolean) {
         if (trailing.isNotBlank()) MarkdownTextChunk(trailing, animateStreaming)
     } else {
         val rendered = remember(chunk) { runCatching { SafeMathMarkdown.sanitize(MarkdownMath.format(chunk)) }.getOrDefault(chunk) }
-        if (animateStreaming) {
-            var entered by remember { mutableStateOf(false) }
-            LaunchedEffect(Unit) { entered = true }
-            AnimatedVisibility(visible = entered, enter = fadeIn(tween(110))) { MarkdownChunkView(rendered) }
-        } else MarkdownChunkView(rendered)
+        val tailFade = remember { Animatable(1f) }
+        LaunchedEffect(chunk, animateStreaming) {
+            if (animateStreaming) {
+                tailFade.snapTo(minOf(tailFade.value, 0.88f))
+                tailFade.animateTo(1f, tween(150, easing = LinearOutSlowInEasing))
+            } else {
+                tailFade.snapTo(1f)
+            }
+        }
+        Box(Modifier.fillMaxWidth().graphicsLayer { alpha = tailFade.value }) {
+            MarkdownChunkView(rendered)
+        }
     }
 }
 
@@ -269,10 +276,10 @@ fun MonoCodeBlock(code: String, language: String?, modifier: Modifier = Modifier
             .fillMaxWidth()
             .clip(shape)
             .background(Ink.I900)
-            .border(1.dp, whiteA(0.08f), shape),
+            .then(if (showRunner) Modifier else Modifier.border(1.dp, whiteA(0.08f), shape)),
     ) {
         Row(
-            Modifier.fillMaxWidth().background(whiteA(0.03f)).padding(start = 14.dp, end = 6.dp, top = 3.dp, bottom = 3.dp),
+            Modifier.fillMaxWidth().background(whiteA(0.03f)).padding(start = 18.dp, end = 6.dp, top = 3.dp, bottom = 3.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
@@ -285,10 +292,19 @@ fun MonoCodeBlock(code: String, language: String?, modifier: Modifier = Modifier
             CopyChip(onCopy = { copyToClipboard(context, trimmed, "Code") })
         }
         Hairline()
-        AnimatedContent(targetState = showRunner, transitionSpec = { fadeIn(tween(150)) togetherWith fadeOut(tween(90)) }, label = "codePreviewToggle") { preview ->
-            if (preview) CodeRunnerInline(code = trimmed, language = runLanguage, modifier = Modifier.padding(start = 4.dp, end = 4.dp, bottom = 8.dp))
-            else Box(Modifier.horizontalScroll(rememberScrollState())) {
-                Text(highlightCode(trimmed, language), style = MonoBody.copy(color = CodePalette.Text), softWrap = false, modifier = Modifier.padding(14.dp))
+        AnimatedContent(
+            modifier = Modifier.fillMaxWidth(),
+            targetState = showRunner,
+            transitionSpec = { fadeIn(tween(150)) togetherWith fadeOut(tween(90)) },
+            label = "codePreviewToggle",
+        ) { preview ->
+            if (preview) {
+                CodeRunnerInline(code = trimmed, language = runLanguage, modifier = Modifier.fillMaxWidth())
+            } else {
+                Box(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+                    Text(highlightCode(trimmed, language), style = MonoBody.copy(color = CodePalette.Text), softWrap = false,
+                        modifier = Modifier.padding(start = 18.dp, end = 14.dp, top = 14.dp, bottom = 14.dp))
+                }
             }
         }
     }

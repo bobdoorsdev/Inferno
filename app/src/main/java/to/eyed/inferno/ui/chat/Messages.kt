@@ -307,14 +307,17 @@ private fun SharedTransitionScope.UserBubble(
             Column(Modifier.widthIn(max = maxBubbleWidth).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 msg.files.forEach { file ->
                     Row(
-                        Modifier.fillMaxWidth().surfaceHigh(RoundedCornerShape(Radii.row)).padding(horizontal = 12.dp, vertical = 10.dp),
+                        Modifier.fillMaxWidth().surfaceHigh(RoundedCornerShape(15.dp)).padding(horizontal = 11.dp, vertical = 9.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(9.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
-                        Icon(Lucide.FileText, null, Modifier.size(17.dp), tint = Ink.I300)
-                        Column(Modifier.weight(1f)) {
+                        val kind = file.displayName.substringAfterLast('.', file.mimeType.substringAfterLast('/')).uppercase().take(6)
+                        Box(Modifier.size(36.dp).clip(RoundedCornerShape(10.dp)).background(Ink.I900), contentAlignment = Alignment.Center) {
+                            Text(kind, style = RowMeta, color = Ink.I300, maxLines = 1)
+                        }
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text(file.displayName, style = Typography.bodySmall.copy(fontWeight = FontWeight.Medium), color = Ink.White, maxLines = 1)
-                            Text("${file.mimeType} · ${android.text.format.Formatter.formatShortFileSize(context, file.sizeBytes)}",
+                            Text("${file.mimeType.substringBefore(';')} · ${android.text.format.Formatter.formatShortFileSize(context, file.sizeBytes)}",
                                 style = RowMeta, color = Ink.I500, maxLines = 1)
                         }
                     }

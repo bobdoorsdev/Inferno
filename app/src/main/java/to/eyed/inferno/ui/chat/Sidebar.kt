@@ -122,9 +122,13 @@ fun Sidebar(
         // In touch mode text fields are the only focusable nodes, so the drawer's initial focus would land in
         // the search field and pop the keyboard on every open. This 1 dp sink takes it instead.
         Box(Modifier.size(1.dp).focusable())
-        Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 14.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(S.appName, style = Typography.titleMedium.copy(fontSize = 18.sp, lineHeight = 24.sp, letterSpacing = (-0.2).sp), color = Ink.White, modifier = Modifier.weight(1f))
-            if (onClose != null) GhostIconButton(Lucide.X, S.closeSidebar, onClose, size = 40.dp, iconSize = 18.dp, tint = Ink.I300)
+        if (onClose != null) {
+            Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 8.dp, top = 8.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Spacer(Modifier.weight(1f))
+                GhostIconButton(Lucide.X, S.closeSidebar, onClose, size = 40.dp, iconSize = 18.dp, tint = Ink.I300)
+            }
+        } else {
+            Spacer(Modifier.height(10.dp))
         }
         SearchPill(query, { query = it }, Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
         // The destinations scroll with the chat list so a short window (phone landscape) still reaches every chat.
@@ -188,7 +192,7 @@ fun Sidebar(
 @Composable
 private fun SearchPill(query: String, onChange: (String) -> Unit, modifier: Modifier = Modifier) {
     Row(
-        modifier.fillMaxWidth().surfaceLow(CircleShape).padding(start = 14.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
+        modifier.fillMaxWidth().surfaceLow(CircleShape).padding(start = 14.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(Lucide.Search, null, Modifier.size(16.dp), tint = Ink.I500)
@@ -206,7 +210,7 @@ private fun SearchPill(query: String, onChange: (String) -> Unit, modifier: Modi
                     inner()
                 }
             },
-            modifier = Modifier.weight(1f).widthIn(min = 0.dp).clipToBounds(),
+            modifier = Modifier.weight(1f).widthIn(min = 0.dp).padding(end = 8.dp).clipToBounds(),
         )
         if (query.isNotEmpty()) GhostIconButton(Lucide.X, S.cancel, onClick = { onChange("") }, size = 30.dp, iconSize = 13.dp, tint = Ink.I500)
         else Spacer(Modifier.size(width = 30.dp, height = 30.dp))

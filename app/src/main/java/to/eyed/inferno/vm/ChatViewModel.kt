@@ -60,7 +60,10 @@ import to.eyed.inferno.ui.S
  * live in the SavedStateHandle.
  */
 private val CODE_RUNNER_INSTRUCTIONS = """
-Inferno has an isolated in-app browser preview for HTML, SVG, JavaScript, and CSS. When the user explicitly asks you to run, execute, test, or preview one of these formats, return the complete runnable source in one fenced code block with a single-token suffix such as ```html-run or ```svg-run; the code card switches to its inline preview. The preview has no network or file access and no Android bridge. Never claim Python, Luau, shell, or another unavailable runtime was executed.
+Inferno has an isolated in-app browser preview for HTML, SVG, JavaScript, and CSS.
+IMPORTANT: Do not output HTML/SVG/JavaScript as a default presentation format. Normal answers must be natural Markdown prose, not a web page.
+Use a runnable code fence suffix such as ```html-run or ```svg-run ONLY when the latest user explicitly asks to run, execute, test, or preview browser code. If the user only asks you to write HTML/SVG/JavaScript, use a normal code fence without the -run suffix. Never wrap ordinary explanations, search results, math, tables, or chat replies in HTML.
+The preview is isolated, with network and file access blocked and no Android bridge. Never claim Python, Luau, shell, or another unavailable runtime was executed.
 """.trim()
 
 class ChatViewModel(private val c: AppContainer, private val handle: SavedStateHandle) : ViewModel() {
@@ -645,7 +648,6 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
             // Generate the chat title after the visible answer, so title planning never delays the first token.
             // It runs only for the first user turn and uses the same local model; no network request is involved.
             if (history.count { it.role == ChatRepository.ROLE_USER } == 1 && assistantId != null) {
-                setGen(conversationId, GenState.Thinking("Naming chat", 0f, 0L))
                 val title = try {
                     chooseTools(history, thinking, detail, allowWeb = false, createTitle = true).title
                 } catch (e: CancellationException) {

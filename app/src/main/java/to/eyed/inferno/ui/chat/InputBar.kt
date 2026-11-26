@@ -54,6 +54,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -240,22 +241,30 @@ private fun ThumbStrip(attachments: List<Attachment>, onRemove: (Int) -> Unit) {
 @Composable
 private fun FileStrip(files: List<FileAttachment>, onRemove: (Int) -> Unit) {
     val haptics = rememberHaptics()
-    LazyRow(Modifier.padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+    val context = LocalContext.current
+    LazyRow(Modifier.padding(bottom = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         items(files.size, key = { files[it].id }) { index ->
+            val file = files[index]
+            val kind = file.displayName.substringAfterLast('.', file.mimeType.substringAfterLast('/')).uppercase().take(6)
             Row(
-                Modifier.clip(RoundedCornerShape(Radii.control)).background(Ink.SurfaceHigh)
-                    .padding(start = 9.dp, end = 5.dp, top = 7.dp, bottom = 7.dp),
+                Modifier.widthIn(min = 205.dp, max = 270.dp).clip(RoundedCornerShape(15.dp))
+                    .background(Ink.SurfaceHigh).padding(start = 9.dp, end = 7.dp, top = 8.dp, bottom = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(7.dp),
+                horizontalArrangement = Arrangement.spacedBy(9.dp),
             ) {
-                Icon(Lucide.FileText, null, Modifier.size(15.dp), tint = Ink.I300)
-                Text(files[index].displayName, color = Ink.I100, fontSize = 12.sp, maxLines = 1,
-                    overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 150.dp))
-                Box(Modifier.size(22.dp).clip(CircleShape).clickable(
-                    interactionSource = remember { MutableInteractionSource() }, indication = null,
-                    role = Role.Button,
+                Box(Modifier.size(38.dp).clip(RoundedCornerShape(11.dp)).background(Ink.I800), contentAlignment = Alignment.Center) {
+                    Text(kind, style = RowMeta, color = Ink.I300, maxLines = 1)
+                }
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(file.displayName, color = Ink.White, style = Typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text("${file.mimeType.substringBefore(';')} · ${android.text.format.Formatter.formatShortFileSize(context, file.sizeBytes)}",
+                        color = Ink.I500, style = RowMeta, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                Box(Modifier.size(30.dp).clip(CircleShape).background(whiteA(0.06f)).clickable(
+                    interactionSource = remember { MutableInteractionSource() }, indication = null, role = Role.Button,
                 ) { haptics.tap(); onRemove(index) }, contentAlignment = Alignment.Center) {
-                    Icon(Lucide.X, "Remove ${files[index].displayName}", Modifier.size(12.dp), tint = Ink.I500)
+                    Icon(Lucide.X, "Remove ${file.displayName}", Modifier.size(14.dp), tint = Ink.I300)
                 }
             }
         }
@@ -279,19 +288,27 @@ private fun AttachButton(
         ) {
             Icon(Lucide.Plus, if (open) "Close attachments" else S.attach, Modifier.size(21.dp), tint = Ink.I100)
         }
-        GlassMenu(expanded = open, onDismiss = { open = false }, offset = DpOffset(0.dp, (-8).dp), minWidth = 196.dp) {
-            AttachmentMenuItem(Lucide.FileText, "Choose file", enabled = !idle) { open = false; onPickFile() }
-            AttachmentMenuItem(Lucide.Images, S.photos, enabled = canAttachImages && !idle) {
-                open = false
-                if (canAttachImages) onPickPhotos() else onNoVision(noVisionReason ?: S.noVision)
-            }
-            if (cameraAvailable) AttachmentMenuItem(Lucide.Camera, S.camera, enabled = canAttachImages && !idle) {
-                open = false
-                if (canAttachImages) onCapturePhoto() else onNoVision(noVisionReason ?: S.noVision)
-            }
-            if (!canAttachImages) {
-                Text(noVisionReason ?: S.noVision, style = Typography.bodySmall, color = Ink.I500,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp))
+        GlassMenu(expanded = open, onDismiss = { open = false }, offset = DpOffset(0.dp, (-10).dp), minWidth = 258.dp) {
+            Column(Modifier.widthIn(min = 258.dp).padding(9.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                Text("Add to message", style = Typography.titleSmall, color = Ink.White,
+                    modifier = Modifier.padding(start = 9.dp, top = 5.dp))
+                Text("Attach files or bring in media", style = Typography.bodySmall, color = Ink.I500,
+                    modifier = Modifier.padding(start = 9.dp, bottom = 5.dp))
+                AttachmentMenuItem(Lucide.FileText, "Choose files", "Any file type · multiple files", enabled = !idle) {
+                    open = false; onPickFile()
+                }
+                AttachmentMenuItem(Lucide.Images, S.photos, "Select photos from your device", enabled = canAttachImages && !idle) {
+                    open = false
+                    if (canAttachImages) onPickPhotos() else onNoVision(noVisionReason ?: S.noVision)
+                }
+                if (cameraAvailable) AttachmentMenuItem(Lucide.Camera, S.camera, "Take a new photo", enabled = canAttachImages && !idle) {
+                    open = false
+                    if (canAttachImages) onCapturePhoto() else onNoVision(noVisionReason ?: S.noVision)
+                }
+                if (!canAttachImages) {
+                    Text(noVisionReason ?: S.noVision, style = Typography.bodySmall, color = Ink.I500,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp))
+                }
             }
         }
     }
@@ -301,19 +318,28 @@ private fun AttachButton(
 private fun AttachmentMenuItem(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
+    subtitle: String,
     enabled: Boolean,
     onClick: () -> Unit,
 ) {
+    val haptics = rememberHaptics()
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable(
-            interactionSource = remember { MutableInteractionSource() }, indication = null,
-            enabled = enabled, role = Role.Button, onClick = onClick,
-        ).padding(horizontal = 14.dp, vertical = 11.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(13.dp))
+            .background(if (enabled) whiteA(0.035f) else Color.Transparent)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() }, indication = null,
+                enabled = enabled, role = Role.Button, onClick = { haptics.tap(); onClick() },
+            ).padding(horizontal = 10.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalArrangement = Arrangement.spacedBy(11.dp),
     ) {
-        Icon(icon, null, Modifier.size(17.dp), tint = if (enabled) Ink.I100 else Ink.I500)
-        Text(label, style = Typography.bodyMedium, color = if (enabled) Ink.I100 else Ink.I500)
+        Box(Modifier.size(38.dp).clip(RoundedCornerShape(11.dp)).background(Ink.I800), contentAlignment = Alignment.Center) {
+            Icon(icon, null, Modifier.size(18.dp), tint = if (enabled) Ink.White else Ink.I500)
+        }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(label, style = Typography.bodyMedium.copy(fontWeight = FontWeight.Medium), color = if (enabled) Ink.White else Ink.I500)
+            Text(subtitle, style = RowMeta, color = Ink.I500)
+        }
     }
 }
 

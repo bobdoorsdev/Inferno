@@ -1,5 +1,7 @@
 package to.eyed.inferno.ui.chat
 
+import android.view.MotionEvent
+import android.view.View
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -20,7 +22,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -96,10 +97,14 @@ internal fun CodeRunnerInline(code: String, language: String?, modifier: Modifie
     val lang = language.orEmpty().trim().lowercase().substringBefore(' ')
     val document = remember(code, lang) { runnerDocument(code, lang) }
     AndroidView(
-        modifier = modifier.fillMaxWidth().height(300.dp).clip(RoundedCornerShape(12.dp)).background(Ink.Pitch),
+        modifier = modifier.fillMaxWidth().height(380.dp),
         factory = { viewContext ->
             WebView(viewContext).apply {
                 setBackgroundColor(android.graphics.Color.rgb(23, 23, 23))
+                isVerticalScrollBarEnabled = true
+                isHorizontalScrollBarEnabled = true
+                isNestedScrollingEnabled = true
+                overScrollMode = View.OVER_SCROLL_NEVER
                 settings.javaScriptEnabled = true
                 settings.allowFileAccess = false
                 settings.allowContentAccess = false
@@ -113,6 +118,22 @@ internal fun CodeRunnerInline(code: String, language: String?, modifier: Modifie
                 webViewClient = object : WebViewClient() {
                     override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean = true
                     override fun shouldOverrideUrlLoading(view: WebView, request: android.webkit.WebResourceRequest): Boolean = true
+                }
+                var lastY = 0f
+                setOnTouchListener { view, event ->
+                    when (event.actionMasked) {
+                        MotionEvent.ACTION_DOWN -> {
+                            lastY = event.y
+                            view.parent?.requestDisallowInterceptTouchEvent(true)
+                        }
+                        MotionEvent.ACTION_MOVE -> {
+                            val direction = if (lastY - event.y > 0f) 1 else -1
+                            view.parent?.requestDisallowInterceptTouchEvent(view.canScrollVertically(direction))
+                            lastY = event.y
+                        }
+                        MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> view.parent?.requestDisallowInterceptTouchEvent(false)
+                    }
+                    false
                 }
             }
         },
@@ -129,33 +150,41 @@ internal fun CodeRunnerInline(code: String, language: String?, modifier: Modifie
 private fun runnerDocument(source: String, language: String): String {
     val csp = """<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: blob:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; font-src data:">"""
     val baseStyle = """<style>
-html,body{margin:0;padding:12px;min-height:100%;box-sizing:border-box;background:#171717!important;color:#eeeeee!important;color-scheme:dark;font:14px system-ui,sans-serif}
-*{box-sizing:border-box}img,svg,canvas,video{max-width:100%;height:auto}pre{white-space:pre-wrap;overflow-wrap:anywhere}a{color:#a9c7ff}
+:root{color-scheme:dark;background:#171717}
+html{width:100%;min-height:100%;margin:0!important;background:#171717!important;overflow-x:hidden}
+body{display:flow-root;width:100%;min-height:100vh;margin:0!important;box-sizing:border-box;background:#171717!important;color:#eeeeee!important;font:14px system-ui,sans-serif}
+*,*::before,*::after{box-sizing:border-box}
+img,svg,canvas,video{max-width:100%;height:auto}
+svg{display:block;max-width:100%;height:auto}
+pre{white-space:pre-wrap;overflow-wrap:anywhere}a{color:#a9c7ff}
 </style>"""
     return when (language) {
         "svg", "xml" -> {
-            val body = if (source.trimStart().startsWith("<svg", ignoreCase = true)) source
-                else "<pre style='white-space:pre-wrap;color:#ddd'>${escapeHtml(source)}</pre>"
-            "<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'>$csp$baseStyle</head><body style='margin:0;background:#171717;color:white;min-height:100vh'>$body</body></html>"
+            val body = if (source.trimStart().startsWith("<svg", ignoreCase = true)) {
+                source.replaceFirst(Regex("(?i)<svg\\b")) { it.value + " style='display:block;max-width:100%;height:auto'" }
+            } else "<pre style='white-space:pre-wrap;color:#ddd;margin:0'>${escapeHtml(source)}</pre>"
+            "<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=5'>$csp$baseStyle</head><body>$body</body></html>"
         }
         "javascript", "js" -> {
             val safe = source.replace(Regex("(?i)</script"), "<\\\\/script")
-            """<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">$csp
-<style>html,body{margin:0;min-height:100%;background:#171717!important;color:#eee!important;font:14px monospace;padding:14px}pre{white-space:pre-wrap;overflow-wrap:anywhere}</style></head>
+            """<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=5">$csp$baseStyle
+<style>body{font:14px monospace;padding:14px}pre{white-space:pre-wrap;overflow-wrap:anywhere}</style></head>
 <body><b>JavaScript output</b><pre id="out"></pre><script>
 const out=document.getElementById('out');console.log=(...v)=>out.textContent+=v.join(' ')+'\n';
 try{$safe}catch(e){out.textContent+='Error: '+(e&&e.stack||e)}
 </script></body></html>"""
         }
-        "css" -> """<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">$csp
-$baseStyle<style>$source</style></head><body><h2>CSS preview</h2><p>Sample text</p><button>Button</button><div class="preview">Preview element</div></body></html>"""
+        "css" -> """<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=5">$csp
+$baseStyle<style>$source</style></head><body><main style="padding:16px"><h2>CSS preview</h2><p>Sample text</p><button>Button</button><div class="preview">Preview element</div></main></body></html>"""
         else -> {
             val headTag = Regex("(?i)<head\\b[^>]*>").find(source)?.value
             val htmlTag = Regex("(?i)<html\\b[^>]*>").find(source)?.value
+            val bodyTag = Regex("(?i)<body\\b[^>]*>").find(source)?.value
             when {
                 headTag != null -> source.replaceFirst(headTag, headTag + csp + baseStyle)
                 htmlTag != null -> source.replaceFirst(htmlTag, htmlTag + "<head>$csp$baseStyle</head>")
-                else -> "<!doctype html><html><head>$csp$baseStyle</head><body style='margin:0;background:#171717;color:#eee;min-height:100vh'>$source</body></html>"
+                bodyTag != null -> "<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=5'>$csp$baseStyle</head>$source</html>"
+                else -> "<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=5'>$csp$baseStyle</head><body>$source</body></html>"
             }
         }
     }
