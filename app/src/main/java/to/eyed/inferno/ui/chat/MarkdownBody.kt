@@ -128,7 +128,7 @@ fun MarkdownBody(text: String, modifier: Modifier = Modifier, streaming: Boolean
             style = body,
             theme = theme,
             components = components,
-            streaming = false,
+            streaming = streaming,
         )
     }
 }
@@ -330,17 +330,17 @@ fun MonoCodeBlock(code: String, language: String?, modifier: Modifier = Modifier
 @Composable
 private fun CodeRunChip(showingPreview: Boolean, onSelect: (Boolean) -> Unit) {
     val activeOffset by androidx.compose.animation.core.animateDpAsState(
-        targetValue = if (showingPreview) 25.dp else 0.dp,
+        targetValue = if (showingPreview) 28.dp else 0.dp,
         animationSpec = tween(180),
         label = "codePreviewToggle",
     )
     Box(
-        Modifier.padding(end = 3.dp).size(width = 50.dp, height = 27.dp)
-            .clip(RoundedCornerShape(8.dp)).background(whiteA(0.06f)),
+        Modifier.padding(end = 5.dp).size(width = 56.dp, height = 31.dp)
+            .clip(RoundedCornerShape(9.dp)).background(whiteA(0.10f)),
     ) {
         Box(
-            Modifier.offset(x = activeOffset + 2.dp, y = 2.dp).size(21.dp, 23.dp)
-                .clip(RoundedCornerShape(6.dp)).background(whiteA(0.16f)),
+            Modifier.offset(x = activeOffset + 2.dp, y = 3.dp).size(24.dp, 25.dp)
+                .clip(RoundedCornerShape(7.dp)).background(whiteA(0.22f)),
         )
         Row(Modifier.fillMaxWidth().fillMaxHeight(), verticalAlignment = Alignment.CenterVertically) {
             CodeToggleIcon(Lucide.Braces, "Show code", !showingPreview, Modifier.weight(1f).fillMaxHeight()) { onSelect(false) }
@@ -360,16 +360,17 @@ private fun CodeToggleIcon(
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.90f else 1f,
-        animationSpec = tween(100),
+        targetValue = if (pressed) 0.80f else 1f,
+        animationSpec = tween(150),
         label = "codeTogglePress",
     )
     Box(
-        modifier.graphicsLayer { scaleX = scale; scaleY = scale }
+        modifier.graphicsLayer { scaleX = scale; scaleY = scale; rotationZ = if (pressed) -5f else 0f }
+            .clip(RoundedCornerShape(7.dp)).background(whiteA(if (pressed) 0.16f else 0f))
             .clickable(interactionSource = interaction, indication = null, role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, contentDescription = label, Modifier.size(13.dp), tint = if (selected) Ink.White else Ink.I500)
+        Icon(icon, contentDescription = label, Modifier.size(15.dp), tint = if (selected) Ink.White else Ink.I500)
     }
 }
 
@@ -381,14 +382,14 @@ private fun CopyChip(onCopy: () -> Unit) {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.90f else 1f,
-        animationSpec = tween(100),
+        targetValue = if (pressed) 0.80f else 1f,
+        animationSpec = tween(150),
         label = "codeCopyPress",
     )
     LaunchedEffect(copied) { if (copied) { delay(1_100); copied = false } }
     Box(
-        Modifier.size(width = 25.dp, height = 25.dp).graphicsLayer { scaleX = scale; scaleY = scale }
-            .clip(RoundedCornerShape(7.dp))
+        Modifier.size(width = 30.dp, height = 30.dp).graphicsLayer { scaleX = scale; scaleY = scale; rotationZ = if (pressed) 5f else 0f }
+            .clip(RoundedCornerShape(8.dp)).background(whiteA(if (pressed) 0.16f else 0f))
             .clickable(interactionSource = interaction, indication = null, role = Role.Button) {
                 haptics.tap(); onCopy(); copied = true
             },
@@ -396,7 +397,7 @@ private fun CopyChip(onCopy: () -> Unit) {
     ) {
         AnimatedContent(copied, transitionSpec = { fadeIn(tween(130)) togetherWith fadeOut(tween(80)) }, label = "codeCopy") { done ->
             Icon(if (done) Lucide.Check else Lucide.Copy, contentDescription = if (done) "Copied" else S.copyCode,
-                Modifier.size(13.dp), tint = if (done) Ink.White else Ink.I500)
+                Modifier.size(15.dp), tint = if (done) Ink.White else Ink.I500)
         }
     }
 }
