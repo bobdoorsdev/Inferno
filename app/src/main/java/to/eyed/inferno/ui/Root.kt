@@ -123,7 +123,6 @@ fun InfernoRoot(container: AppContainer, appVm: AppViewModel, chatVm: ChatViewMo
         // Keyed on the transition, not on `is Ready`: every turn goes Ready -> Generating -> Ready and ChatRoot
         // already plays the Done confirm.
         LaunchedEffect(appVm.engine, appVm.loadInProgress) {
-            var previous: EngineState = appVm.engine.value
             var readyAwaitingCalibration = false
             combine(appVm.engine, appVm.loadInProgress) { state, calibrating -> state to calibrating }.collect { (state, calibrating) ->
                 if (state is EngineState.Loading) readyAwaitingCalibration = true
@@ -140,7 +139,6 @@ fun InfernoRoot(container: AppContainer, appVm: AppViewModel, chatVm: ChatViewMo
                         }
                     }
                 }
-                previous = state
             }
         }
 
