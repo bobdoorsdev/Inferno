@@ -20,7 +20,7 @@ import okhttp3.Request
 import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
 
-data class WebSearchResult(val title: String, val url: String, val snippet: String)
+data class WebSearchResult(val title: String, val url: String, val snippet: String, val siteImageUrl: String? = null)
 
 /** Small model-independent web search adapter. Search runs before local inference and returns cited excerpts. */
 class WebSearchClient(private val client: OkHttpClient = DEFAULT_CLIENT) {
@@ -31,9 +31,10 @@ class WebSearchClient(private val client: OkHttpClient = DEFAULT_CLIENT) {
     suspend fun searchAll(
         queries: List<String>,
         onResults: (List<WebSearchResult>) -> Unit = {},
+        maxResults: Int = 5,
     ): List<WebSearchResult> = coroutineScope {
         val collected = mutableListOf<WebSearchResult>()
-        queries.map(String::trim).filter { it.length >= 2 }.distinct().take(4)
+        queries.map(String::trim).filter { it.length >= 2 }.distinct().take(8)
             .map { query -> async {
                 val found = try {
                     search(query)
@@ -48,12 +49,14 @@ class WebSearchClient(private val client: OkHttpClient = DEFAULT_CLIENT) {
                         found.forEach { result ->
                             if (seen.add(canonicalUrl(result.url))) collected.add(result)
                         }
-                        rankResults(collected, queries).take(8)
+                        rankResults(collected, queries).take(maxResults.coerceIn(1, 12))
                     }
                     onResults(snapshot)
                 }
             } }.awaitAll()
-        synchronized(collected) { rankResults(collected, queries).take(8) }
+        val ranked = synchronized(collected) { rankResults(collected, queries).take(maxResults.coerceIn(1, 12)) }
+        ranked.map { result -> async { result.copy(siteImageUrl = fetchPageImage(result.url)) } }.awaitAll()
+            .also(onResults)
     }
 
     private fun rankResults(results: List<WebSearchResult>, queries: List<String>): List<WebSearchResult> {
@@ -116,8 +119,8 @@ class WebSearchClient(private val client: OkHttpClient = DEFAULT_CLIENT) {
                 val uri = url?.let { runCatching { Uri.parse(it) }.getOrNull() } ?: return false
                 return uri.scheme == "https" && !uri.host.isNullOrBlank()
             }
-            val image = thumbnail?.takeIf(::usable) ?: original?.takeIf(::usable) ?: return@mapNotNull null
-            val fallback = original?.takeIf { it != image && usable(it) }
+            val image = original?.takeIf(::usable) ?: thumbnail?.takeIf(::usable) ?: return@mapNotNull null
+            val fallback = thumbnail?.takeIf { it != image && usable(it) }
             val source = obj["url"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
             val title = obj["title"]?.jsonPrimitive?.contentOrNull?.take(120).orEmpty().ifBlank { q }
             WebImageResult(title, image, source, fallback)
@@ -156,6 +159,28 @@ class WebSearchClient(private val client: OkHttpClient = DEFAULT_CLIENT) {
         val code = current["weather_code"]?.jsonPrimitive?.intOrNull ?: -1
         val placeName = listOf(name, country).filter { it.isNotBlank() }.joinToString(", ")
         "$placeName: ${weatherDescription(code)}, ${value("temperature_2m")} °C, feels like ${value("apparent_temperature")} °C, humidity ${value("relative_humidity_2m")}%, precipitation ${value("precipitation")} mm, wind ${value("wind_speed_10m")} km/h. Local observation time: ${value("time")}."
+    }
+
+    /** Extract the publisher's own Open Graph image so product results can show the image from the cited page. */
+    private suspend fun fetchPageImage(pageUrl: String): String? = withContext(Dispatchers.IO) {
+        runCatching {
+            val request = Request.Builder().url(pageUrl).header("User-Agent", USER_AGENT).header("Accept", "text/html").build()
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return@use null
+                val html = response.body?.string()?.take(1_500_000).orEmpty()
+                val tags = Regex("""<meta\b[^>]*>""", RegexOption.IGNORE_CASE).findAll(html)
+                val image = tags.mapNotNull { tag ->
+                    val raw = tag.value
+                    val key = Regex("""(?:property|name)=["'](?:og:image|twitter:image)["']""", RegexOption.IGNORE_CASE)
+                    if (!key.containsMatchIn(raw)) return@mapNotNull null
+                    Regex("""content=["']([^"']+)["']""", RegexOption.IGNORE_CASE).find(raw)?.groupValues?.get(1)
+                }.firstOrNull() ?: return@use null
+                val uri = Uri.parse(image)
+                val absolute = if (uri.isRelative) Uri.parse(pageUrl).buildUpon().encodedPath(uri.encodedPath).build().toString() else image
+                val parsed = Uri.parse(absolute)
+                absolute.takeIf { parsed.scheme == "https" && !parsed.host.isNullOrBlank() && it.length < 2_048 }
+            }
+        }.getOrNull()
     }
 
     suspend fun search(query: String): List<WebSearchResult> = withContext(Dispatchers.IO) {
