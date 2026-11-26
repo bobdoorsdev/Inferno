@@ -257,8 +257,8 @@ fun MonoCodeBlock(code: String, language: String?, modifier: Modifier = Modifier
     val context = LocalContext.current
     val trimmed = code.trimEnd('\n')
     val info = language?.trim()?.lowercase().orEmpty()
-    val runLanguage = info.substringBefore(' ')
-    val autoRun = info.endsWith(" run")
+    val runLanguage = info.removeSuffix("-run").substringBefore(' ')
+    val autoRun = info.endsWith(" run") || info.endsWith("-run")
     var showRunner by remember(code, language) { mutableStateOf(autoRun && !streaming) }
     LaunchedEffect(streaming, autoRun, code) { if (autoRun && !streaming) showRunner = true }
     val runnable = runLanguage in setOf("html", "htm", "svg", "xml", "javascript", "js", "css")
