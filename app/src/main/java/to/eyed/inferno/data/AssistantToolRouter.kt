@@ -68,7 +68,7 @@ object AssistantToolRouter {
             .containsMatchIn(text)
         if (educational) return false
         val explicitPlace = Regex(
-            """\b(?:in|near|for)\s+(?!the\b|next\b|coming\b|this\b|last\b|my\b|your\b|a\b|an\b)[\p{L}][\p{L}\p{M}'’.-]*(?:\s+[\p{L}][\p{L}\p{M}'’.-]*){0,2}""",
+            """\b(?:in|near|for)\s+(?!the\b|next\b|coming\b|this\b|last\b|today\b|tomorrow\b|tonight\b|week\b|weekend\b|days?\b|hours?\b|month\b|year\b|my\b|your\b|a\b|an\b)[\p{L}][\p{L}\p{M}'’.-]*(?:\s+[\p{L}][\p{L}\p{M}'’.-]*){0,2}""",
             RegexOption.IGNORE_CASE,
         ).containsMatchIn(text)
         return !explicitPlace
@@ -101,7 +101,7 @@ object AssistantToolRouter {
         val webRule = if (allowWeb) "You alone decide whether web search is useful; do not search merely because a keyword appears. Search changing facts, product recommendations, prices, availability, reviews, compatibility, releases, news, or when research is requested. Return empty search_queries and max_sources=0 when search is unnecessary. Write focused natural-language queries using context, country, budget, and constraints. Choose the query count and result count based on difficulty; max_sources is 1–12 (usually 3–6, complex comparisons 8–12). Prefer primary official specifications and independent tests. " else "Web search is disabled; never request web, image, or weather search. "
         val cityRule = coarseCity?.takeIf { it.isNotBlank() }?.let { "Approximate user city from Android coarse location permission: " + it + ". Use only for relevant local/weather requests; never infer or disclose coordinates." }.orEmpty()
         val titleRule = if (createTitle) "Create a concise 2–6 word title for the user's substantive first request, not the assistant's greeting or response. Return an empty title for greetings, acknowledgements, and small talk. " else "Set title to an empty string. "
-        val localRule = "Use local tools for conversions, date arithmetic, JSON, regex, color conversion, Base64, SHA hashes, and CSV. " + if (allowWeb) "Use read_url when the user gives a public web page and asks to inspect its contents. " else "Do not set read_url while web search is disabled. ") + "Keep payloads short and faithful. "
+        val localRule = "Use local tools for conversions, date arithmetic, JSON, regex, color conversion, Base64, SHA hashes, and CSV. " + (if (allowWeb) "Use read_url when the user gives a public web page and asks to inspect its contents. " else "Do not set read_url while web search is disabled. ") + "Keep payloads short and faithful. "
         return """
 You are the tool planner for an offline-first assistant. Judge the latest user request and use recent turns to resolve references.
 $webRule$titleRule$localRule$cityRule
