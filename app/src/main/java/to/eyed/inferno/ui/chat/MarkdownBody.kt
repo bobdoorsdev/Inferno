@@ -125,7 +125,7 @@ private fun MarkdownChunkView(chunk: String) {
     }
 }
 
-private val MarkdownImagePattern = Regex("""!\[([^\]]*)\]\((https?://[^)\s]+)(?:\s+"[^"]*")?\)""")
+private val MarkdownImagePattern = Regex("""!\[([^\]]*)\]\(((?:https?://|file://)[^)\s]+)(?:\s+"[^"]*")?\)""")
 
 @Composable
 private fun MarkdownImageCard(alt: String, url: String) {
