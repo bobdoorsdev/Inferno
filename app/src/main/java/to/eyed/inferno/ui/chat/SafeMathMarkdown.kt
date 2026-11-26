@@ -72,9 +72,13 @@ object SafeMathMarkdown {
             }
             val end = line.indexOf(close, start)
             if (end < 0) {
-                out.append(line.substring(i, start - if (close == "$") 1 else 2))
-                out.append(codeSpan(line.substring(start)))
+                out.append(line.substring(i))
                 return out.toString()
+            }
+            if (end - start > 2_048) {
+                out.append(line.substring(i, end + close.length))
+                i = end + close.length
+                continue
             }
             val content = line.substring(start, end)
             out.append(line.substring(i, start - if (close == "$") 1 else 2))

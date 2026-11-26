@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -19,6 +20,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -87,32 +89,73 @@ internal fun CodeRunnerDialog(code: String, language: String?, onDismiss: () -> 
     }
 }
 
+
+/** Inline preview displayed in the same code card; no external browser tab or dialog. */
+@Composable
+internal fun CodeRunnerInline(code: String, language: String?, modifier: Modifier = Modifier) {
+    val lang = language.orEmpty().trim().lowercase().substringBefore(' ')
+    val document = remember(code, lang) { runnerDocument(code, lang) }
+    AndroidView(
+        modifier = modifier.fillMaxWidth().height(300.dp).clip(RoundedCornerShape(12.dp)).background(Ink.Pitch),
+        factory = { viewContext ->
+            WebView(viewContext).apply {
+                setBackgroundColor(android.graphics.Color.rgb(23, 23, 23))
+                settings.javaScriptEnabled = true
+                settings.allowFileAccess = false
+                settings.allowContentAccess = false
+                settings.domStorageEnabled = false
+                settings.databaseEnabled = false
+                settings.javaScriptCanOpenWindowsAutomatically = false
+                settings.setSupportMultipleWindows(false)
+                settings.blockNetworkLoads = true
+                settings.blockNetworkImage = true
+                webChromeClient = WebChromeClient()
+                webViewClient = object : WebViewClient() {
+                    override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean = true
+                    override fun shouldOverrideUrlLoading(view: WebView, request: android.webkit.WebResourceRequest): Boolean = true
+                }
+            }
+        },
+        update = { view ->
+            if (view.tag != document) {
+                view.tag = document
+                view.loadDataWithBaseURL("https://inferno.invalid/", document, "text/html", "UTF-8", null)
+            }
+        },
+        onRelease = { it.stopLoading(); it.destroy() },
+    )
+}
+
 private fun runnerDocument(source: String, language: String): String {
     val csp = """<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: blob:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; font-src data:">"""
+    val baseStyle = """<style>
+html,body{margin:0;padding:12px;min-height:100%;box-sizing:border-box;background:#171717!important;color:#eeeeee!important;color-scheme:dark;font:14px system-ui,sans-serif}
+*{box-sizing:border-box}img,svg,canvas,video{max-width:100%;height:auto}pre{white-space:pre-wrap;overflow-wrap:anywhere}a{color:#a9c7ff}
+</style>"""
     return when (language) {
         "svg", "xml" -> {
             val body = if (source.trimStart().startsWith("<svg", ignoreCase = true)) source
                 else "<pre style='white-space:pre-wrap;color:#ddd'>${escapeHtml(source)}</pre>"
-            "<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'>$csp</head><body style='margin:0;background:#171717;color:white'>$body</body></html>"
+            "<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'>$csp$baseStyle</head><body style='margin:0;background:#171717;color:white;min-height:100vh'>$body</body></html>"
         }
         "javascript", "js" -> {
             val safe = source.replace(Regex("(?i)</script"), "<\\\\/script")
             """<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">$csp
-<style>body{background:#171717;color:#eee;font:14px monospace;padding:14px}pre{white-space:pre-wrap;overflow-wrap:anywhere}</style></head>
+<style>html,body{margin:0;min-height:100%;background:#171717!important;color:#eee!important;font:14px monospace;padding:14px}pre{white-space:pre-wrap;overflow-wrap:anywhere}</style></head>
 <body><b>JavaScript output</b><pre id="out"></pre><script>
 const out=document.getElementById('out');console.log=(...v)=>out.textContent+=v.join(' ')+'\n';
 try{$safe}catch(e){out.textContent+='Error: '+(e&&e.stack||e)}
 </script></body></html>"""
         }
         "css" -> """<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">$csp
-<style>$source</style></head><body><h2>CSS preview</h2><p>Sample text</p><button>Button</button><div class="preview">Preview element</div></body></html>"""
+$baseStyle<style>$source</style></head><body><h2>CSS preview</h2><p>Sample text</p><button>Button</button><div class="preview">Preview element</div></body></html>"""
         else -> {
             val headTag = Regex("(?i)<head\\b[^>]*>").find(source)?.value
             val htmlTag = Regex("(?i)<html\\b[^>]*>").find(source)?.value
             when {
-                headTag != null -> source.replaceFirst(headTag, headTag + csp)
-                htmlTag != null -> source.replaceFirst(htmlTag, htmlTag + "<head>$csp</head>")
-                else -> "<!doctype html><html><head>$csp</head><body style='margin:0'>$source</body></html>"
+                headTag != null -> source.replaceFirst(headTag, headTag + csp + baseStyle)
+                htmlTag != null -> source.replaceFirst(htmlTag, htmlTag + "<head>$csp$baseStyle</head>")
+                else -> "<!doctype html><html><head>$csp$baseStyle</head><body style='margin:0;background:#171717;color:#eee;min-height:100vh'>$source</body></html>"
             }
         }
     }

@@ -18,6 +18,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -416,15 +417,16 @@ private fun AssistantMessage(
 private fun AnimatedCopyButton(label: String, onCopy: () -> Unit) {
     val haptics = rememberHaptics()
     var copied by remember { mutableStateOf(false) }
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (pressed) 0.90f else 1f, fastSpatialSpec(), label = "copyPress")
     androidx.compose.runtime.LaunchedEffect(copied) {
         if (copied) { delay(1_050); copied = false }
     }
     Box(
-        Modifier.size(32.dp).clip(RoundedCornerShape(9.dp)).clickable(
-            interactionSource = remember { MutableInteractionSource() },
-            indication = null,
-            role = Role.Button,
-        ) { haptics.tap(); onCopy(); copied = true },
+        Modifier.size(32.dp).graphicsLayer { scaleX = scale; scaleY = scale }
+            .clip(RoundedCornerShape(9.dp)).clickable(interactionSource = interaction, indication = null,
+                role = Role.Button) { haptics.tap(); onCopy(); copied = true },
         contentAlignment = Alignment.Center,
     ) {
         AnimatedContent(
@@ -445,19 +447,14 @@ private fun AnimatedCopyButton(label: String, onCopy: () -> Unit) {
 /** Small press-and-release motion shared by Branch and Redo. */
 @Composable
 private fun AnimatedActionIcon(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
-    var pressed by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (pressed) 0.82f else 1f, fastSpatialSpec(), label = "messageActionScale")
-    val alpha by animateFloatAsState(if (pressed) 0.62f else 1f, fastSpatialSpec(), label = "messageActionAlpha")
-    androidx.compose.runtime.LaunchedEffect(pressed) {
-        if (pressed) { delay(130); pressed = false }
-    }
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (pressed) 0.90f else 1f, fastSpatialSpec(), label = "messageActionScale")
+    val alpha by animateFloatAsState(if (pressed) 0.72f else 1f, fastSpatialSpec(), label = "messageActionAlpha")
     Box(
         Modifier.size(32.dp).graphicsLayer { scaleX = scale; scaleY = scale; this.alpha = alpha }
-            .clip(CircleShape).clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                role = Role.Button,
-            ) { pressed = true; onClick() },
+            .clip(CircleShape).clickable(interactionSource = interaction, indication = null,
+                role = Role.Button) { onClick() },
         contentAlignment = Alignment.Center,
     ) {
         Icon(icon, contentDescription = label, Modifier.size(15.dp), tint = Ink.I500)

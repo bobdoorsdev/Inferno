@@ -1,6 +1,7 @@
 package to.eyed.inferno.ui.chat
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
@@ -52,6 +53,7 @@ import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import com.composables.icons.lucide.Check
 import com.composables.icons.lucide.Copy
+import com.composables.icons.lucide.Code
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Play
 import com.mikepenz.markdown.compose.components.markdownComponents
@@ -87,7 +89,7 @@ import to.eyed.inferno.ui.theme.whiteA
 fun MarkdownBody(text: String, modifier: Modifier = Modifier, streaming: Boolean = false, animateStreaming: Boolean = true) {
     // Parse the live tail with the same safe markdown/math pipeline as completed messages.
     // Previously streaming bypassed it, so headings (###), emphasis (**...**) and formulas were shown literally.
-    val formatted = remember(text) { SafeMathMarkdown.sanitize(MarkdownMath.format(text)) }
+    val formatted = remember(text) { runCatching { SafeMathMarkdown.sanitize(MarkdownMath.format(text)) }.getOrDefault(text) }
     val split = remember(formatted) { MarkdownChunker.splitOpenFence(formatted) }
     val chunks = remember(split.first) { MarkdownChunker.chunks(split.first) }
     SelectionContainer {
@@ -177,16 +179,12 @@ private fun StreamingMarkdownTail(chunk: String, animateStreaming: Boolean) {
         val trailing = lines.drop(closeIndex + 1).joinToString("\n")
         if (trailing.isNotBlank()) MarkdownTextChunk(trailing, animateStreaming)
     } else {
-        val rendered = remember(chunk) { SafeMathMarkdown.sanitize(MarkdownMath.format(chunk)) }
+        val rendered = remember(chunk) { runCatching { SafeMathMarkdown.sanitize(MarkdownMath.format(chunk)) }.getOrDefault(chunk) }
         if (animateStreaming) {
-            AnimatedContent(
-                targetState = rendered,
-                transitionSpec = { fadeIn(tween(110)) togetherWith fadeOut(tween(55)) },
-                label = "streamingMarkdown",
-            ) { current -> MarkdownChunkView(current, animated = true) }
-        } else {
-            MarkdownChunkView(rendered)
-        }
+            var entered by remember { mutableStateOf(false) }
+            LaunchedEffect(Unit) { entered = true }
+            AnimatedVisibility(visible = entered, enter = fadeIn(tween(110))) { MarkdownChunkView(rendered) }
+        } else MarkdownChunkView(rendered)
     }
 }
 
@@ -279,29 +277,31 @@ fun MonoCodeBlock(code: String, language: String?, modifier: Modifier = Modifier
                 color = Ink.I500,
                 modifier = Modifier.weight(1f),
             )
-            if (runnable && !streaming) CodeRunChip { showRunner = true }
+            if (runnable && !streaming) CodeRunChip(showingPreview = showRunner) { showRunner = !showRunner }
             CopyChip(onCopy = { copyToClipboard(context, trimmed, "Code") })
         }
         Hairline()
-        Box(Modifier.horizontalScroll(rememberScrollState())) {
-            Text(highlightCode(trimmed, language), style = MonoBody.copy(color = CodePalette.Text), softWrap = false, modifier = Modifier.padding(14.dp))
+        AnimatedContent(targetState = showRunner, transitionSpec = { fadeIn(tween(150)) togetherWith fadeOut(tween(90)) }, label = "codePreviewToggle") { preview ->
+            if (preview) CodeRunnerInline(code = trimmed, language = runLanguage, modifier = Modifier.padding(start = 4.dp, end = 4.dp, bottom = 8.dp))
+            else Box(Modifier.horizontalScroll(rememberScrollState())) {
+                Text(highlightCode(trimmed, language), style = MonoBody.copy(color = CodePalette.Text), softWrap = false, modifier = Modifier.padding(14.dp))
+            }
         }
     }
-    if (showRunner) CodeRunnerDialog(code = trimmed, language = runLanguage, onDismiss = { showRunner = false })
 }
 
 /** Run affordance beside Copy. Only self-contained browser formats are enabled. */
 @Composable
-private fun CodeRunChip(onRun: () -> Unit) {
+private fun CodeRunChip(showingPreview: Boolean, onRun: () -> Unit) {
     Row(
-        Modifier.clip(RoundedCornerShape(10.dp)).background(whiteA(0.06f))
+        Modifier.padding(end = 8.dp).clip(RoundedCornerShape(10.dp)).background(whiteA(0.06f))
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, role = Role.Button, onClick = onRun)
             .padding(horizontal = 10.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(5.dp),
     ) {
-        Icon(Lucide.Play, contentDescription = "Run code", Modifier.size(15.dp), tint = Ink.I100)
-        Text("Run", style = RowMeta, color = Ink.I100)
+        Icon(if (showingPreview) Lucide.Code else Lucide.Play, contentDescription = if (showingPreview) "Show code" else "Preview code", Modifier.size(15.dp), tint = Ink.I100)
+        Text(if (showingPreview) "Code" else "Preview", style = RowMeta, color = Ink.I100)
     }
 }
 

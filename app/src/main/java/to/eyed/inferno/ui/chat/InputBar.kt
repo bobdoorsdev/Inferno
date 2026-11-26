@@ -60,6 +60,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
@@ -77,7 +78,6 @@ import to.eyed.inferno.data.Attachment
 import to.eyed.inferno.data.FileAttachment
 import to.eyed.inferno.engine.EngineState
 import to.eyed.inferno.ui.S
-import to.eyed.inferno.ui.components.GhostIconButton
 import to.eyed.inferno.ui.components.GlassMenu
 import to.eyed.inferno.ui.components.MenuActionRow
 import to.eyed.inferno.ui.components.QuietNotice
@@ -269,9 +269,17 @@ private fun AttachButton(
 ) {
     var open by remember { mutableStateOf(false) }
     val haptics = rememberHaptics()
+    val rotation by animateFloatAsState(if (open) 45f else 0f, fastSpatialSpec(), label = "attachPlusRotation")
     Box {
-        GhostIconButton(Lucide.Plus, S.attach, onClick = { haptics.tap(); open = true }, size = 38.dp, iconSize = 21.dp, tint = Ink.I100, enabled = !idle)
-        GlassMenu(expanded = open, onDismiss = { open = false }, minWidth = 196.dp) {
+        Box(
+            Modifier.size(38.dp).graphicsLayer { rotationZ = rotation }.clip(CircleShape)
+                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null,
+                    enabled = !idle, role = Role.Button) { haptics.tap(); open = !open },
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(Lucide.Plus, if (open) "Close attachments" else S.attach, Modifier.size(21.dp), tint = Ink.I100)
+        }
+        GlassMenu(expanded = open, onDismiss = { open = false }, offset = DpOffset(0.dp, (-8).dp), minWidth = 196.dp) {
             AttachmentMenuItem(Lucide.FileText, "Choose file", enabled = !idle) { open = false; onPickFile() }
             AttachmentMenuItem(Lucide.Images, S.photos, enabled = canAttachImages && !idle) {
                 open = false
