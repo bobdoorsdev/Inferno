@@ -357,7 +357,17 @@ class InferenceEngine internal constructor(
                             val l = current ?: throw EngineException("No model loaded")
                             if (ctx == 0L) resumeLocked()
                             _state.value = EngineState.Loading(l.model, null, LoadPhase.CALIBRATING)
-                            val r = native.bench(ctx, nPrompt, nGen, reps) { done, total, _ -> progress(done, total); !lowMemory }
+                            val r = native.bench(ctx, nPrompt, nGen, reps) { done, total, _ ->
+                                progress(done, total)
+                                if (!lowMemory && total > 0) {
+                                    _state.value = EngineState.Loading(
+                                        l.model,
+                                        (done.toFloat() / total).coerceIn(0f, 1f),
+                                        LoadPhase.CALIBRATING,
+                                    )
+                                }
+                                !lowMemory
+                            }
                             _kvUsed.value = 0
                             ensureActive()
                             if (r.size < 4) throw EngineException(if (lowMemory) NOT_ENOUGH_MEMORY else nativeError("Benchmark cancelled"))
