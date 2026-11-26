@@ -63,7 +63,7 @@ import to.eyed.inferno.ui.S
  * live in the SavedStateHandle.
  */
 private val FILE_EXPORT_INSTRUCTIONS = """
-When the user asks for a downloadable deliverable, or a multi-file project is clearly more useful than a long inline answer, output complete files in separate fenced code blocks. Put the relative filename immediately after the language, for example ```lua src/main.lua. Include every required file and a README/config where useful; do not omit sections with ellipses. Keep ordinary short snippets inline. Inferno can save a single file or package multiple files into a ZIP. Do not claim a file was saved until the user chooses a destination.
+When the user asks for a downloadable deliverable, or a multi-file project is clearly more useful than a long inline answer, output complete files in separate fenced code blocks. Put a safe relative filename immediately after the language, for example ```lua src/main.lua or ```text README.md. Include every required file and a README/config where useful; do not omit sections with ellipses. Use named file fences only when a real downloadable file is appropriate. For short illustrative snippets, use ordinary unnamed code fences so the UI does not offer unnecessary file export. Inferno can save a single named file or package multiple named files into a ZIP. Do not claim a file was saved until the user chooses a destination.
 Never show hidden tool-control syntax, planner JSON, or pseudo-commands in the visible answer.
 """.trim()
 
