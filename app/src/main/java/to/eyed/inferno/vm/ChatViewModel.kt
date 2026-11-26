@@ -7,6 +7,8 @@ import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
@@ -481,7 +483,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
         try {
             var history = c.chats.messagesOnce(conversationId)
             val latestUserText = history.lastOrNull { it.role == ChatRepository.ROLE_USER }?.content.orEmpty()
-            val webIntent = settings.webSearchEnabled && AssistantToolRouter.shouldConsiderWeb(latestUserText)
+            val webIntent = settings.webSearchEnabled
             val imageIntent = AssistantToolRouter.shouldConsiderImageGeneration(latestUserText)
             val shouldRoute = latestUserText.isNotBlank() &&
                 (webIntent || imageIntent || AssistantToolRouter.shouldRouteLocally(latestUserText))
@@ -529,7 +531,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
                 }
             }
             var calculation: to.eyed.inferno.data.LocalCalculation? = null
-            var localTime: String? = null
+            var localTime: String? = AssistantToolRouter.currentTime()
             var weather: String? = null
             val calculated = linkedSetOf<String>()
             val localToolResults = mutableListOf<to.eyed.inferno.data.LocalToolResult>()
@@ -540,25 +542,21 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
             val visibleSearchQueries = linkedSetOf<String>()
             val webResults = mutableListOf<to.eyed.inferno.data.WebSearchResult>()
             val webImages = mutableListOf<to.eyed.inferno.data.WebImageResult>()
-            val fallbackQuery = if (settings.webSearchEnabled) AssistantToolRouter.fallbackSearchQuery(latestUserText) else null
-            val imageFallback = if (settings.webSearchEnabled) AssistantToolRouter.fallbackImageQuery(latestUserText) else null
-            val weatherFallback = if (settings.webSearchEnabled) AssistantToolRouter.fallbackWeatherLocation(latestUserText) else null
             var pendingPlan = toolPlan
 
             // Re-plan after every batch so the model can request follow-up searches/tools. The fixed
             // round ceiling prevents a malformed planner response from creating an unbounded loop.
             for (round in 0 until MAX_TOOL_ROUNDS) {
                 val roundSearch = if (settings.webSearchEnabled) {
-                    (pendingPlan.searchQueries + if (round == 0) listOfNotNull(fallbackQuery) else emptyList())
-                        .map { it.trim() }.filter { it.length >= 2 && usedSearchQueries.add(it.lowercase()) }.take(4)
+                    pendingPlan.searchQueries.map { it.trim() }
+                        .filter { it.length >= 2 && usedSearchQueries.add(it.lowercase()) }.take(8)
                 } else emptyList()
                 val roundImages = if (settings.webSearchEnabled) {
-                    (pendingPlan.imageQueries + if (round == 0) listOfNotNull(imageFallback) else emptyList())
-                        .map { it.trim() }.filter { it.length >= 2 && usedImageQueries.add(it.lowercase()) }.take(4)
+                    pendingPlan.imageQueries.map { it.trim() }
+                        .filter { it.length >= 2 && usedImageQueries.add(it.lowercase()) }.take(4)
                 } else emptyList()
                 val requestedWeather = if (settings.webSearchEnabled) {
-                    (listOfNotNull(pendingPlan.weatherLocation) + if (round == 0) listOfNotNull(weatherFallback) else emptyList())
-                        .firstOrNull { it.isNotBlank() && usedWeatherLocations.add(it.lowercase()) }
+                    listOfNotNull(pendingPlan.weatherLocation).firstOrNull { it.isNotBlank() && usedWeatherLocations.add(it.lowercase()) }
                 } else null
                 var didWork = false
                 pendingPlan.calculation?.takeIf { calculated.add(it) }?.let {
@@ -576,33 +574,46 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
                         didWork = true
                     }
                 }
-                if (roundSearch.isNotEmpty()) {
+                if (roundSearch.isNotEmpty() || roundImages.isNotEmpty()) {
                     didWork = true
                     visibleSearchQueries += roundSearch
                     _toolStatus.value = S.searchingWeb
                     _toolSearchNotes.value = AssistantToolRouter.searchNotes(webResults.toList(), visibleSearchQueries.toList(), webImages.toList())
                     try {
-                        webResults += webSearchClient.searchAll(roundSearch) { partial ->
-                            _toolSearchNotes.value = AssistantToolRouter.searchNotes(
-                                (webResults.toList() + partial).distinctBy { it.url },
-                                visibleSearchQueries.toList(),
-                                webImages.toList(),
-                            )
+                        coroutineScope {
+                            val sourceTask = async {
+                                if (roundSearch.isEmpty()) emptyList()
+                                else webSearchClient.searchAll(
+                                    roundSearch,
+                                    onResults = { partial ->
+                                        _toolSearchNotes.value = AssistantToolRouter.searchNotes(
+                                            (webResults.toList() + partial).distinctBy { it.url },
+                                            visibleSearchQueries.toList(),
+                                            webImages.toList(),
+                                        )
+                                    },
+                                    maxResults = pendingPlan.maxSources,
+                                )
+                            }
+                            val imageTask = async {
+                                roundImages.flatMap { query -> webSearchClient.searchImages(query) }
+                            }
+                            val foundSources = sourceTask.await()
+                            webResults += foundSources
+                            webImages += foundSources.mapNotNull { source ->
+                                source.siteImageUrl?.let { imageUrl ->
+                                    to.eyed.inferno.data.WebImageResult(source.title, imageUrl, source.url)
+                                }
+                            }
+                            webImages += imageTask.await()
                         }
                     } catch (e: CancellationException) { throw e }
                     catch (_: Exception) { appVmRef?.notice(S.webSearchFailed) }
-                }
-                if (roundImages.isNotEmpty()) {
-                    didWork = true
-                    visibleSearchQueries += roundImages.map { "Images: $it" }
-                    _toolStatus.value = S.searchingWeb
-                    _toolSearchNotes.value = AssistantToolRouter.searchNotes(webResults.toList(), visibleSearchQueries.toList(), webImages.toList())
-                    for (query in roundImages) {
-                        try { webImages += webSearchClient.searchImages(query) }
-                        catch (e: CancellationException) { throw e }
-                        catch (_: Exception) { Unit }
-                        _toolSearchNotes.value = AssistantToolRouter.searchNotes(webResults.toList(), visibleSearchQueries.toList(), webImages.toList())
-                    }
+                    _toolSearchNotes.value = AssistantToolRouter.searchNotes(
+                        webResults.distinctBy { it.url },
+                        visibleSearchQueries.toList(),
+                        webImages.distinctBy { it.imageUrl },
+                    )
                 }
                 if (requestedWeather != null) {
                     didWork = true
