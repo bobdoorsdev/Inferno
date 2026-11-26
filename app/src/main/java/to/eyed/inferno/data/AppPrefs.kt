@@ -77,6 +77,7 @@ data class SettingsState(
     val imageDetail: ImageDetail = ImageDetail.HIGH,
     // chat
     val streamingAnimations: Boolean = true,
+    val streamingTokenDelayMs: Int = 8,
     val haptics: Boolean = true,
     val webSearchEnabled: Boolean = true,        // always available; the intent planner decides when a lookup is useful
     // downloads
@@ -163,6 +164,7 @@ class AppPrefs(
     suspend fun setThinking(v: Boolean) = update { it.copy(thinking = v) }
     suspend fun setImageDetail(d: ImageDetail) = update { it.copy(imageDetail = d) }
     suspend fun setStreamingAnimations(v: Boolean) = update { it.copy(streamingAnimations = v) }
+    suspend fun setStreamingTokenDelayMs(v: Int) = update { it.copy(streamingTokenDelayMs = v.coerceIn(0, 30)) }
     suspend fun setHaptics(v: Boolean) = update { it.copy(haptics = v) }
     suspend fun setWebSearchEnabled(v: Boolean) = update { it.copy(webSearchEnabled = true) }
     override suspend fun setAllowMeteredDownloads(allow: Boolean) = update { it.copy(allowMeteredDownloads = allow) }
@@ -211,6 +213,7 @@ private object K {
     val imageDetail = stringPreferencesKey("imageDetail")
     val autoTrim = booleanPreferencesKey("autoTrim")
     val streamingAnimations = booleanPreferencesKey("streamingAnimations")
+    val streamingTokenDelayMs = intPreferencesKey("streamingTokenDelayMs")
     val haptics = booleanPreferencesKey("haptics")
     val webSearchEnabled = booleanPreferencesKey("webSearchEnabled")
     val allowMeteredDownloads = booleanPreferencesKey("allowMeteredDownloads")
@@ -257,6 +260,7 @@ internal fun Preferences.toState(): SettingsState {
         thinking = this[K.thinking] ?: d.thinking,
         imageDetail = ImageDetail.HIGH,
         streamingAnimations = this[K.streamingAnimations] ?: d.streamingAnimations,
+        streamingTokenDelayMs = (this[K.streamingTokenDelayMs] ?: d.streamingTokenDelayMs).coerceIn(0, 30),
         haptics = this[K.haptics] ?: d.haptics,
         webSearchEnabled = true,
         allowMeteredDownloads = this[K.allowMeteredDownloads] ?: d.allowMeteredDownloads,
@@ -303,6 +307,7 @@ internal fun MutablePreferences.write(s: SettingsState) {
     this[K.thinking] = s.thinking
     this[K.imageDetail] = s.imageDetail.name
     this[K.streamingAnimations] = s.streamingAnimations
+    this[K.streamingTokenDelayMs] = s.streamingTokenDelayMs.coerceIn(0, 30)
     this[K.haptics] = s.haptics
     this[K.webSearchEnabled] = true
     this[K.allowMeteredDownloads] = s.allowMeteredDownloads
