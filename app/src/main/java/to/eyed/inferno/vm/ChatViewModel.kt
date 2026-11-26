@@ -137,7 +137,11 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
             append("# ").append(conversation.displayTitle).append("\n\n")
             history.forEach { message ->
                 val label = if (message.role == ChatRepository.ROLE_USER) "You" else "Assistant"
+                val timestamp = java.time.Instant.ofEpochMilli(message.createdAt)
+                    .atZone(java.time.ZoneId.systemDefault())
+                    .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
                 append("## ").append(label).append("\n\n")
+                append("*").append(timestamp).append("*\n\n")
                 append(message.content.trim()).append("\n\n")
             }
         }.trim()
