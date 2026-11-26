@@ -226,7 +226,8 @@ fun SharedTransitionScope.MessagesList(
                             onBranch = { onBranch(m) },
                             onDetails = { onOpenTurnDetails(m) },
                             onFollowUp = onFollowUp,
-                            modifier = Modifier.animateItem(fadeInSpec = tween(180), fadeOutSpec = tween(120), placementSpec = placement),
+                            // Do not fade the live assistant row on insertion; text itself uses Compose TextMotion.
+                            modifier = Modifier.animateItem(fadeInSpec = null, fadeOutSpec = null, placementSpec = placement),
                             showDetails = dev.turnDetails,
                             techMeta = dev.generationStats,
                             liveMeta = if (streamingRow) liveMeta else null,
