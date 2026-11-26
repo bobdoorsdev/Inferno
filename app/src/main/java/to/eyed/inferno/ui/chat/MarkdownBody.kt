@@ -252,8 +252,12 @@ fun MonoCodeBlock(code: String, language: String?, modifier: Modifier = Modifier
     val shape = RoundedCornerShape(Radii.row)
     val context = LocalContext.current
     val trimmed = code.trimEnd('\n')
-    var showRunner by remember(code, language) { mutableStateOf(false) }
-    val runnable = language?.trim()?.lowercase()?.substringBefore(' ') in setOf("html", "htm", "svg", "xml", "javascript", "js", "css")
+    val info = language?.trim()?.lowercase().orEmpty()
+    val runLanguage = info.substringBefore(' ')
+    val autoRun = info.endsWith(" run")
+    var showRunner by remember(code, language) { mutableStateOf(autoRun && !streaming) }
+    LaunchedEffect(streaming, autoRun, code) { if (autoRun && !streaming) showRunner = true }
+    val runnable = runLanguage in setOf("html", "htm", "svg", "xml", "javascript", "js", "css")
     Column(
         modifier
             .fillMaxWidth()
@@ -279,7 +283,7 @@ fun MonoCodeBlock(code: String, language: String?, modifier: Modifier = Modifier
             Text(highlightCode(trimmed, language), style = MonoBody.copy(color = CodePalette.Text), softWrap = false, modifier = Modifier.padding(14.dp))
         }
     }
-    if (showRunner) CodeRunnerDialog(code = trimmed, language = language, onDismiss = { showRunner = false })
+    if (showRunner) CodeRunnerDialog(code = trimmed, language = runLanguage, onDismiss = { showRunner = false })
 }
 
 /** Run affordance beside Copy. Only self-contained browser formats are enabled. */
