@@ -169,9 +169,10 @@ class WebSearchClient(private val client: OkHttpClient = DEFAULT_CLIENT) {
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) return@use Pair(null, null)
                 val html = response.body?.string()?.take(1_500_000).orEmpty()
+                val finalPageUrl = response.request.url.toString()
                 fun resolve(raw: String?): String? {
                     val value = raw?.trim()?.trim('\'', '"')?.takeIf(String::isNotBlank) ?: return null
-                    val absolute = runCatching { java.net.URI(pageUrl).resolve(value).toString() }.getOrDefault(value)
+                    val absolute = runCatching { java.net.URI(finalPageUrl).resolve(value).toString() }.getOrDefault(value)
                     val parsed = Uri.parse(absolute)
                     return absolute.takeIf { parsed.scheme == "https" && !parsed.host.isNullOrBlank() && it.length < 2_048 }
                 }
