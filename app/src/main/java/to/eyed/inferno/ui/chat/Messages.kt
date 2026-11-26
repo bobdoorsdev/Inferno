@@ -397,7 +397,7 @@ private data class AssistantCodeFile(val path: String, val content: String)
 private data class AssistantFileExport(val files: List<AssistantCodeFile>, val zip: Boolean)
 
 private fun extractCodeArtifacts(answer: String): List<AssistantCodeFile> {
-    val fence = Regex("""(?ms)^\\x60{3,}([A-Za-z0-9_+.-]+)(?:[ \\t]+([^\\r\\n]+))?[ \\t]*\\r?\\n(.*?)^\\x60{3,}\\s*$""")
+    val fence = Regex("""(?ms)^\x60{3,}([A-Za-z0-9_+.-]+)(?:[ \t]+([^\r\n]+))?[ \t]*\r?\n(.*?)^\x60{3,}\s*$""")
     val extensions = mapOf(
         "lua" to "lua", "luau" to "lua", "python" to "py", "javascript" to "js", "js" to "js",
         "typescript" to "ts", "ts" to "ts", "kotlin" to "kt", "java" to "java", "json" to "json",
@@ -409,7 +409,7 @@ private fun extractCodeArtifacts(answer: String): List<AssistantCodeFile> {
     fence.findAll(answer).forEachIndexed { index, match ->
         val language = match.groupValues[1].lowercase()
         val extension = extensions[language] ?: "txt"
-        val hinted = match.groupValues[2].trim().replace('\\\\', '/')
+        val hinted = match.groupValues[2].trim().replace('\\', '/')
         val safe = hinted.split('/').filter { it.isNotBlank() && it != "." && it != ".." }
             .joinToString("/") { it.replace(Regex("""[^A-Za-z0-9._-]"""), "_") }
         val path = when {
