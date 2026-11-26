@@ -147,6 +147,7 @@ fun SharedTransitionScope.MessagesList(
     dev: ChatDevFlags = ChatDevFlags(),
     toolStatus: String? = null,
     toolSearchNotes: String? = null,
+    streamingAnimations: Boolean = true,
 ) {
     val live = liveFor(messages, gen)
     val liveMeta = (gen as? GenState.Streaming)?.takeIf { dev.tokenCounter && it.tokens > 0 }?.let { S.liveTokens(it.tokens, String.format(Locale.US, "%.1f", it.tokPerSec)) }
@@ -167,7 +168,7 @@ fun SharedTransitionScope.MessagesList(
             if (live is Live.Item) item(key = "live", contentType = "live") {
                 if (gen is GenState.Streaming && gen.text.isNotBlank()) {
                     AssistantMessage(
-                        text = gen.text, reasoning = gen.reasoning, thinkingMs = gen.thinkingMs, streaming = true,
+                        text = gen.text, reasoning = gen.reasoning, thinkingMs = gen.thinkingMs, streaming = true, streamingAnimations = streamingAnimations,
                         stats = null, showActions = false, showRegenerate = false, announce = false,
                         searchNotes = toolSearchNotes, toolStatus = toolStatus,
                         onRegenerate = {}, onBranch = {}, onDetails = {}, liveMeta = liveMeta,
@@ -201,6 +202,7 @@ fun SharedTransitionScope.MessagesList(
                             reasoning = if (streamingRow && s != null) s.reasoning else m.thinking.orEmpty(),
                             thinkingMs = if (streamingRow && s != null) s.thinkingMs else m.stats?.thinkingMs ?: 0L,
                             streaming = streamingRow,
+                            streamingAnimations = streamingAnimations,
                             searchNotes = if (streamingRow) toolSearchNotes else null,
                             toolStatus = if (streamingRow) toolStatus else null,
                             stats = m.stats,
@@ -334,6 +336,7 @@ private fun AssistantMessage(
     reasoning: String,
     thinkingMs: Long,
     streaming: Boolean,
+    streamingAnimations: Boolean = true,
     stats: MessageStats?,
     showActions: Boolean,
     showRegenerate: Boolean,
@@ -364,7 +367,7 @@ private fun AssistantMessage(
             )
             Spacer(Modifier.height(10.dp))
         }
-        if (text.isNotBlank()) MarkdownBody(text, streaming = streaming)
+        if (text.isNotBlank()) MarkdownBody(text, streaming = streaming, animateStreaming = streamingAnimations)
         if (streaming) Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             BlinkingCaret()
             if (liveMeta != null) Text(liveMeta, style = Meta, color = Ink.I500)
