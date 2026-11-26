@@ -12,6 +12,12 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import coil3.compose.AsyncImage
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -132,7 +138,7 @@ fun AssistantActivityPanel(
                 } else {
                     Text(title, style = Typography.bodyMedium.copy(fontWeight = FontWeight.Medium), color = Ink.I100)
                 }
-                if (live && (status != null || selected == "think")) PulsingDots()
+                if (live && selected == "think") PulsingDots()
             }
             androidx.compose.foundation.layout.Box(
                 Modifier.size(32.dp).clickable(
@@ -158,22 +164,156 @@ fun AssistantActivityPanel(
                 transitionSpec = { fadeIn(tabFade) togetherWith fadeOut(tabFade) },
                 label = "activityTabContent",
             ) { showSearch ->
-                val content = if (showSearch) search.orEmpty() else think
-                if (content.isNotBlank()) {
+                if (showSearch) {
+                    SearchResultsView(
+                        notes = search.orEmpty(),
+                        status = status,
+                        modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+                    )
+                } else if (think.isNotBlank()) {
                     val scroll = rememberScrollState()
-                    LaunchedEffect(content, showSearch) { if (live) scroll.scrollTo(scroll.maxValue) }
+                    LaunchedEffect(think) { if (live) scroll.scrollTo(scroll.maxValue) }
                     Box(
                         Modifier.fillMaxWidth().padding(top = 10.dp).heightIn(max = 260.dp).verticalScroll(scroll),
                     ) {
-                        MarkdownBody(content, Modifier.padding(end = 4.dp))
-                    }
-                } else if (showSearch && status != null) {
-                    Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        MorphingMark(20.dp, active = true)
-                        Text("Finding relevant pages and sources", style = Typography.bodySmall, color = Ink.I500)
+                        MarkdownBody(think, Modifier.padding(end = 4.dp))
                     }
                 }
             }
+        }
+    }
+}
+
+private data class SearchSourceCard(val number: String, val title: String, val url: String, val host: String, val snippet: String = "")
+private data class SearchImageCard(val title: String, val url: String, val sourceUrl: String)
+private data class SearchPanelData(val queries: List<String>, val sources: List<SearchSourceCard>, val images: List<SearchImageCard>)
+
+private fun parseSearchPanel(notes: String): SearchPanelData {
+    val queries = mutableListOf<String>()
+    val sources = mutableListOf<SearchSourceCard>()
+    val images = mutableListOf<SearchImageCard>()
+    val sourceLine = Regex("""^(\d+)\.\s+\*\*\[([^\]]+)]\((https?://[^)]+)\)\*\*(?:\s+·\s+(.+))?$""")
+    val imageLine = Regex("""^!\[([^\]]*)]\((https?://[^\s)]+)(?:\s+"([^"]*)")?\)$""")
+    var section = ""
+    for (line in notes.lines()) {
+        when (line.trim()) {
+            "**Web search**" -> { section = "queries"; continue }
+            "**Web sources**" -> { section = "sources"; continue }
+            "**Images**" -> { section = "images"; continue }
+        }
+        when (section) {
+            "queries" -> if (line.trimStart().startsWith("- ")) queries += line.trim().removePrefix("- ").take(100)
+            "sources" -> {
+                val match = sourceLine.matchEntire(line.trim())
+                if (match != null) {
+                    sources += SearchSourceCard(match.groupValues[1], match.groupValues[2], match.groupValues[3], match.groupValues[4])
+                } else if (line.startsWith("   ") && sources.isNotEmpty()) {
+                    val previous = sources.removeAt(sources.lastIndex)
+                    sources += previous.copy(snippet = line.trim().take(260))
+                }
+            }
+            "images" -> {
+                val match = imageLine.matchEntire(line.trim())
+                if (match != null) {
+                    images += SearchImageCard(match.groupValues[1], match.groupValues[2], "")
+                } else if (line.startsWith("[Source page](") && images.isNotEmpty()) {
+                    val url = line.substringAfter("](").substringBeforeLast(")")
+                    if (url.startsWith("http")) images[images.lastIndex] = images.last().copy(sourceUrl = url)
+                }
+            }
+        }
+    }
+    return SearchPanelData(queries.distinct().take(4), sources.take(8), images.take(3))
+}
+
+@Composable
+private fun SearchResultsView(notes: String, status: String?, modifier: Modifier = Modifier) {
+    val data = remember(notes) { parseSearchPanel(notes) }
+    val uriHandler = LocalUriHandler.current
+    Column(
+        modifier.heightIn(max = 300.dp).verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(9.dp),
+    ) {
+        if (status != null) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                PulsingDots()
+                Text("Searching the web", style = Typography.bodySmall.copy(fontWeight = FontWeight.Medium), color = Ink.I100)
+                Text("Finding useful sources", style = Typography.labelSmall, color = Ink.I500)
+            }
+        }
+        if (data.queries.isNotEmpty()) {
+            Text("SEARCHED FOR", style = Typography.labelSmall.copy(fontWeight = FontWeight.SemiBold), color = Ink.I500)
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(7.dp),
+            ) {
+                data.queries.forEach { query ->
+                    Box(
+                        Modifier.clip(RoundedCornerShape(9.dp)).background(Ink.SurfaceHigh).padding(horizontal = 9.dp, vertical = 7.dp),
+                    ) {
+                        Text(query, style = Typography.labelSmall, color = Ink.I300, maxLines = 1)
+                    }
+                }
+            }
+        }
+        if (data.sources.isNotEmpty()) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("SOURCES", style = Typography.labelSmall.copy(fontWeight = FontWeight.SemiBold), color = Ink.I500)
+                Spacer(Modifier.width(7.dp))
+                Text(data.sources.size.toString(), style = Typography.labelSmall, color = Ink.I500)
+            }
+            data.sources.forEach { source ->
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(13.dp)).background(Ink.SurfaceHigh)
+                        .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
+                            runCatching { uriHandler.openUri(source.url) }
+                        }
+                        .padding(horizontal = 10.dp, vertical = 9.dp),
+                    verticalAlignment = Alignment.Top,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Box(
+                        Modifier.size(27.dp).clip(CircleShape).background(Ink.I800),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(source.number, style = Typography.labelSmall.copy(fontWeight = FontWeight.SemiBold), color = Ink.I300)
+                    }
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text(source.title, style = Typography.bodySmall.copy(fontWeight = FontWeight.Medium), color = Ink.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        if (source.host.isNotBlank()) Text(source.host, style = Typography.labelSmall, color = Ink.I500, maxLines = 1)
+                        if (source.snippet.isNotBlank()) Text(source.snippet, style = Typography.bodySmall, color = Ink.I300, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                    }
+                    Text("↗", style = Typography.bodyMedium, color = Ink.I500)
+                }
+            }
+        }
+        if (data.images.isNotEmpty()) {
+            Text("IMAGES", style = Typography.labelSmall.copy(fontWeight = FontWeight.SemiBold), color = Ink.I500)
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                data.images.forEach { item ->
+                    Column(
+                        Modifier.width(132.dp).clip(RoundedCornerShape(13.dp)).background(Ink.SurfaceHigh)
+                            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
+                                runCatching { uriHandler.openUri(item.sourceUrl.ifBlank { item.url }) }
+                            }
+                            .padding(7.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        AsyncImage(
+                            model = item.url,
+                            contentDescription = item.title,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 68.dp, max = 78.dp).clip(RoundedCornerShape(8.dp)),
+                        )
+                        Text(item.title.ifBlank { "Image result" }, style = Typography.labelSmall, color = Ink.I300, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+            }
+        }
+        if (data.queries.isEmpty() && data.sources.isEmpty() && data.images.isEmpty()) {
+            if (status != null) {
+                Text("Waiting for the first results…", style = Typography.bodySmall, color = Ink.I500)
+            } else if (notes.isNotBlank()) MarkdownBody(notes)
         }
     }
 }
@@ -301,7 +441,7 @@ fun CompactingIndicator(modifier: Modifier = Modifier) {
 fun PulsingDots(modifier: Modifier = Modifier) {
     val animations = animationsEnabled()
     val t = rememberInfiniteTransition(label = "dots")
-    Row(modifier.clearAndSetSemantics {}, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+    Row(modifier.clearAndSetSemantics {}, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         repeat(3) { i ->
             val alpha by t.animateFloat(
                 initialValue = if (animations) 0.2f else 0.7f,
@@ -309,7 +449,7 @@ fun PulsingDots(modifier: Modifier = Modifier) {
                 animationSpec = pulseSpec(i * 200),
                 label = "dot$i",
             )
-            Box(Modifier.size(3.dp).graphicsLayer { this.alpha = alpha }.background(Ink.I500, CircleShape))
+            Box(Modifier.size(4.dp).graphicsLayer { this.alpha = alpha }.background(Ink.I300, CircleShape))
         }
     }
 }

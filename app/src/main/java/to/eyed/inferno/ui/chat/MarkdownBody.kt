@@ -89,17 +89,40 @@ import to.eyed.inferno.ui.theme.whiteA
  */
 @Composable
 fun MarkdownBody(text: String, modifier: Modifier = Modifier, streaming: Boolean = false, animateStreaming: Boolean = true) {
-    // Parse the live tail with the same safe markdown/math pipeline as completed messages.
-    // Previously streaming bypassed it, so headings (###), emphasis (**...**) and formulas were shown literally.
-    val formatted = remember(text) { runCatching { SafeMathMarkdown.sanitize(MarkdownMath.format(text)) }.getOrDefault(text) }
-    val split = remember(formatted) { MarkdownChunker.splitOpenFence(formatted) }
-    val chunks = remember(split.first) { MarkdownChunker.chunks(split.first) }
-    SelectionContainer {
-        Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            chunks.forEachIndexed { index, chunk -> key(index) { if (streaming && index == chunks.lastIndex) StreamingMarkdownTail(chunk, animateStreaming) else MarkdownChunkView(chunk) } }
-            split.second?.let { fence ->
-                key("live-code") { MonoCodeBlock(fence.code, fence.language, streaming = streaming) }
+    if (streaming) {
+        StreamingMarkdownBody(text, modifier, animateStreaming)
+    } else {
+        val formatted = remember(text) { formatMarkdownChunk(text) }
+        val split = remember(formatted) { MarkdownChunker.splitOpenFence(formatted) }
+        val chunks = remember(split.first) { MarkdownChunker.chunks(split.first) }
+        SelectionContainer {
+            Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                chunks.forEachIndexed { index, chunk -> key(index) { MarkdownChunkView(chunk) } }
+                split.second?.let { fence -> key("live-code") { MonoCodeBlock(fence.code, fence.language) } }
             }
+        }
+    }
+}
+
+private fun formatMarkdownChunk(source: String): String =
+    runCatching { SafeMathMarkdown.sanitize(MarkdownMath.format(source)) }.getOrDefault(source)
+
+@Composable
+private fun StreamingMarkdownBody(text: String, modifier: Modifier, animateStreaming: Boolean) {
+    // Split the raw stream before formatting. Every completed paragraph is formatted and parsed once;
+    // only the final growing paragraph is revisited as tokens arrive.
+    val split = remember(text) { MarkdownChunker.splitOpenFence(text) }
+    val chunks = remember(split.first) { MarkdownChunker.chunks(split.first) }
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        chunks.forEachIndexed { index, rawChunk ->
+            key(index) {
+                val chunk = remember(rawChunk) { formatMarkdownChunk(rawChunk) }
+                if (index == chunks.lastIndex) StreamingMarkdownTail(chunk, animateStreaming)
+                else MarkdownChunkView(chunk)
+            }
+        }
+        split.second?.let { fence ->
+            key("live-code") { MonoCodeBlock(fence.code, fence.language, streaming = true) }
         }
     }
 }
@@ -185,7 +208,7 @@ private fun StreamingMarkdownTail(chunk: String, animateStreaming: Boolean) {
         val trailing = lines.drop(closeIndex + 1).joinToString("\n")
         if (trailing.isNotBlank()) MarkdownTextChunk(trailing, animateStreaming)
     } else {
-        val rendered = remember(chunk) { runCatching { SafeMathMarkdown.sanitize(MarkdownMath.format(chunk)) }.getOrDefault(chunk) }
+        val rendered = chunk
         // Fade once when the live message first appears. Restarting this animation for every
         // token batch caused opacity to stutter and kept the tail from ever settling at 1f.
         val tailFade = remember { Animatable(if (animateStreaming) 0.92f else 1f) }
@@ -197,7 +220,7 @@ private fun StreamingMarkdownTail(chunk: String, animateStreaming: Boolean) {
             }
         }
         Box(Modifier.fillMaxWidth().graphicsLayer { alpha = tailFade.value }) {
-            MarkdownChunkView(rendered)
+            MarkdownChunkView(rendered, animated = true)
         }
     }
 }
@@ -208,7 +231,7 @@ private fun MarkdownTextChunk(chunk: String, animated: Boolean = false) {
     // immediate parses the first composition synchronously (no blank frame) and retainState keeps the
     // previous tree on screen during the async re-parse; without both, each publish flashes the
     // library's placeholder, which reads as violent flicker at streaming rate.
-    val state = rememberMarkdownState(content = chunk, retainState = true, immediate = true)
+    val state = rememberMarkdownState(content = chunk, retainState = true, immediate = !animated)
     Markdown(
         markdownState = state,
         colors = markdownColor(
@@ -417,12 +440,16 @@ internal object MarkdownMath {
     )
     private val superscript = mapOf(
         '0' to '⁰', '1' to '¹', '2' to '²', '3' to '³', '4' to '⁴', '5' to '⁵', '6' to '⁶', '7' to '⁷', '8' to '⁸', '9' to '⁹',
-        '+' to '⁺', '-' to '⁻', '=' to '⁼', '(' to '⁽', ')' to '⁾', 'n' to 'ⁿ', 'i' to 'ⁱ', 'T' to 'ᵀ', 'k' to 'ᵏ'
+        '+' to '⁺', '-' to '⁻', '=' to '⁼', '(' to '⁽', ')' to '⁾', 'n' to 'ⁿ', 'i' to 'ⁱ', 'T' to 'ᵀ', 'k' to 'ᵏ',
+        'a' to 'ᵃ', 'b' to 'ᵇ', 'c' to 'ᶜ', 'd' to 'ᵈ', 'e' to 'ᵉ', 'f' to 'ᶠ', 'g' to 'ᵍ', 'h' to 'ʰ',
+        'j' to 'ʲ', 'l' to 'ˡ', 'm' to 'ᵐ', 'o' to 'ᵒ', 'p' to 'ᵖ', 'r' to 'ʳ', 's' to 'ˢ', 't' to 'ᵗ',
+        'u' to 'ᵘ', 'v' to 'ᵛ', 'w' to 'ʷ', 'x' to 'ˣ', 'y' to 'ʸ', 'z' to 'ᶻ'
     )
     private val subscript = mapOf(
         '0' to '₀', '1' to '₁', '2' to '₂', '3' to '₃', '4' to '₄', '5' to '₅', '6' to '₆', '7' to '₇', '8' to '₈', '9' to '₉',
         '+' to '₊', '-' to '₋', '=' to '₌', '(' to '₍', ')' to '₎', 'a' to 'ₐ', 'e' to 'ₑ', 'i' to 'ᵢ',
-        'j' to 'ⱼ', 'k' to 'ₖ', 'n' to 'ₙ', 'x' to 'ₓ', 'h' to 'ₕ', 'r' to 'ᵣ', 's' to 'ₛ', 't' to 'ₜ', 'u' to 'ᵤ', 'v' to 'ᵥ'
+        'j' to 'ⱼ', 'k' to 'ₖ', 'n' to 'ₙ', 'x' to 'ₓ', 'h' to 'ₕ', 'r' to 'ᵣ', 's' to 'ₛ', 't' to 'ₜ', 'u' to 'ᵤ', 'v' to 'ᵥ',
+        'b' to 'ᵦ', 'c' to 'ᶜ', 'd' to 'ᑯ', 'f' to 'բ', 'g' to 'ᵧ', 'm' to 'ₘ', 'o' to 'ₒ', 'p' to 'ₚ', 'q' to '૧', 'w' to 'ʷ', 'y' to 'ᵧ'
     )
 
     private val doubleStruckUpper = "𝔸𝔹ℂ𝔻𝔼𝔽𝔾ℍ𝕀𝕁𝕂𝕃𝕄ℕ𝕆ℙℚℝ𝕊𝕋𝕌𝕍𝕎𝕏𝕐ℤ"
@@ -499,56 +526,146 @@ internal object MarkdownMath {
 
     private fun formatExpression(raw: String): String {
         if (raw.length > MAX_EXPRESSION_CHARS) return raw
-        var value = raw.trim()
-        repeat(5) {
-            value = binomial.replace(value) { "C(${it.groupValues[1]}, ${it.groupValues[2]})" }
-            value = simpleFraction.replace(value) { "(${it.groupValues[1].trim()})/(${it.groupValues[2].trim()})" }
-            value = indexedRoot.replace(value) { "${mapIndex(it.groupValues[1], superscript, "⁽${it.groupValues[1]}⁾")}√(${it.groupValues[2]})" }
-            value = squareRoot.replace(value) { "√(${it.groupValues[1]})" }
-            value = overUnder.replace(value) { "${it.groupValues[2]}⁽${it.groupValues[1]}⁾" }
+        return LatexReadableParser(raw).parse()
+    }
+
+    /** Small bounded LaTeX reader: braces are balanced, so nested fractions and roots stay readable. */
+    private class LatexReadableParser(private val source: String) {
+        private var index = 0
+
+        fun parse(): String = readUntil(null).replace(Regex("""\s+"""), " ").trim()
+
+        private fun readUntil(close: Char?): String {
+            val out = StringBuilder()
+            while (index < source.length) {
+                val ch = source[index]
+                if (close != null && ch == close) {
+                    index++
+                    break
+                }
+                when (ch) {
+                    '{' -> { index++; out.append(readUntil('}')) }
+                    '}' -> { index++; out.append('}') }
+                    '\\' -> out.append(readCommand())
+                    '^', '_' -> {
+                        index++
+                        val argument = readArgument()
+                        val table = if (ch == '^') MarkdownMath.superscript else MarkdownMath.subscript
+                        val fallback = if (ch == '^') "^($argument)" else "_($argument)"
+                        out.append(MarkdownMath.mapIndex(argument, table, fallback))
+                    }
+                    else -> {
+                        out.append(ch)
+                        index++
+                    }
+                }
+            }
+            return out.toString()
         }
-        value = wrappedCommand.replace(value) { match ->
-            val command = match.groupValues[1]
-            val content = match.groupValues[2]
-            when (command) {
-                "mathbb" -> styleLetters(content, doubleStruckUpper, doubleStruckLower)
-                "mathcal", "mathscr" -> styleLetters(content, scriptUpper, scriptLower)
-                "mathfrak" -> styleLetters(content, frakturUpper, frakturLower)
-                "mathbf", "boldsymbol" -> styleLetters(content, boldUpper, boldLower)
-                "mathit" -> styleLetters(content, italicUpper, italicLower)
-                "mathsf" -> styleLetters(content, sansUpper, sansLower)
-                "mathtt" -> styleLetters(content, monoUpper, monoLower)
-                else -> content
+
+        private fun readArgument(): String {
+            while (index < source.length && source[index].isWhitespace()) index++
+            if (index >= source.length) return ""
+            if (source[index] == '{') {
+                index++
+                return readUntil('}')
+            }
+            if (source[index] == '\\') return readCommand()
+            val start = index
+            index++
+            return source.substring(start, index)
+        }
+
+        private fun readCommand(): String {
+            index++
+            if (index >= source.length) return ""
+            if (!source[index].isLetter()) {
+                val symbol = source[index++]
+                return when (symbol) {
+                    ',', ';', ':' -> " "
+                    '!' -> ""
+                    '%' -> "%"
+                    '_' -> "_"
+                    '&' -> "&"
+                    '{' -> "{"
+                    '}' -> "}"
+                    '\\' -> " "
+                    else -> symbol.toString()
+                }
+            }
+            val start = index
+            while (index < source.length && source[index].isLetter()) index++
+            val command = source.substring(start, index)
+            return when (command) {
+                "frac", "dfrac", "tfrac", "cfrac" -> {
+                    val numerator = readArgument()
+                    val denominator = readArgument()
+                    "($numerator)/($denominator)"
+                }
+                "sqrt" -> {
+                    val rootIndex = readOptionalIndex()
+                    val value = readArgument()
+                    val prefix = rootIndex?.let { MarkdownMath.mapIndex(it, MarkdownMath.superscript, it) }.orEmpty()
+                    "$prefix√($value)"
+                }
+                "mathbb", "mathcal", "mathscr", "mathfrak", "mathbf", "boldsymbol", "mathit", "mathsf", "mathtt" -> {
+                    val value = readArgument()
+                    when (command) {
+                        "mathbb" -> MarkdownMath.styleLetters(value, MarkdownMath.doubleStruckUpper, MarkdownMath.doubleStruckLower)
+                        "mathcal", "mathscr" -> MarkdownMath.styleLetters(value, MarkdownMath.scriptUpper, MarkdownMath.scriptLower)
+                        "mathfrak" -> MarkdownMath.styleLetters(value, MarkdownMath.frakturUpper, MarkdownMath.frakturLower)
+                        "mathbf", "boldsymbol" -> MarkdownMath.styleLetters(value, MarkdownMath.boldUpper, MarkdownMath.boldLower)
+                        "mathit" -> MarkdownMath.styleLetters(value, MarkdownMath.italicUpper, MarkdownMath.italicLower)
+                        "mathsf" -> MarkdownMath.styleLetters(value, MarkdownMath.sansUpper, MarkdownMath.sansLower)
+                        else -> MarkdownMath.styleLetters(value, MarkdownMath.monoUpper, MarkdownMath.monoLower)
+                    }
+                }
+                "mathrm", "text", "textnormal", "texttt", "operatorname", "textrm", "textsf" -> readArgument()
+                "bar", "overline", "underline", "hat", "widehat", "tilde", "widetilde", "vec", "dot", "ddot", "acute", "grave", "breve", "check" -> {
+                    val value = readArgument()
+                    val mark = when (command) {
+                        "bar", "overline" -> "̄"
+                        "underline" -> "̲"
+                        "hat", "widehat" -> "̂"
+                        "tilde", "widetilde" -> "̃"
+                        "vec" -> "⃗"
+                        "dot" -> "̇"
+                        "ddot" -> "̈"
+                        "acute" -> "́"
+                        "grave" -> "̀"
+                        "breve" -> "̆"
+                        else -> "̌"
+                    }
+                    value + mark
+                }
+                "boxed" -> "⟦" + readArgument() + "⟧"
+                "cancel", "underbrace", "overbrace" -> readArgument()
+                "overset", "stackrel" -> {
+                    val top = readArgument()
+                    val bottom = readArgument()
+                    "$bottom⁽$top⁾"
+                }
+                "begin", "end" -> { readArgument(); "" }
+                "left", "right", "displaystyle", "textstyle", "scriptstyle", "scriptscriptstyle",
+                "limits", "nolimits", "allowbreak" -> ""
+                "quad", "qquad", "enspace", "thinspace" -> " "
+                "sin", "cos", "tan", "cot", "sec", "csc", "arcsin", "arccos", "arctan",
+                "sinh", "cosh", "tanh", "log", "ln", "exp", "lim", "max", "min", "sup",
+                "inf", "det", "dim", "ker", "Pr", "arg", "deg", "gcd" -> command
+                else -> MarkdownMath.symbols[command] ?: command
             }
         }
-        value = accentCommand.replace(value) { match ->
-            val mark = when (match.groupValues[1]) {
-                "bar", "overline" -> "̄"
-                "underline" -> "̲"
-                "hat", "widehat" -> "̂"
-                "tilde", "widetilde" -> "̃"
-                "vec" -> "⃗"
-                "dot" -> "̇"
-                "ddot" -> "̈"
-                "acute" -> "́"
-                "grave" -> "̀"
-                "breve" -> "̆"
-                else -> "̌"
-            }
-            match.groupValues[2] + mark
+
+        private fun readOptionalIndex(): String? {
+            while (index < source.length && source[index].isWhitespace()) index++
+            if (index >= source.length || source[index] != '[') return null
+            index++
+            val start = index
+            while (index < source.length && source[index] != ']') index++
+            val result = source.substring(start, index)
+            if (index < source.length) index++
+            return result
         }
-        value = Regex("""\\boxed\s*\{([^{}]*)}""").replace(value) { "⟦${it.groupValues[1]}⟧" }
-        value = Regex("""\\cancel\s*\{([^{}]*)}""").replace(value) { it.groupValues[1] }
-        value = Regex("""\\underbrace\s*\{([^{}]*)}""").replace(value) { it.groupValues[1] }
-        value = environment.replace(value, "")
-        value = inlineSuperscript.replace(value) { mapIndex(it.groupValues[1].ifEmpty { it.groupValues[2] }, superscript, "^( ${it.value.removePrefix("^")} )") }
-        value = inlineSubscript.replace(value) { mapIndex(it.groupValues[1].ifEmpty { it.groupValues[2] }, subscript, "_(${it.value.removePrefix("_")})") }
-        value = escapedSymbols.replace(value) { symbols[it.groupValues[1]] ?: it.groupValues[1] }
-        value = ignoredCommands.replace(value, "")
-        value = value.replace("""\\%""", "%").replace("""\\_""", "_").replace("""\\&""", "&")
-            .replace("{", "").replace("}", "")
-        value = whitespace.replace(value, " ").trim()
-        return value
     }
 
     private fun styleLetters(value: String, upper: String, lower: String): String {

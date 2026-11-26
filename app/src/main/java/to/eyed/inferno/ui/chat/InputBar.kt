@@ -389,12 +389,12 @@ private fun SendButton(
     val subdued = loading || calibrating || prefill != null || !active
     val stopping = streaming || queued
     val interaction = remember { MutableInteractionSource() }
-    val bg by animateColorAsState(Ink.White.copy(alpha = if (subdued) 0.58f else 1f), fastEffectsSpec(), label = "sendBg")
-    val restScale by animateFloatAsState(if (active) 1f else 0.97f, fastSpatialSpec(), label = "sendScale")
+    val bg by animateColorAsState(Ink.White.copy(alpha = if (subdued) 0.62f else 1f), fastEffectsSpec(), label = "sendBg")
     Box(
-        Modifier.size(40.dp).graphicsLayer { scaleX = restScale; scaleY = restScale }
-            .shadow(if (active) 2.dp else 0.dp, CircleShape)
-            .pressScale(interaction, 0.93f).clip(CircleShape).background(bg)
+        Modifier.size(36.dp)
+            .pressScale(interaction, 0.92f)
+            .clip(CircleShape)
+            .background(bg)
             .clickable(interactionSource = interaction, indication = null, enabled = active, role = Role.Button) {
                 if (stopping) onStop() else onSend()
             },
@@ -402,11 +402,17 @@ private fun SendButton(
     ) {
         AnimatedContent(
             targetState = stopping,
-            transitionSpec = { (fadeIn(tween(130)) + scaleIn(initialScale = 0.82f)) togetherWith (fadeOut(tween(90)) + scaleOut(targetScale = 0.82f)) },
+            transitionSpec = {
+                (fadeIn(tween(110)) + scaleIn(initialScale = 0.78f)) togetherWith
+                    (fadeOut(tween(85)) + scaleOut(targetScale = 0.78f))
+            },
             label = "sendButtonIcon",
         ) { isStopping ->
-            if (isStopping) Icon(Lucide.Square, S.stop, Modifier.size(15.dp), tint = Ink.Pitch)
-            else Icon(Lucide.ArrowUp, S.send, Modifier.size(19.dp), tint = Ink.Pitch)
+            if (isStopping) {
+                Box(Modifier.size(11.dp).clip(RoundedCornerShape(3.dp)).background(Ink.Pitch))
+            } else {
+                Icon(Lucide.ArrowUp, S.send, Modifier.size(18.dp), tint = Ink.Pitch)
+            }
         }
     }
 }
