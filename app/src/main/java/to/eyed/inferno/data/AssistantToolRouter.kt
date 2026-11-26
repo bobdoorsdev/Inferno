@@ -410,7 +410,7 @@ object AssistantToolRouter {
             "fake browser results", "pretend search", "simulation of a web search",
         ).any(lower::contains)
         if (explicitSimulation) return true
-        val codeFence = listOf("\x60\x60\x60lua", "\x60\x60\x60python", "\x60\x60\x60javascript", "\x60\x60\x60js").any(lower::contains)
+        val codeFence = listOf("\u0060\u0060\u0060lua", "\u0060\u0060\u0060python", "\u0060\u0060\u0060javascript", "\u0060\u0060\u0060js").any(lower::contains)
         val scriptMarkers = listOf(
             "local results", "local searchresults", "search_results =", "searchresults =",
             "http.get(", "http.request(", "requests.get(", "duckduckgo.com", "fetch(",
