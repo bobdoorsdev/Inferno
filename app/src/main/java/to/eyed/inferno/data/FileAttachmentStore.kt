@@ -23,7 +23,7 @@ data class FileAttachment(
 class FileAttachmentStore(private val context: Context) {
     private val root = File(context.filesDir, "attachments")
 
-    suspend fun import(uri: Uri): FileAttachment = withContext(Dispatchers.IO) {
+    suspend fun importFile(uri: Uri): FileAttachment = withContext(Dispatchers.IO) {
         root.mkdirs()
         val resolver = context.contentResolver
         val name = resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
