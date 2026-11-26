@@ -14,13 +14,10 @@ class ModelCatalogTest {
     @Test
     fun visibleRowsInRankedOrder() {
         assertEquals(
-            listOf(
-                "qwen3.5-2b-q4_0", "minicpm-v-4.6-q4_0", "lfm2.5-vl-1.6b-q4_0", "gemma-4-e2b-q4_0", "lfm2.5-vl-3b-q4_0",
-                "qwen3.5-0.8b-q8_0", "qwen3-vl-2b-q4_0", "qwen3.5-4b-q4_0", "lfm2.5-vl-450m-q8_0",
-            ),
+            listOf("qwen3.5-0.8b-q8_0"),
             ModelCatalog.visible.map { it.id },
         )
-        assertEquals(ModelCatalog.models.size, ModelCatalog.visible.size)
+        assertEquals(1, ModelCatalog.visible.size)
     }
 
     @Test
@@ -33,8 +30,8 @@ class ModelCatalogTest {
 
     @Test
     fun exactlyOneRecommended() {
-        assertEquals(listOf("qwen3.5-2b-q4_0"), ModelCatalog.models.filter { it.recommended }.map { it.id })
-        assertSame(ModelCatalog.byId("qwen3.5-2b-q4_0"), ModelCatalog.recommended)
+        assertEquals(listOf("qwen3.5-0.8b-q8_0"), ModelCatalog.models.filter { it.recommended }.map { it.id })
+        assertSame(ModelCatalog.byId("qwen3.5-0.8b-q8_0"), ModelCatalog.recommended)
         assertEquals(ModelCatalog.recommended, ModelCatalog.visible.first())
     }
 

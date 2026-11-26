@@ -46,6 +46,22 @@ class AssistantToolRouterTest {
         assertEquals("Show me pictures of a red panda", AssistantToolRouter.fallbackImageQuery("Show me pictures of a red panda"))
     }
 
+    @Test fun productRecommendationsAlsoRequestImages() {
+        assertEquals("Best gaming PCs online", AssistantToolRouter.fallbackImageQuery("Best gaming PCs online"))
+        assertEquals("Compare the best monitors", AssistantToolRouter.fallbackImageQuery("Compare the best monitors"))
+        assertNull(AssistantToolRouter.fallbackImageQuery("Explain how GPUs work"))
+    }
+
+    @Test fun weatherLocationIsParsedForThePrivateWeatherTool() {
+        val plan = AssistantToolRouter.parse(
+            """{"weather_location":"São Paulo, Brazil","current_time":true}"""
+        )
+        assertEquals("São Paulo, Brazil", plan.weatherLocation)
+        assertTrue(plan.currentTime)
+        assertEquals("Piumhi", AssistantToolRouter.fallbackWeatherLocation("What is the weather in Piumhi?"))
+        assertNull(AssistantToolRouter.fallbackWeatherLocation("Explain how weather systems work"))
+    }
+
     @Test fun calculatorUsesOperatorPrecedenceAndParentheses() {
         assertEquals("14", AssistantToolRouter.calculate("2 + 3 * 4")?.result)
         assertEquals("20", AssistantToolRouter.calculate("(2 + 3) * 4")?.result)

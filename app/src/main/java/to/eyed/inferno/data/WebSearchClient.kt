@@ -12,6 +12,8 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -23,7 +25,7 @@ data class WebSearchResult(val title: String, val url: String, val snippet: Stri
 /** Small model-independent web search adapter. Search runs before local inference and returns cited excerpts. */
 class WebSearchClient(private val client: OkHttpClient = DEFAULT_CLIENT) {
     suspend fun searchAll(queries: List<String>): List<WebSearchResult> = coroutineScope {
-        queries.map(String::trim).filter { it.length >= 2 }.distinct().take(2)
+        queries.map(String::trim).filter { it.length >= 2 }.distinct().take(4)
             .map { query -> async {
                 try {
                     search(query)
@@ -33,7 +35,7 @@ class WebSearchClient(private val client: OkHttpClient = DEFAULT_CLIENT) {
                     emptyList()
                 }
             } }
-            .awaitAll().flatten().distinctBy { it.url }.take(5)
+            .awaitAll().flatten().distinctBy { it.url }.take(8)
     }
 
     /** Optional image lookup. Results are never mixed into factual web citations. */
@@ -66,12 +68,47 @@ class WebSearchClient(private val client: OkHttpClient = DEFAULT_CLIENT) {
         val rows = runCatching { Json.parseToJsonElement(json).jsonObject["results"]?.jsonArray }.getOrNull().orEmpty()
         rows.mapNotNull { item ->
             val obj = item.jsonObject
-            val image = obj["image"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+            val image = obj["thumbnail"]?.jsonPrimitive?.contentOrNull
+                ?: obj["image"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
             val source = obj["url"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
             val title = obj["title"]?.jsonPrimitive?.contentOrNull?.take(120).orEmpty().ifBlank { q }
             val uri = runCatching { Uri.parse(image) }.getOrNull() ?: return@mapNotNull null
             if (uri.scheme != "https" || uri.host.isNullOrBlank()) null else WebImageResult(title, image, source)
         }.distinctBy { it.imageUrl }.take(3)
+    }
+
+
+    /** Current conditions via Open-Meteo geocoding + forecast; no API key or account is required. */
+    suspend fun currentWeather(location: String): String? = withContext(Dispatchers.IO) {
+        val query = location.trim().take(100)
+        if (query.length < 2) return@withContext null
+        val encoded = URLEncoder.encode(query, Charsets.UTF_8.name())
+        val geocodeUrl = "https://geocoding-api.open-meteo.com/v1/search?name=$encoded&count=1&language=en&format=json"
+        val geoText = client.newCall(Request.Builder().url(geocodeUrl).header("User-Agent", USER_AGENT).build())
+            .execute().use { response ->
+                if (!response.isSuccessful) return@withContext null
+                response.body?.string().orEmpty()
+            }
+        val place = runCatching {
+            Json.parseToJsonElement(geoText).jsonObject["results"]?.jsonArray?.firstOrNull()?.jsonObject
+        }.getOrNull() ?: return@withContext null
+        val latitude = place["latitude"]?.jsonPrimitive?.doubleOrNull ?: return@withContext null
+        val longitude = place["longitude"]?.jsonPrimitive?.doubleOrNull ?: return@withContext null
+        val name = place["name"]?.jsonPrimitive?.contentOrNull ?: query
+        val country = place["country"]?.jsonPrimitive?.contentOrNull.orEmpty()
+        val forecastUrl = "https://api.open-meteo.com/v1/forecast?latitude=$latitude&longitude=$longitude&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m&timezone=auto"
+        val forecastText = client.newCall(Request.Builder().url(forecastUrl).header("User-Agent", USER_AGENT).build())
+            .execute().use { response ->
+                if (!response.isSuccessful) return@withContext null
+                response.body?.string().orEmpty()
+            }
+        val current = runCatching {
+            Json.parseToJsonElement(forecastText).jsonObject["current"]?.jsonObject
+        }.getOrNull() ?: return@withContext null
+        fun value(key: String) = current[key]?.jsonPrimitive?.contentOrNull ?: "unavailable"
+        val code = current["weather_code"]?.jsonPrimitive?.intOrNull ?: -1
+        val placeName = listOf(name, country).filter { it.isNotBlank() }.joinToString(", ")
+        "$placeName: ${weatherDescription(code)}, ${value("temperature_2m")} °C, feels like ${value("apparent_temperature")} °C, humidity ${value("relative_humidity_2m")}%, precipitation ${value("precipitation")} mm, wind ${value("wind_speed_10m")} km/h. Local observation time: ${value("time")}."
     }
 
     suspend fun search(query: String): List<WebSearchResult> = withContext(Dispatchers.IO) {
@@ -90,6 +127,20 @@ class WebSearchClient(private val client: OkHttpClient = DEFAULT_CLIENT) {
     }
 
     companion object {
+        private fun weatherDescription(code: Int): String = when (code) {
+            0 -> "clear sky"
+            1 -> "mainly clear"
+            2 -> "partly cloudy"
+            3 -> "overcast"
+            45, 48 -> "fog"
+            in 51..57 -> "drizzle"
+            in 61..67 -> "rain"
+            in 71..77 -> "snow"
+            in 80..82 -> "rain showers"
+            85, 86 -> "snow showers"
+            in 95..99 -> "thunderstorm"
+            else -> "conditions unavailable"
+        }
         private const val MAX_QUERY_CHARS = 400
         private const val MAX_SNIPPET_CHARS = 320
         private const val USER_AGENT = "Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 Chrome/131.0 Mobile Safari/537.36"

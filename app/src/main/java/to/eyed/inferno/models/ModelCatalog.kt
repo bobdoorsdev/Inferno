@@ -34,7 +34,7 @@ object ModelCatalog {
             imageTokensMin = 0, imageTokensMax = 512, dynamicResolution = true, maxImageEdgePx = 1536, encoderPeakBytes = 700 * MB,
             estTgTps = "12-15",   // measured 2026-09-16: pp 86.6 / tg 14.8 (11.6 at sustained clocks)
             blurb = "Best all-round chat and vision for this phone; optional thinking mode.",
-            recommended = true, encodeMsAt448 = 5100,
+            encodeMsAt448 = 5100,
         ),
         CatalogModel(
             id = "minicpm-v-4.6-q4_0", displayName = "MiniCPM-V 4.6", family = ModelFamily.MINICPMV, tier = ModelTier.FASTEST,
@@ -111,6 +111,7 @@ object ModelCatalog {
             imageTokensMin = 0, imageTokensMax = 512, dynamicResolution = true, maxImageEdgePx = 1536, encoderPeakBytes = 700 * MB,
             estTgTps = "20-22",   // measured 2026-09-16: pp 244 / tg 21.5
             blurb = "Small and quick; fine for short questions and simple image descriptions.",
+            recommended = true,
         ),
         CatalogModel(
             id = "qwen3-vl-2b-q4_0", displayName = "Qwen3-VL 2B", family = ModelFamily.QWEN3VL, tier = ModelTier.BALANCED,
@@ -153,8 +154,8 @@ object ModelCatalog {
     /** Rows gated out of every list. Empty since MiniCPM-V 4.6 passed the vision acceptance test with the Q8_0 projector at 448 px. */
     private val hidden: Set<String> = emptySet()
 
-    val visible: List<CatalogModel> = models.filter { it.tier != ModelTier.LEGACY && it.id !in hidden }
     private val byId: Map<String, CatalogModel> = models.associateBy { it.id }
+    val visible: List<CatalogModel> = models.filter { it.id == "qwen3.5-0.8b-q8_0" }
     fun byId(id: String): CatalogModel? = byId[id]
-    val recommended: CatalogModel = models.first { it.recommended }
+    val recommended: CatalogModel = byId.getValue("qwen3.5-0.8b-q8_0")
 }

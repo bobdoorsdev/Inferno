@@ -134,7 +134,7 @@ class ModelRepository(
             .map { ModelEntry(it.id, it.catalog, it, DownloadState.Downloaded) }
         val imports = s.models.filter { it.catalog == null }.sortedBy { it.importedAt }
             .map { ModelEntry(it.id, null, it, DownloadState.Downloaded) }
-        rows + extra + imports
+        if (catalog.map { it.id } == ModelCatalog.visible.map { it.id }) rows else rows + extra + imports
     }.stateIn(scope, SharingStarted.Eagerly, emptyList())
 
     /** Download state per image model id (the Create screen cards). */
