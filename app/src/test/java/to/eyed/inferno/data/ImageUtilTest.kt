@@ -69,7 +69,7 @@ class ImageUtilTest {
         assertEquals("", ChatRepository.titleFrom("  \n\n "))
         assertEquals("", ChatRepository.titleFrom("\n  Hello there  \nsecond line"))
         assertEquals("How to build Roblox rooms", ChatRepository.titleFrom("  How to build Roblox rooms  \nsecond line"))
-        val longer = "build ".repeat(20).trim()
+        val longer = "word ".repeat(20).trim()
         val t = ChatRepository.titleFrom(longer)
         assertEquals(49, t.length)
         assertEquals('…', t.last())
