@@ -157,7 +157,10 @@ class AppViewModel(private val c: AppContainer, private val handle: SavedStateHa
             notice(S.crashedWhileLoading(c.models.displayName(crashed)))
             return
         }
-        val selected = s.selectedModelId ?: return
+        val savedSelection = s.selectedModelId ?: return
+        val selected = savedSelection.takeIf { id -> ModelCatalog.visible.any { it.id == id } }
+            ?: ModelCatalog.recommended.id
+        if (selected != savedSelection) c.prefs.setSelectedModel(selected)
         if (!s.keepModelLoaded) return
         chatShown.first { it }
         models.first { it.isNotEmpty() }          // the disk scan has landed

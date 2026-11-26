@@ -94,8 +94,8 @@ class AssistantToolRouterTest {
         assertTrue(notes!!.startsWith(AssistantToolRouter.NOTES_MARKER))
         assertTrue(notes.contains("**Web search**"))
         assertTrue(notes.contains("latest release"))
-        assertTrue(notes.contains("[Example](https://example.com)"))
+        assertTrue(notes.contains("**[Example](https://example.com)** · example.com"))
         assertTrue(notes.contains("2 + 2 = 4"))
-        assertTrue(notes.contains("Wednesday, 25 November 2026"))
+        assertFalse(notes.contains("Wednesday, 25 November 2026"))
     }
 }

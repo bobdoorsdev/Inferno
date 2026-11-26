@@ -71,7 +71,8 @@ class ModelCatalogTest {
         assertEquals(727_954_528L, minicpm.mmproj.sizeBytes)
         assertEquals("llava-uhd slicing: 448 px is a hard clamp (kernel-panic incident)", 448, minicpm.maxImageEdgePx)
         assertFalse(minicpm.dynamicResolution)
-        assertTrue(minicpm in ModelCatalog.visible)
+        assertFalse(minicpm in ModelCatalog.visible)
+        assertTrue(ModelCatalog.recommended in ModelCatalog.visible)
 
         val lfm3b = ModelCatalog.byId("lfm2.5-vl-3b-q4_0")!!
         assertEquals("LFM Open License v1.0", lfm3b.license)

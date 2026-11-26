@@ -72,7 +72,7 @@ Return JSON only: {"search_queries":[],"image_queries":[],"image_prompt":"","cal
         val queries = when (val element = root["search_queries"]) {
             is JsonArray -> element.mapNotNull { it.jsonPrimitive.contentOrNull?.trim()?.takeIf(String::isNotEmpty) }
             else -> element?.jsonPrimitive?.contentOrNull?.trim()?.takeIf(String::isNotEmpty)?.let(::listOf).orEmpty()
-        }.distinct().take(2).map { it.take(180) }
+        }.distinct().take(4).map { it.take(180) }
         val imageQueries = when (val element = root["image_queries"]) {
             is JsonArray -> element.mapNotNull { it.jsonPrimitive.contentOrNull?.trim()?.takeIf(String::isNotEmpty) }
             else -> element?.jsonPrimitive?.contentOrNull?.trim()?.takeIf(String::isNotEmpty)?.let(::listOf).orEmpty()
@@ -168,7 +168,8 @@ Return JSON only: {"search_queries":[],"image_queries":[],"image_prompt":"","cal
         images: List<WebImageResult> = emptyList(),
     ): String? {
         val search = searchNotes(results, searchQueries, images)
-        if (search == null && calculation == null && currentTime == null) return null
+        // Time is private tool context, never a standalone visible search/activity note.
+        if (search == null && calculation == null) return null
         return buildString {
             append(NOTES_MARKER)
             if (search != null) append("\n\n").append(SEARCH_MARKER).append("\n").append(search)
