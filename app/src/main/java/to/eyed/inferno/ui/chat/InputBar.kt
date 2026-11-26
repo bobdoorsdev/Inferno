@@ -58,6 +58,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
@@ -72,6 +73,7 @@ import com.composables.icons.lucide.Plus
 import com.composables.icons.lucide.Square
 import com.composables.icons.lucide.X
 import to.eyed.inferno.data.Attachment
+import to.eyed.inferno.data.FileAttachment
 import to.eyed.inferno.engine.EngineState
 import to.eyed.inferno.ui.S
 import to.eyed.inferno.ui.components.GhostIconButton
@@ -100,6 +102,8 @@ fun InputBar(
     onValueChange: (String) -> Unit,
     attachments: List<Attachment>,
     onRemoveAttachment: (Int) -> Unit,
+    files: List<FileAttachment>,
+    onRemoveFile: (Int) -> Unit,
     canAttachImages: Boolean,
     cameraAvailable: Boolean,
     noVisionReason: String?,
@@ -123,7 +127,7 @@ fun InputBar(
     val idle = disabledReason != null
     val loading = engine is EngineState.Loading
     val streaming = gen.isBusy && gen !is GenState.Queued
-    val hasContent = value.isNotBlank() || attachments.isNotEmpty()
+    val hasContent = value.isNotBlank() || attachments.isNotEmpty() || files.isNotEmpty()
     val enabledCard by animateFloatAsState(if (idle) 0.6f else 1f, fastEffectsSpec(), label = "composerAlpha")
     val placeholder = when {
         disabledReason != null -> disabledReason
@@ -136,6 +140,7 @@ fun InputBar(
         Column(Modifier.fillMaxWidth().background(Ink.Pitch).padding(start = 12.dp, end = 12.dp, bottom = 12.dp)) {
             ComposerNotice(gen, imageBusy)
             if (attachments.isNotEmpty()) ThumbStrip(attachments, onRemoveAttachment)
+            if (files.isNotEmpty()) FileStrip(files, onRemoveFile)
             Column(
                 Modifier
                     .fillMaxWidth()
@@ -231,6 +236,31 @@ private fun ThumbStrip(attachments: List<Attachment>, onRemove: (Int) -> Unit) {
 }
 
 /** The plus remains visible even when a model cannot accept images; unavailable image actions are disabled. */
+@Composable
+private fun FileStrip(files: List<FileAttachment>, onRemove: (Int) -> Unit) {
+    val haptics = rememberHaptics()
+    LazyRow(Modifier.padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+        items(files.size, key = { files[it].id }) { index ->
+            Row(
+                Modifier.clip(RoundedCornerShape(Radii.control)).background(Ink.SurfaceHigh)
+                    .padding(start = 9.dp, end = 5.dp, top = 7.dp, bottom = 7.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(7.dp),
+            ) {
+                Icon(Lucide.FileText, null, Modifier.size(15.dp), tint = Ink.I300)
+                Text(files[index].displayName, color = Ink.I100, fontSize = 12.sp, maxLines = 1,
+                    overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 150.dp))
+                Box(Modifier.size(22.dp).clip(CircleShape).clickable(
+                    interactionSource = remember { MutableInteractionSource() }, indication = null,
+                    role = Role.Button,
+                ) { haptics.tap(); onRemove(index) }, contentAlignment = Alignment.Center) {
+                    Icon(Lucide.X, "Remove ${files[index].displayName}", Modifier.size(12.dp), tint = Ink.I400)
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun AttachButton(
     canAttachImages: Boolean, cameraAvailable: Boolean, noVisionReason: String?, idle: Boolean,
