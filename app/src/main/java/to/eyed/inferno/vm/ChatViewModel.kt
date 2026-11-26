@@ -589,8 +589,10 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
                                 else webSearchClient.searchAll(
                                     roundSearch,
                                     onResults = { partial ->
+                                        val liveSources = (webResults.toList() + partial).distinctBy { it.url }
+                                        _toolSourceUrls.value = liveSources.map { it.url }
                                         _toolSearchNotes.value = AssistantToolRouter.searchNotes(
-                                            (webResults.toList() + partial).distinctBy { it.url },
+                                            liveSources,
                                             visibleSearchQueries.toList(),
                                             webImages.toList(),
                                         )
