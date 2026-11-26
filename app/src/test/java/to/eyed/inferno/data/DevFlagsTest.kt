@@ -47,7 +47,7 @@ class DevFlagsTest {
     @Test fun metaLineHidesNumbersForNormalUsers() {
         val clean = MessageStats(promptTokens = 40, generatedTokens = 120, prefillMs = 200, decodeMs = 8_000, kvUsedTokens = 160, nCtx = 8192, finishReason = "EOS", modelId = "m")
         assertNull(metaLine(clean, tech = false))
-        assertEquals("stopped", metaLine(clean.copy(finishReason = "CANCELLED"), tech = false))
+        assertEquals("Stopped...", metaLine(clean.copy(finishReason = "CANCELLED"), tech = false))
         val dev = metaLine(clean, tech = true)!!
         assertTrue(dev, dev.startsWith("15.0 tok/s · 120 tokens · 8.2 s · prefill 200 ms · ctx 160/8,192"))
     }
