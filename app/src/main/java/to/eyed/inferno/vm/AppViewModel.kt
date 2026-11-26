@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import to.eyed.inferno.AppContainer
 import to.eyed.inferno.data.DevFlag
 import to.eyed.inferno.data.ContextPolicy
@@ -310,8 +311,21 @@ class AppViewModel(private val c: AppContainer, private val handle: SavedStateHa
 
     /** pp512/tg128 x1 on the first load of a model; the result drives the ADPF target and the meta-line estimate. */
     private suspend fun calibrate(modelId: String, loadMs: Long) {
-        val r = c.engine.bench(nPrompt = 512, nGen = 128, reps = 1) { _, _ -> }
-        val cal = Calibration(ppTps = r.ppTps, tgTps = r.tgTps, loadMs = loadMs, at = System.currentTimeMillis())
+        val result = try {
+            withTimeoutOrNull(15_000L) {
+                c.engine.bench(nPrompt = 64, nGen = 16, reps = 1) { _, _ -> }
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            null
+        } ?: return
+        val cal = Calibration(
+            ppTps = result.ppTps,
+            tgTps = result.tgTps,
+            loadMs = loadMs,
+            at = System.currentTimeMillis(),
+        )
         c.prefs.setCalibration(modelId, cal)
         c.engine.setCalibration(cal)
     }
