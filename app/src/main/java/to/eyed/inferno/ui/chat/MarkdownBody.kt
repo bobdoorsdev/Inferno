@@ -298,7 +298,7 @@ private fun StreamingMarkdownText(chunk: String, animateStreaming: Boolean) {
     val readable = remember(chunk) {
         chunk.replace("**", "").replace("__", "").replace("~~", "").replace(96.toChar().toString(), "")
     }
-    var settled by remember { mutableStateOf(readable) }
+    var settled by remember { mutableStateOf("") }
     var incoming by remember { mutableStateOf("") }
     val fade = remember { Animatable(1f) }
     LaunchedEffect(readable, animateStreaming) {
