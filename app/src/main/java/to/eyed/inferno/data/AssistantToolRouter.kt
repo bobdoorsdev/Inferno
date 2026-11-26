@@ -469,7 +469,7 @@ Return JSON only: {"search_queries":[],"max_sources":5,"image_queries":[],"image
                 }
             }
             if (images.isNotEmpty()) {
-                append("\nOPTIONAL WEB IMAGE RESULTS — real image URLs returned by image search. When a picture materially improves the answer (product recommendations, places, animals, visual comparisons), place one or two relevant images inline next to the matching explanation using exactly ![short description](image URL). Choose placement yourself; do not dump an unrelated gallery at the end. Never invent URLs, counts, licensing, or exclusivity.\n")
+                append("\nOPTIONAL WEB IMAGE RESULTS — real image URLs returned by image search. When a picture materially improves the answer (product recommendations, places, animals, visual comparisons), place one or two relevant images inline next to the matching explanation. Use Markdown image syntax with distinct, factual alt text naming the exact product/model or visible subject. Never use generic alt text such as short description, image, or picture. Choose placement yourself; do not dump an unrelated gallery at the end. Never invent URLs, counts, licensing, or exclusivity.\n")
                 images.forEach { image ->
                     append("Image: ").append(image.title).append("\nImage URL: ").append(image.imageUrl).append("\nSource page: ").append(image.sourceUrl).append('\n')
                 }
@@ -528,15 +528,30 @@ Return JSON only: {"search_queries":[],"max_sources":5,"image_queries":[],"image
                 }.joinToString(", ").ifBlank { match.value }
             }
         }
+        fun sanitizeGenericImageAlt(block: String): String {
+            val generic = Regex("""!\[(?:short description|image description|description|image|photo|picture|product image|image result)]\((https?://[^)\s]+)(?:\s+"([^"]*)")?\)""", RegexOption.IGNORE_CASE)
+            return generic.replace(block) { match ->
+                val url = match.groupValues[1]
+                val matched = images.firstOrNull { markdownUrl(it.imageUrl) == url || it.imageUrl == url }
+                val title = matched?.title?.replace("[", "(")?.replace("]", ")")?.replace("\n", " ")?.take(100)?.takeIf(String::isNotBlank) ?: "Relevant image"
+                val fallback = match.groupValues.getOrNull(2)?.takeIf(String::isNotBlank)
+                    ?: matched?.fallbackImageUrl?.takeIf { it.startsWith("https://") && it != matched.imageUrl }?.let(::markdownUrl)
+                buildString {
+                    append("![").append(title).append("](").append(url)
+                    fallback?.let { append(" \"").append(it).append("\"") }
+                    append(")")
+                }
+            }
+        }
         val fences = Regex("""(?s)(?:\x60{3,}.*?\x60{3,}|~~~.*?~~~)""")
         val linked = StringBuilder(result.length + 64)
         var citationCursor = 0
         fences.findAll(result).forEach { fence ->
-            linked.append(linkCitations(result.substring(citationCursor, fence.range.first)))
+            linked.append(sanitizeGenericImageAlt(linkCitations(result.substring(citationCursor, fence.range.first))))
             linked.append(fence.value)
             citationCursor = fence.range.last + 1
         }
-        linked.append(linkCitations(result.substring(citationCursor)))
+        linked.append(sanitizeGenericImageAlt(linkCitations(result.substring(citationCursor))))
         result = linked.toString()
         val missingImages = images.asSequence()
             .filter { it.imageUrl.startsWith("https://") && it.sourceUrl.startsWith("https://") }
