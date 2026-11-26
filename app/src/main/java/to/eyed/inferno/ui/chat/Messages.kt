@@ -14,9 +14,13 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import android.content.Context
+import android.content.Intent
+import android.speech.tts.TextToSpeech
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -33,6 +37,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.shape.CircleShape
@@ -41,6 +46,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -73,6 +79,8 @@ import com.composables.icons.lucide.GitBranch
 import com.composables.icons.lucide.NotebookPen
 import com.composables.icons.lucide.Pencil
 import com.composables.icons.lucide.RefreshCw
+import com.composables.icons.lucide.Share2
+import com.composables.icons.lucide.Volume2
 import kotlinx.coroutines.delay
 import to.eyed.inferno.data.AssistantToolRouter
 import to.eyed.inferno.data.Attachment
@@ -152,7 +160,11 @@ fun SharedTransitionScope.MessagesList(
     toolStatus: String? = null,
     toolSearchNotes: String? = null,
     streamingAnimations: Boolean = true,
+    onFollowUp: (String) -> Unit = {},
 ) {
+    val context = LocalContext.current
+    val speech = remember(context) { MessageSpeechController(context) }
+    DisposableEffect(speech) { onDispose { speech.release() } }
     val live = liveFor(messages, gen)
     val liveMeta = (gen as? GenState.Streaming)?.takeIf { dev.tokenCounter && it.tokens > 0 }?.let { S.liveTokens(it.tokens, String.format(Locale.US, "%.1f", it.tokPerSec)) }
     val lastAssistantId = messages.lastOrNull { it.role == ChatRepository.ROLE_ASSISTANT }?.id
@@ -217,6 +229,9 @@ fun SharedTransitionScope.MessagesList(
                             onRegenerate = onRegenerate,
                             onBranch = { onBranch(m) },
                             onDetails = { onOpenTurnDetails(m) },
+                            speech = speech,
+                            showQuickActions = m.id == lastAssistantId,
+                            onFollowUp = onFollowUp,
                             modifier = Modifier.animateItem(fadeInSpec = tween(180), fadeOutSpec = tween(120), placementSpec = placement),
                             showDetails = dev.turnDetails,
                             techMeta = dev.generationStats,
@@ -395,6 +410,9 @@ private fun AssistantMessage(
     liveMeta: String? = null,
     searchNotes: String? = null,
     toolStatus: String? = null,
+    speech: MessageSpeechController? = null,
+    showQuickActions: Boolean = false,
+    onFollowUp: (String) -> Unit = {},
 ) {
     val context = LocalContext.current
     val haptics = rememberHaptics()
@@ -420,6 +438,15 @@ private fun AssistantMessage(
             Column {
                 Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
                     AnimatedCopyButton(S.copyMessage) { copyToClipboard(context, text, "Inferno message") }
+                    AnimatedActionIcon(Lucide.Volume2, "Read aloud") { haptics.tap(); speech?.speak(text) }
+                    AnimatedActionIcon(Lucide.Share2, "Share response") {
+                        haptics.tap()
+                        val intent = Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_TEXT, text)
+                        }
+                        runCatching { context.startActivity(Intent.createChooser(intent, "Share response")) }
+                    }
                     AnimatedActionIcon(Lucide.GitBranch, "Branch from this reply") { haptics.tap(); onBranch() }
                     if (showRegenerate) AnimatedActionIcon(Lucide.RefreshCw, S.regenerate) { haptics.tap(); onRegenerate() }
                     if (stats != null && showDetails) GhostIconButton(Lucide.Info, S.details, onClick = { haptics.tap(); onDetails() }, size = 32.dp, iconSize = 15.dp, tint = Ink.I500)
@@ -430,6 +457,78 @@ private fun AssistantMessage(
                 }
             }
         }
+        AnimatedVisibility(showActions && showQuickActions, enter = fadeIn(defaultEffectsSpec()), exit = fadeOut(defaultEffectsSpec())) {
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(top = 3.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                QuickFollowUpChip("Explain simply") { onFollowUp("Explain your previous answer more simply, keeping the important details.") }
+                QuickFollowUpChip("Summarize") { onFollowUp("Summarize your previous answer in a few clear points.") }
+                QuickFollowUpChip("Give an example") { onFollowUp("Give a concrete example that illustrates your previous answer.") }
+            }
+        }
+    }
+}
+
+@Composable
+private fun QuickFollowUpChip(label: String, onClick: () -> Unit) {
+    val haptics = rememberHaptics()
+    Box(
+        Modifier.clip(RoundedCornerShape(16.dp))
+            .background(Ink.SurfaceHigh)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                role = Role.Button,
+            ) { haptics.tap(); onClick() }
+            .padding(horizontal = 11.dp, vertical = 7.dp),
+    ) {
+        Text(label, style = Typography.labelSmall, color = Ink.I300, maxLines = 1)
+    }
+}
+
+/** A single lifecycle-owned Android TTS engine shared by the message list. */
+private class MessageSpeechController(context: Context) {
+    @Volatile private var ready = false
+    @Volatile private var pending: String? = null
+    private var engine: TextToSpeech? = null
+
+    init {
+        engine = TextToSpeech(context.applicationContext) { status ->
+            if (status == TextToSpeech.SUCCESS) {
+                val current = engine
+                if (current != null) {
+                    ready = current.setLanguage(Locale.getDefault()) >= TextToSpeech.LANG_AVAILABLE
+                    val queued = pending
+                    pending = null
+                    if (ready && queued != null) speak(queued)
+                }
+            }
+        }
+    }
+
+    fun speak(markdown: String) {
+        val plain = markdown
+            .replace(Regex("""(?s)\x60{3,}[^\n]*\n?(.*?)\x60{3,}"""), "$1")
+            .replace(Regex("""!?\[([^\]]+)]\((?:https?://[^)]+)\)"""), "$1")
+            .replace("**", "").replace("__", "").replace("~~", "")
+            .replace(Regex("""\s+"""), " ").trim()
+        if (plain.isBlank()) return
+        val current = engine ?: return
+        if (!ready) {
+            pending = plain
+            return
+        }
+        current.speak(plain, TextToSpeech.QUEUE_FLUSH, null, "inferno-answer")
+    }
+
+    fun release() {
+        pending = null
+        ready = false
+        engine?.stop()
+        engine?.shutdown()
+        engine = null
     }
 }
 
