@@ -393,6 +393,35 @@ private fun SharedTransitionScope.UserBubble(
     }
 }
 
+private data class AssistantCodeFile(val path: String, val content: String)
+private data class AssistantFileExport(val files: List<AssistantCodeFile>, val zip: Boolean)
+
+private fun extractCodeArtifacts(answer: String): List<AssistantCodeFile> {
+    val fence = Regex("""(?ms)^\\x60{3,}([A-Za-z0-9_+.-]+)(?:[ \\t]+([^\\r\\n]+))?[ \\t]*\\r?\\n(.*?)^\\x60{3,}\\s*$""")
+    val extensions = mapOf(
+        "lua" to "lua", "luau" to "lua", "python" to "py", "javascript" to "js", "js" to "js",
+        "typescript" to "ts", "ts" to "ts", "kotlin" to "kt", "java" to "java", "json" to "json",
+        "html" to "html", "css" to "css", "xml" to "xml", "bash" to "sh", "shell" to "sh",
+        "sh" to "sh", "markdown" to "md", "md" to "md", "sql" to "sql", "yaml" to "yml",
+        "yml" to "yml", "toml" to "toml", "rust" to "rs", "go" to "go", "c" to "c", "cpp" to "cpp",
+    )
+    val files = mutableListOf<AssistantCodeFile>()
+    fence.findAll(answer).forEachIndexed { index, match ->
+        val language = match.groupValues[1].lowercase()
+        val extension = extensions[language] ?: "txt"
+        val hinted = match.groupValues[2].trim().replace('\\\\', '/')
+        val safe = hinted.split('/').filter { it.isNotBlank() && it != "." && it != ".." }
+            .joinToString("/") { it.replace(Regex("""[^A-Za-z0-9._-]"""), "_") }
+        val path = when {
+            safe.isBlank() -> "file_" + (index + 1).toString().padStart(2, '0') + "." + extension
+            safe.substringAfterLast('/').contains('.') -> safe
+            else -> safe + "." + extension
+        }
+        if (files.none { it.path == path }) files += AssistantCodeFile(path, match.groupValues[3].trimEnd())
+    }
+    return files
+}
+
 /**
  * Assistant turn, no bubble: reasoning panel, markdown, caret while streaming, then the action row
  * (fades in once the engine is idle) and - on the latest turn only - the meta line from MessageStats.
@@ -426,6 +455,45 @@ private fun AssistantMessage(
 ) {
     val context = LocalContext.current
     val haptics = rememberHaptics()
+    val codeArtifacts = remember(text) { extractCodeArtifacts(text) }
+    var markdownToExport by remember(text) { mutableStateOf<String?>(null) }
+    var filesToExport by remember(text) { mutableStateOf<AssistantFileExport?>(null) }
+    val markdownLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/markdown")) { uri ->
+        val payload = markdownToExport
+        if (uri != null && payload != null) runCatching {
+            context.contentResolver.openOutputStream(uri)?.bufferedWriter(Charsets.UTF_8)?.use { it.write(payload) }
+                ?: error("Unable to write the Markdown file")
+        }.onFailure { Toast.makeText(context, "Could not export Markdown", Toast.LENGTH_SHORT).show() }
+        markdownToExport = null
+    }
+    val filesLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+        val payload = filesToExport
+        if (uri != null && payload != null) runCatching {
+            val output = context.contentResolver.openOutputStream(uri) ?: error("Unable to open destination")
+            if (payload.zip) {
+                ZipOutputStream(output).use { zip ->
+                    payload.files.forEach { file ->
+                        zip.putNextEntry(ZipEntry(file.path))
+                        zip.write(file.content.toByteArray(Charsets.UTF_8))
+                        zip.closeEntry()
+                    }
+                }
+            } else {
+                output.use { it.write(payload.files.first().content.toByteArray(Charsets.UTF_8)) }
+            }
+        }.onFailure { Toast.makeText(context, "Could not export files", Toast.LENGTH_SHORT).show() }
+        filesToExport = null
+    }
+    fun startMarkdownExport() {
+        markdownToExport = text
+        markdownLauncher.launch("answer.md")
+    }
+    fun startCodeExport() {
+        if (codeArtifacts.isEmpty()) return
+        val zipped = codeArtifacts.size > 1
+        filesToExport = AssistantFileExport(codeArtifacts, zipped)
+        filesLauncher.launch(if (zipped) "project.zip" else codeArtifacts.first().path.substringAfterLast('/'))
+    }
     Column(modifier.fillMaxWidth()) {
         val activityContent = reasoning.isNotBlank() || !searchNotes.isNullOrBlank() || toolStatus != null
         if (activityContent) {
