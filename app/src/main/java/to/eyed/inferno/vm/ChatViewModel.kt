@@ -77,6 +77,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
                 if (s is EngineState.Ready) pendingSend?.let { q -> pendingSend = null; dispatch(q.text, q.attachments, q.files, q.target) }
                 if ((s is EngineState.Idle || s is EngineState.Error) && !loading) pendingSend?.let { q ->
                     pendingSend = null
+                    q.files.forEach { c.files.delete(it.id) }
                     setGen(q.target, GenState.Error((s as? EngineState.Error)?.message ?: S.couldNotLoadModel))
                 }
             }
@@ -130,7 +131,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
         val exact = last?.takeIf { it.createdAt >= modelSwitchAt && (view.summary == null || it.createdAt >= view.summary.createdAt) }
             ?.stats?.kvUsedTokens?.takeIf { it > 0 }
         if (exact != null) ContextUsage(exact, nCtx, approximate = false)
-        else ContextUsage(((view.summary?.content?.length ?: 0) + view.recent.sumOf { it.content.length }) / 4, nCtx, approximate = true)
+        else ContextUsage(((view.summary?.content?.length ?: 0) + view.recent.sumOf { it.content.length + it.files.sumOf { file -> file.extractedText?.length ?: file.displayName.length } }) / 4, nCtx, approximate = true)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, ContextUsage(0, 0, true))
 
     /** Chats whose next prompt did not fit under the STOP policy (cleared when the policy changes or the chat is left). */
@@ -215,14 +216,17 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
         if (genStates.value[id]?.isBusy == true) {
             // A busy chat (active or not) must not keep generating into a deleted row: cancel and wait for run()'s
             // NonCancellable handler, so its last updateAssistant lands before the cascade removes the messages.
-            if (pendingSend?.target == id) pendingSend = null
+            if (pendingSend?.target == id) { pendingSend?.files?.forEach { c.files.delete(it.id) }; pendingSend = null }
             genJobs.remove(id)?.let { it.cancel(); it.join() }
             genStates.update { it - id }
         }
         c.chats.delete(id)
     }
     fun deleteAll() = viewModelScope.launch {
+        pendingSend?.files?.forEach { c.files.delete(it.id) }
         pendingSend = null
+        _pendingFiles.value.forEach { c.files.delete(it.id) }
+        _pendingFiles.value = emptyList(); savePendingFiles()
         genJobs.values.toList().forEach { it.cancel() }
         genJobs.clear()
         genStates.value = emptyMap()
@@ -304,7 +308,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
         if (text.isBlank() && atts.isEmpty() && files.isEmpty()) return
         fun queue() {
             // Replacing an earlier queued turn must not leave its chat stuck in Queued.
-            pendingSend?.let { setGen(it.target, GenState.Idle) }
+            pendingSend?.let { old -> setGen(old.target, GenState.Idle); old.files.forEach { c.files.delete(it.id) } }
             val target = activeId.value ?: NO_CHAT
             pendingSend = QueuedSend(target, text, atts, files)
             _pending.value = emptyList(); savePending()
