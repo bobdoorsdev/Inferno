@@ -1,9 +1,12 @@
 package to.eyed.inferno.ui.chat
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.core.FiniteAnimationSpec
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -372,8 +375,8 @@ private fun AssistantMessage(
             Column {
                 Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
                     AnimatedCopyButton(S.copyMessage) { copyToClipboard(context, text, "Inferno message") }
-                    GhostIconButton(Lucide.GitBranch, "Branch from this reply", onClick = { haptics.tap(); onBranch() }, size = 32.dp, iconSize = 15.dp, tint = Ink.I500)
-                    if (showRegenerate) GhostIconButton(Lucide.RefreshCw, S.regenerate, onClick = { haptics.tap(); onRegenerate() }, size = 32.dp, iconSize = 15.dp, tint = Ink.I500)
+                    AnimatedActionIcon(Lucide.GitBranch, "Branch from this reply") { haptics.tap(); onBranch() }
+                    if (showRegenerate) AnimatedActionIcon(Lucide.RefreshCw, S.regenerate) { haptics.tap(); onRegenerate() }
                     if (stats != null && showDetails) GhostIconButton(Lucide.Info, S.details, onClick = { haptics.tap(); onDetails() }, size = 32.dp, iconSize = 15.dp, tint = Ink.I500)
                     if (showMeta && stats != null) metaLine(stats, techMeta)?.let { meta ->
                         Spacer(Modifier.size(6.dp))
@@ -385,44 +388,56 @@ private fun AssistantMessage(
     }
 }
 
-/**
- * A soft confirmation grows from the familiar copy glyph; the original copy icon remains visible.
- */
+/** Copy icon smoothly morphs into a checkmark without showing a text label. */
 @Composable
 private fun AnimatedCopyButton(label: String, onCopy: () -> Unit) {
     val haptics = rememberHaptics()
     var copied by remember { mutableStateOf(false) }
     androidx.compose.runtime.LaunchedEffect(copied) {
-        if (copied) {
-            delay(1_400)
-            copied = false
+        if (copied) { delay(1_050); copied = false }
+    }
+    Box(
+        Modifier.size(32.dp).clip(RoundedCornerShape(9.dp)).clickable(
+            interactionSource = remember { MutableInteractionSource() },
+            indication = null,
+            role = Role.Button,
+        ) { haptics.tap(); onCopy(); copied = true },
+        contentAlignment = Alignment.Center,
+    ) {
+        AnimatedContent(
+            targetState = copied,
+            transitionSpec = { fadeIn(tween(140)) togetherWith fadeOut(tween(90)) },
+            label = "messageCopy",
+        ) { done ->
+            Icon(
+                if (done) Lucide.Check else Lucide.Copy,
+                contentDescription = if (done) "Copied" else label,
+                Modifier.size(16.dp),
+                tint = if (done) Ink.White else Ink.I500,
+            )
         }
     }
-    Row(
-        Modifier
-            .height(32.dp)
-            .clip(RoundedCornerShape(9.dp))
-            .background(Ink.Pitch)
-            .clickable(
+}
+
+/** Small press-and-release motion shared by Branch and Redo. */
+@Composable
+private fun AnimatedActionIcon(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
+    var pressed by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(if (pressed) 0.82f else 1f, fastSpatialSpec(), label = "messageActionScale")
+    val alpha by animateFloatAsState(if (pressed) 0.62f else 1f, fastSpatialSpec(), label = "messageActionAlpha")
+    androidx.compose.runtime.LaunchedEffect(pressed) {
+        if (pressed) { delay(130); pressed = false }
+    }
+    Box(
+        Modifier.size(32.dp).graphicsLayer { scaleX = scale; scaleY = scale; this.alpha = alpha }
+            .clip(CircleShape).clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
                 role = Role.Button,
-            ) {
-                haptics.tap()
-                onCopy()
-                copied = true
-            }
-            .padding(horizontal = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) { pressed = true; onClick() },
+        contentAlignment = Alignment.Center,
     ) {
-        Icon(
-            if (copied) Lucide.Check else Lucide.Copy,
-            contentDescription = if (copied) S.copied else label,
-            Modifier.size(15.dp),
-            tint = if (copied) Ink.White else Ink.I500,
-        )
-        if (copied) Text(S.copied, style = RowMeta, color = Ink.White)
+        Icon(icon, contentDescription = label, Modifier.size(15.dp), tint = Ink.I500)
     }
 }
 
