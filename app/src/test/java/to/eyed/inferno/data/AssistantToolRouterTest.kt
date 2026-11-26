@@ -212,7 +212,7 @@ class AssistantToolRouterTest {
     }
     @Test fun plannerChoosesSourceCountAndExecutableUtilities() {
         val plan = AssistantToolRouter.parse(
-            """{"search_queries":["best gaming PC Brazil under budget"],"max_sources":9,"image_queries":["gaming PC product photo"],"base64_action":"encode","base64_text":"Inferno","hash_algorithm":"SHA-256","hash_text":"abc","csv_action":"stats","csv_text":"name,value\\nGPU,1","read_url":"https://example.com"}"""
+            """{"search_queries":["best gaming PC Brazil under budget"],"max_sources":9,"image_queries":["gaming PC product photo"],"base64_action":"encode","base64_text":"Inferno","hash_algorithm":"SHA-256","hash_text":"abc","csv_action":"stats","csv_text":"name,value\nGPU,1","read_url":"https://example.com"}"""
         )
         assertEquals(9, plan.maxSources)
         assertEquals(listOf("best gaming PC Brazil under budget"), plan.searchQueries)
@@ -231,10 +231,10 @@ class AssistantToolRouterTest {
             "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
             AssistantToolRouter.calculateHash("SHA-256", "abc"),
         )
-        assertTrue(AssistantToolRouter.processCsv("validate", "name,value\\nGPU,1").contains("2 rows, 2 columns"))
-        assertTrue(AssistantToolRouter.processCsv("stats", "name,value\\nGPU,1").contains("4 non-empty cells"))
-        assertEquals("name,value\\nGPU,\\"fast, quiet\\"", AssistantToolRouter.processCsv("format", "name,value\\nGPU,\\"fast, quiet\\""))
-        assertTrue(AssistantToolRouter.processCsv("validate", "name,desc\\nGPU,\\"broken").startsWith("CSV error:"))
+        assertTrue(AssistantToolRouter.processCsv("validate", "name,value\nGPU,1").contains("2 rows, 2 columns"))
+        assertTrue(AssistantToolRouter.processCsv("stats", "name,value\nGPU,1").contains("4 non-empty cells"))
+        assertEquals("name,value\nGPU,\"fast, quiet\"", AssistantToolRouter.processCsv("format", "name,value\nGPU,\"fast, quiet\""))
+        assertTrue(AssistantToolRouter.processCsv("validate", "name,desc\nGPU,\"broken").startsWith("CSV error:"))
     }
 
     @Test fun sourcePanelHidesQueryListAndNumberingButRendersWebsiteFavicon() {
@@ -245,7 +245,7 @@ class AssistantToolRouterTest {
         assertTrue(notes.contains("![__favicon__](https://www.google.com/s2/favicons?domain=example.com&sz=64)"))
         assertTrue(notes.contains("**[Official product page](https://example.com/product)**"))
         assertFalse(notes.contains("internal planner query"))
-        assertFalse(Regex("""(?m)^\\s*\\d+[.)]\\s""").containsMatchIn(notes))
+        assertFalse(Regex("""(?m)^\s*\d+[.)]\s""").containsMatchIn(notes))
     }
 
 }
