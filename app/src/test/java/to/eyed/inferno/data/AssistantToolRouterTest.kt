@@ -246,7 +246,8 @@ class AssistantToolRouterTest {
 
     @Test fun citationEnrichmentLeavesCodeFenceReferencesUntouched() {
         val source = WebSearchResult("Example source", "https://example.com/page", "Evidence")
-        val answer = "Code:\\n" + "```lua\\nlocal values = { [1] = true }\\n```\\nClaim [1]"
+        val fence = 96.toChar().toString().repeat(3)
+        val answer = "Code:\n" + fence + "lua\nlocal values = { [1] = true }\n" + fence + "\nClaim [1]"
         val enriched = AssistantToolRouter.enrichAnswer(answer, listOf(source), emptyList())
         assertTrue(enriched.contains("local values = { [1] = true }"))
         assertTrue(enriched.contains("Claim [1](https://example.com/page)"))
