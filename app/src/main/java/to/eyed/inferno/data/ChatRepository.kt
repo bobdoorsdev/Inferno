@@ -50,13 +50,16 @@ class ChatRepository(private val dao: ChatDao, private val imageUtil: ImageUtil,
     fun messages(conversationId: String): Flow<List<ChatMessage>> =
         dao.messages(conversationId).map { rows -> rows.map { it.toChatMessage() } }
 
-    suspend fun messagesOnce(conversationId: String): List<ChatMessage> =
-        dao.messagesOnce(conversationId).map { row ->
+    suspend fun messagesOnce(conversationId: String): List<ChatMessage> {
+        val result = ArrayList<ChatMessage>()
+        val store = fileStore
+        for (row in dao.messagesOnce(conversationId)) {
             val message = row.toChatMessage()
-            val store = fileStore
-            if (store == null || message.files.isEmpty()) message
+            result += if (store == null || message.files.isEmpty()) message
             else message.copy(files = message.files.map { file -> file.copy(extractedText = store.extractText(file)) })
         }
+        return result
+    }
 
     /** Forks a conversation through a selected reply; copied image rows retain shared blob references. */
     suspend fun branch(conversationId: String, throughOrderIndex: Int): Conversation? {
