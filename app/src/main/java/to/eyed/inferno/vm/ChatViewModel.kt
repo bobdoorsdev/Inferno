@@ -354,7 +354,8 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
 
     /** Ready/Suspended: run now; Loading: queue one turn (replacing an earlier queued one); Idle: "Choose a model first". */
     fun send(text: String) {
-        // A title job belongs to its conversation; it waits for that chat's next turn instead of being cancelled here.
+        // Only cancel this conversation's optional title refinement; other chats may finish naming in the background.
+        activeId.value?.let { titleJobs.remove(it)?.cancel() }
         val current = gen.value
         if (current.isBusy && current !is GenState.Queued) { appVmRef?.notice(S.stopCurrentAnswer); return }
         if (imageBusy.value) { appVmRef?.notice(S.waitForImageFirst); return }
