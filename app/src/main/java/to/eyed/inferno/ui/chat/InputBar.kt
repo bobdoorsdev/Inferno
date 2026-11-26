@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -254,7 +255,7 @@ private fun FileStrip(files: List<FileAttachment>, onRemove: (Int) -> Unit) {
                     interactionSource = remember { MutableInteractionSource() }, indication = null,
                     role = Role.Button,
                 ) { haptics.tap(); onRemove(index) }, contentAlignment = Alignment.Center) {
-                    Icon(Lucide.X, "Remove ${files[index].displayName}", Modifier.size(12.dp), tint = Ink.I400)
+                    Icon(Lucide.X, "Remove ${files[index].displayName}", Modifier.size(12.dp), tint = Ink.I500)
                 }
             }
         }
