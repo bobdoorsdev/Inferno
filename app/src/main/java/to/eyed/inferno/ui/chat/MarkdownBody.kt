@@ -551,15 +551,21 @@ internal object MarkdownMath {
         value = inlineDollar.replace(value) { formatExpression(it.groupValues[1]) }
         value = inlineParen.replace(value) { formatExpression(it.groupValues[1]) }
         // Some local models omit delimiters and emit plain x^2 / x_1 notation in prose.
-        value = Regex("""(?<![\\w\\\\])([A-Za-zΑ-Ωα-ω])\\^([0-9]+|[A-Za-z])""").replace(value) { m ->
+        value = Regex("""(?<![\w\\])([A-Za-zΑ-Ωα-ω])\^\{([^{}]{1,8})}""").replace(value) { m ->
+            m.groupValues[1] + mapIndex(m.groupValues[2], superscript, "^(" + m.groupValues[2] + ")")
+        }
+        value = Regex("""(?<![\w\\])([A-Za-zΑ-Ωα-ω])\^([0-9]+|[A-Za-z])""").replace(value) { m ->
             m.groupValues[1] + mapIndex(m.groupValues[2], superscript, "^" + m.groupValues[2])
         }
-        value = Regex("""(?<![\\w\\\\])([A-Za-zΑ-Ωα-ω])_([0-9]+|[A-Za-z])""").replace(value) { m ->
+        value = Regex("""(?<![\w\\])([A-Za-zΑ-Ωα-ω])_\{([^{}]{1,8})}""").replace(value) { m ->
+            m.groupValues[1] + mapIndex(m.groupValues[2], subscript, "_(" + m.groupValues[2] + ")")
+        }
+        value = Regex("""(?<![\w\\])([A-Za-zΑ-Ωα-ω])_([0-9]+|[A-Za-z])""").replace(value) { m ->
             m.groupValues[1] + mapIndex(m.groupValues[2], subscript, "_" + m.groupValues[2])
         }
-        // Strip unmatched math delimiters (but not currency such as $25).
-        value = value.replace(Regex("""(?<!\\\\)\\$(?=[A-Za-z\\\\(])"""), "")
-            .replace(Regex("""(?<=[A-Za-z0-9)}])\\$(?=\\s|[.,;:!?)]|$)"""), "")
+        // Strip unmatched math delimiters, while retaining currency such as $25.
+        value = value.replace(Regex("""(?<!\\)\$(?=[A-Za-z\\(])"""), "")
+            .replace(Regex("""(?<=[A-Za-z0-9)}])\$(?=\s|[.,;:!?)]|$)"""), "")
         return value
     }
 

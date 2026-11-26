@@ -126,7 +126,7 @@ class AssistantToolRouterTest {
     }
 
     @Test fun localRegexTesterReturnsBoundedMatches() {
-        assertTrue(AssistantToolRouter.testRegex("""\\d+""", "a12 b3").contains("2 match(es)"))
+        assertTrue(AssistantToolRouter.testRegex("""[0-9]+""", "a12 b3").contains("2 match(es)"))
         assertTrue(AssistantToolRouter.testRegex("(", "test").startsWith("Regex error:"))
         assertTrue(AssistantToolRouter.testRegex("""(a+)+""", "aaaa").startsWith("Regex error:"))
     }

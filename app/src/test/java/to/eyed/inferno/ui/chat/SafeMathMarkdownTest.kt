@@ -68,6 +68,15 @@ class SafeMathMarkdownTest {
         assertFalse(formatted.contains("\\frac"))
     }
 
+    @Test fun formatsBareMathIdentifiersAndRemovesStrayDollarMarkers() {
+        val formatted = MarkdownMath.format("The equation is $x^2 and x_1, with braces x^{3} and x_{2}.")
+        assertTrue(formatted.contains("x²"))
+        assertTrue(formatted.contains("x₁"))
+        assertTrue(formatted.contains("x³"))
+        assertTrue(formatted.contains("x₂"))
+        assertFalse(formatted.contains("$"))
+    }
+
     @Test fun rendersGreekIdentifiersAndSubscriptsInTheSameExpression() {
         val formatted = MarkdownMath.format("""\(\Delta = b^2 - 4ac,\quad x_1, x_2\)""")
         assertTrue(formatted.contains("Δ = b² - 4ac"))
