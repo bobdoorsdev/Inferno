@@ -702,6 +702,9 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
                     is GenerationEvent.Prefill -> setGen(conversationId, GenState.Prefill(ev.done, ev.total, ev.encodingImage, expectedEncodeMs))
                     is GenerationEvent.Thinking -> { stream.thinking(ev.text); stream.publish(ev.text.contains('\n')) }
                     is GenerationEvent.Token -> {
+                        if (settings.streamingAnimations && settings.streamingTokenDelayMs > 0) {
+                            delay(settings.streamingTokenDelayMs.toLong())
+                        }
                         stream.token(ev.text)
                         if (assistantId == null) assistantId = c.chats.appendAssistant(conversationId, stream.textStr, stream.reasoningOrNull(), null).id
                         else if (stream.shouldPersist()) c.chats.updateAssistant(assistantId!!, stream.textStr, stream.reasoningOrNull(), null)
