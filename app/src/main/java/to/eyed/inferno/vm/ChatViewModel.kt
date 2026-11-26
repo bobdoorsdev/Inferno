@@ -265,7 +265,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
 
     fun attachFileFromUri(uri: Uri) = viewModelScope.launch {
         if (_pendingFiles.value.size >= MAX_FILES) { appVmRef?.notice("You can attach up to $MAX_FILES files"); return@launch }
-        runCatching { c.files.import(uri) }.onSuccess { file ->
+        runCatching { c.files.importFile(uri) }.onSuccess { file ->
             if (_pendingFiles.value.none { it.id == file.id } && _pendingFiles.value.size < MAX_FILES) {
                 _pendingFiles.update { it + file }
                 savePendingFiles()
