@@ -22,10 +22,12 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.Text
+import androidx.compose.material3.Slider
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -178,6 +180,18 @@ private fun SettingsBody(appVm: AppViewModel, chatVm: ChatViewModel, onOpenBench
         ToggleRow(S.stayReady, s.keepModelLoaded, appVm::setKeepModelLoaded, description = S.stayReadyDesc)
         CardDivider()
         ToggleRow(S.streamingAnimations, s.streamingAnimations, appVm::setStreamingAnimations, description = S.streamingAnimationsDesc)
+        if (s.streamingAnimations) {
+            var revealDelay by rememberSaveable(s.streamingTokenDelayMs) { mutableFloatStateOf(s.streamingTokenDelayMs.toFloat()) }
+            ControlRow(S.streamingTokenDelay, description = S.streamingTokenDelayDesc(s.streamingTokenDelayMs)) {
+                Slider(
+                    value = revealDelay,
+                    onValueChange = { revealDelay = it },
+                    onValueChangeFinished = { appVm.setStreamingTokenDelayMs(revealDelay.toInt()) },
+                    valueRange = 0f..30f,
+                    steps = 5,
+                )
+            }
+        }
         CardDivider()
         ToggleRow(S.haptics, s.haptics, appVm::setHaptics, description = S.hapticsDesc)
         CardDivider()
