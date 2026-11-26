@@ -1,8 +1,5 @@
 package to.eyed.inferno.ui.chat
 
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import android.widget.Toast
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
@@ -28,6 +25,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.ClickableText
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -93,11 +91,18 @@ import to.eyed.inferno.ui.theme.whiteA
  * Embedded image links are rendered with Coil at their original position. `TextDirection.Content` keeps RTL readable.
  */
 @Composable
-fun MarkdownBody(text: String, modifier: Modifier = Modifier, streaming: Boolean = false, animateStreaming: Boolean = true) {
+fun MarkdownBody(
+    text: String,
+    modifier: Modifier = Modifier,
+    streaming: Boolean = false,
+    animateStreaming: Boolean = true,
+    citationUrls: List<String> = emptyList(),
+) {
+    val linkedText = remember(text, citationUrls) { linkInlineCitations(text, citationUrls) }
     if (streaming) {
-        StreamingMarkdownBody(text, modifier, animateStreaming)
+        StreamingMarkdownBody(linkedText, modifier, animateStreaming)
     } else {
-        val formatted = remember(text) { formatMarkdownChunk(text) }
+        val formatted = remember(linkedText) { formatMarkdownChunk(linkedText) }
         val split = remember(formatted) { MarkdownChunker.splitOpenFence(formatted) }
         val chunks = remember(split.first) { MarkdownChunker.chunks(split.first) }
         SelectionContainer {
@@ -111,6 +116,18 @@ fun MarkdownBody(text: String, modifier: Modifier = Modifier, streaming: Boolean
 
 private fun formatMarkdownChunk(source: String): String =
     runCatching { SafeMathMarkdown.sanitize(MarkdownMath.format(source)) }.getOrDefault(source)
+
+private fun linkInlineCitations(source: String, urls: List<String>): String {
+    if (urls.isEmpty()) return source
+    val citation = Regex("""(?<!\\!)\\[(\\d{1,2}(?:\\s*[,;]\\s*\\d{1,2})*)](?!\\s*\\()""")
+    return citation.replace(source) { match ->
+        Regex("""\\d{1,2}""").findAll(match.groupValues[1]).mapNotNull { item ->
+            val index = item.value.toIntOrNull()?.minus(1) ?: return@mapNotNull null
+            urls.getOrNull(index)?.takeIf { it.startsWith("https://") || it.startsWith("http://") }
+                ?.let { "[" + item.value + "](" + it + ")" }
+        }.joinToString(", ").ifBlank { match.value }
+    }
+}
 
 @Composable
 private fun StreamingMarkdownBody(text: String, modifier: Modifier, animateStreaming: Boolean) {
@@ -159,7 +176,14 @@ private fun MarkdownChunkView(chunk: String, animated: Boolean = false) {
                 val preceding = chunk.substring(cursor, start)
                 if (preceding.isNotBlank()) MarkdownTextChunk(preceding, animated)
             }
-            MarkdownImageCard(match.groupValues[1], match.groupValues[2], match.groupValues.getOrNull(3).orEmpty())
+            if (match.groupValues[1] == "__favicon__") {
+                AsyncImage(
+                    model = match.groupValues[2],
+                    contentDescription = "Website icon",
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.size(18.dp).clip(RoundedCornerShape(4.dp)),
+                )
+            } else MarkdownImageCard(match.groupValues[1], match.groupValues[2], match.groupValues.getOrNull(3).orEmpty())
             cursor = match.range.last + 1
         }
         if (cursor < chunk.length) {
@@ -237,23 +261,61 @@ private fun StreamingMarkdownTail(chunk: String, animateStreaming: Boolean) {
             }
         }
         Box(Modifier.fillMaxWidth().graphicsLayer { alpha = tailFade.value }) {
-            StreamingMarkdownText(rendered)
+            StreamingMarkdownText(formatMarkdownChunk(rendered), animateStreaming)
         }
     }
 }
 
 @Composable
-private fun StreamingMarkdownText(chunk: String) {
+private fun StreamingMarkdownText(chunk: String, animateStreaming: Boolean) {
+    val uriHandler = LocalUriHandler.current
     val readable = remember(chunk) {
-        chunk.replace("**", "")
-            .replace("__", "")
-            .replace("~~", "")
-            .replace(Regex("""\[([^\]]+)]\((?:https?://[^)]+)\)"""), "$1")
-            .replace(96.toChar().toString(), "")
+        chunk.replace("**", "").replace("__", "").replace("~~", "").replace(96.toChar().toString(), "")
     }
-    Text(
-        readable,
+    var settled by remember { mutableStateOf(readable) }
+    var incoming by remember { mutableStateOf("") }
+    val fade = remember { Animatable(1f) }
+    LaunchedEffect(readable, animateStreaming) {
+        if (!animateStreaming || !readable.startsWith(settled) || readable.length <= settled.length) {
+            settled = readable
+            incoming = ""
+            fade.snapTo(1f)
+        } else {
+            incoming = readable.removePrefix(settled)
+            fade.snapTo(0f)
+            fade.animateTo(1f, tween(170, easing = LinearOutSlowInEasing))
+            settled = readable
+            incoming = ""
+        }
+    }
+    val fullText = settled + incoming
+    val annotated = remember(fullText, incoming, fade.value) {
+        buildAnnotatedString {
+            val links = Regex("""\[([^\]]+)\]\((https?://[^)\s]+)\)""")
+            var cursor = 0
+            links.findAll(fullText).forEach { match ->
+                append(fullText.substring(cursor, match.range.first))
+                val start = length
+                append(match.groupValues[1])
+                val end = length
+                addStringAnnotation("URL", match.groupValues[2], start, end)
+                addStyle(SpanStyle(color = Ink.White, textDecoration = TextDecoration.Underline), start, end)
+                cursor = match.range.last + 1
+            }
+            append(fullText.substring(cursor))
+            if (incoming.isNotEmpty()) {
+                addStyle(SpanStyle(color = Ink.I100.copy(alpha = fade.value)), (settled.length).coerceAtMost(length), length)
+            }
+        }
+    }
+    ClickableText(
+        text = annotated,
         style = Typography.bodyLarge.copy(color = Ink.I100, textDirection = TextDirection.Content),
+        onClick = { offset ->
+            annotated.getStringAnnotations("URL", offset, offset).firstOrNull()?.let { annotation ->
+                runCatching { uriHandler.openUri(annotation.item) }
+            }
+        },
     )
 }
 
@@ -324,29 +386,6 @@ fun MonoCodeBlock(code: String, language: String?, modifier: Modifier = Modifier
     val context = LocalContext.current
     val trimmed = code.trimEnd('\n')
     val info = language?.trim()?.lowercase().orEmpty()
-    val fileExtension = when (info.removeSuffix("-run").substringBefore(' ')) {
-        "kotlin" -> "kt"
-        "javascript" -> "js"
-        "typescript" -> "ts"
-        "python" -> "py"
-        "luau", "lua" -> "lua"
-        "markdown" -> "md"
-        "shell" -> "sh"
-        "text" -> "txt"
-        "html", "htm", "svg", "xml", "css", "json", "csv", "java", "kt", "py", "js", "ts", "sh", "md" ->
-            info.removeSuffix("-run").substringBefore(' ')
-        else -> "txt"
-    }
-    val saveLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
-        if (uri != null) {
-            runCatching {
-                context.contentResolver.openOutputStream(uri)?.bufferedWriter(Charsets.UTF_8)?.use { it.write(trimmed) }
-                    ?: error("Unable to open destination")
-            }.onFailure {
-                Toast.makeText(context, "Could not save file", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
     val runLanguage = info.removeSuffix("-run").substringBefore(' ')
     val autoRun = info.endsWith(" run") || info.endsWith("-run")
     var showPreview by remember(code, language) { mutableStateOf(false) }
@@ -370,20 +409,12 @@ fun MonoCodeBlock(code: String, language: String?, modifier: Modifier = Modifier
                 modifier = Modifier.weight(1f),
             )
             if (runnable && !streaming) CodeRunChip(showingPreview = showPreview) { showPreview = !showPreview }
-            if (!streaming) Text(
-                "Save",
-                style = RowMeta,
-                color = Ink.I500,
-                modifier = Modifier.padding(horizontal = 7.dp).clickable {
-                    saveLauncher.launch("generated.$fileExtension")
-                },
-            )
             CopyChip(onCopy = { copyToClipboard(context, trimmed, "Code") })
         }
         Hairline()
         AnimatedContent(
             targetState = showPreview,
-            transitionSpec = { fadeIn(tween(120)) togetherWith fadeOut(tween(90)) },
+            transitionSpec = { (fadeIn(tween(160)) + scaleIn(initialScale = 0.985f)) togetherWith (fadeOut(tween(110)) + scaleOut(targetScale = 0.99f)) },
             label = "codePreviewInline",
         ) { preview ->
             if (preview) {
