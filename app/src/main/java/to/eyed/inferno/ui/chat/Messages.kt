@@ -71,6 +71,13 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.composables.icons.lucide.ChevronDown
+import com.composables.icons.lucide.Search
+import com.composables.icons.lucide.ShieldCheck
+import com.composables.icons.lucide.ListChecks
+import com.composables.icons.lucide.Lightbulb
+import com.composables.icons.lucide.Table
+import com.composables.icons.lucide.FileDown
+import com.composables.icons.lucide.Archive
 import com.composables.icons.lucide.Check
 import com.composables.icons.lucide.Copy
 import com.composables.icons.lucide.FileText
