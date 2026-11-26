@@ -409,10 +409,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
         var assistantId: String? = null
         var toolNotes: String? = null
         try {
-            var history = c.chats.messagesOnce(conversationId).map { message ->
-                if (message.files.isEmpty()) message
-                else message.copy(files = message.files.map { file -> file.copy(extractedText = c.files.extractText(file)) })
-            }
+            var history = c.chats.messagesOnce(conversationId)
             val latestUserText = history.lastOrNull { it.role == ChatRepository.ROLE_USER }?.content.orEmpty()
             val webIntent = settings.webSearchEnabled && AssistantToolRouter.shouldConsiderWeb(latestUserText)
             val imageIntent = AssistantToolRouter.shouldConsiderImageGeneration(latestUserText)
