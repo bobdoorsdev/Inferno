@@ -247,6 +247,20 @@ class AssistantToolRouterTest {
         assertFalse(AssistantToolRouter.needsApproximateCity("Here is the code you asked for"))
     }
 
+    @Test fun genericImageAltTextUsesTheMatchedProductTitle() {
+        val image = WebImageResult(
+            "RTX 5090 Founders Edition",
+            "https://images.example.com/rtx5090.webp",
+            "https://example.com/products/rtx5090",
+            "https://images.example.com/rtx5090-thumb.webp",
+        )
+        val answer = "Recommended GPU: ![short description](https://images.example.com/rtx5090.webp)"
+        val enriched = AssistantToolRouter.enrichAnswer(answer, emptyList(), listOf(image))
+        assertTrue(enriched.contains("![RTX 5090 Founders Edition]"))
+        assertTrue(enriched.contains("https://images.example.com/rtx5090-thumb.webp"))
+        assertFalse(enriched.contains("short description"))
+    }
+
     @Test fun citationEnrichmentLeavesCodeFenceReferencesUntouched() {
         val source = WebSearchResult("Example source", "https://example.com/page", "Evidence")
         val fence = 96.toChar().toString().repeat(3)
