@@ -36,6 +36,8 @@ interface ChatDao {
     suspend fun deleteFrom(cid: String, from: Int)
     @Query("DELETE FROM conversations") suspend fun deleteAll()
     @Query("SELECT COUNT(*) FROM message_images WHERE imageId = :imageId") suspend fun imageRefs(imageId: String): Int
+    @Query("SELECT COUNT(*) FROM messages WHERE content LIKE '%' || :fileId || '%'") suspend fun fileRefs(fileId: String): Int
+    @Query("SELECT content FROM messages") suspend fun allMessageContents(): List<String>
     @Query("UPDATE conversations SET title = :title, updatedAt = :at WHERE id = :id") suspend fun rename(id: String, title: String, at: Long)
     @Query("UPDATE conversations SET pinned = :pinned WHERE id = :id") suspend fun setPinned(id: String, pinned: Boolean)
     @Query("UPDATE conversations SET archived = :archived WHERE id = :id") suspend fun setArchived(id: String, archived: Boolean)
