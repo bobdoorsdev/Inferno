@@ -23,7 +23,7 @@ object CodePalette {
 }
 
 fun highlightCode(code: String, language: String?): AnnotatedString {
-    val lang = language.orEmpty().trim().lowercase().substringBefore(' ')
+    val lang = language.orEmpty().trim().lowercase().substringBefore(' ').removeSuffix("-run")
     val html = lang in setOf("html", "htm", "xml", "xhtml", "svg")
     val lua = lang in setOf("lua", "luau")
     val python = lang in setOf("python", "py", "python3")
