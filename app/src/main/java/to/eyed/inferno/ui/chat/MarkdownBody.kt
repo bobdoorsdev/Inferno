@@ -40,7 +40,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.TextMotion
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
@@ -193,7 +192,7 @@ private fun StreamingMarkdownTail(chunk: String, animateStreaming: Boolean) {
 
 @Composable
 private fun MarkdownTextChunk(chunk: String, animated: Boolean = false) {
-    val body = Typography.bodyLarge.copy(color = Ink.I100, textDirection = TextDirection.Content, textMotion = if (animated) TextMotion.Animated else TextMotion.Static)
+    val body = Typography.bodyLarge.copy(color = Ink.I100, textDirection = TextDirection.Content)
     // immediate parses the first composition synchronously (no blank frame) and retainState keeps the
     // previous tree on screen during the async re-parse; without both, each publish flashes the
     // library's placeholder, which reads as violent flicker at streaming rate.
