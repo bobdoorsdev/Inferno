@@ -28,7 +28,6 @@ import to.eyed.inferno.imagegen.ImageGenParams
 import to.eyed.inferno.imagegen.ImageGenUiState
 import to.eyed.inferno.imagegen.ImageSizePreset
 import to.eyed.inferno.models.ImageModelCatalog
-import android.net.Uri
 import java.io.File
 import to.eyed.inferno.data.AssistantToolPlan
 import to.eyed.inferno.data.AssistantToolRouter
@@ -404,7 +403,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
                         when (val result = c.imageGen.state.value) {
                             is ImageGenUiState.Done -> {
                                 val uri = Uri.fromFile(File(result.record.path))
-                                c.chats.appendAssistant(conversationId, "![Generated image]($uri)", "Generated with ${selectedImage.name}", null)
+                                c.chats.appendAssistant(conversationId, "![Generated image]($uri)", "Generated with ${selectedImage.displayName}", null)
                             }
                             is ImageGenUiState.Error -> c.chats.appendAssistant(conversationId, result.message, null, null)
                             else -> appVmRef?.notice("Image generation did not return an image")
