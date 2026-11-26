@@ -260,8 +260,8 @@ class AssistantToolRouterTest {
         val notes = AssistantToolRouter.searchNotes(
             listOf(WebSearchResult("Publisher", "https://example.com/page", "Snippet", siteIconUrl = "https://example.com/assets/icon.png")),
         )!!
-        assertTrue(notes.contains("![__favicon__](https://example.com/assets/icon.png)"))
-        assertFalse(notes.contains("google.com/s2/favicons"))
+        assertTrue(notes.contains("![__favicon__](https://example.com/assets/icon.png"))
+        assertTrue(notes.contains("https://www.google.com/s2/favicons?domain=example.com&sz=64"))
     }
 
     @Test fun sourcePanelHidesQueryListAndNumberingButRendersWebsiteFavicon() {
