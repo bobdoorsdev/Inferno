@@ -216,6 +216,7 @@ class AssistantToolRouterTest {
         )
         assertEquals(9, plan.maxSources)
         assertEquals(listOf("best gaming PC Brazil under budget"), plan.searchQueries)
+        assertEquals(0, AssistantToolRouter.parse("""{"search_queries":[],"max_sources":0}""").maxSources)
         assertEquals(listOf("gaming PC product photo"), plan.imageQueries)
         assertEquals("encode", plan.base64Action)
         assertEquals("SHA-256", plan.hashAlgorithm)
@@ -253,6 +254,14 @@ class AssistantToolRouterTest {
         val enriched = AssistantToolRouter.enrichAnswer(answer, listOf(source), emptyList())
         assertTrue(enriched.contains("local values = { [1] = true }"))
         assertTrue(enriched.contains("Claim [1](https://example.com/page)"))
+    }
+
+    @Test fun sourcePanelUsesActualPublisherIconWhenAvailable() {
+        val notes = AssistantToolRouter.searchNotes(
+            listOf(WebSearchResult("Publisher", "https://example.com/page", "Snippet", siteIconUrl = "https://example.com/assets/icon.png")),
+        )!!
+        assertTrue(notes.contains("![__favicon__](https://example.com/assets/icon.png)"))
+        assertFalse(notes.contains("google.com/s2/favicons"))
     }
 
     @Test fun sourcePanelHidesQueryListAndNumberingButRendersWebsiteFavicon() {
