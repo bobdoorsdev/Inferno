@@ -1,5 +1,8 @@
 package to.eyed.inferno.ui.chat
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import android.widget.Toast
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
@@ -321,6 +324,29 @@ fun MonoCodeBlock(code: String, language: String?, modifier: Modifier = Modifier
     val context = LocalContext.current
     val trimmed = code.trimEnd('\n')
     val info = language?.trim()?.lowercase().orEmpty()
+    val fileExtension = when (info.removeSuffix("-run").substringBefore(' ')) {
+        "kotlin" -> "kt"
+        "javascript" -> "js"
+        "typescript" -> "ts"
+        "python" -> "py"
+        "luau", "lua" -> "lua"
+        "markdown" -> "md"
+        "shell" -> "sh"
+        "text" -> "txt"
+        "html", "htm", "svg", "xml", "css", "json", "csv", "java", "kt", "py", "js", "ts", "sh", "md" ->
+            info.removeSuffix("-run").substringBefore(' ')
+        else -> "txt"
+    }
+    val saveLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
+        if (uri != null) {
+            runCatching {
+                context.contentResolver.openOutputStream(uri)?.bufferedWriter(Charsets.UTF_8)?.use { it.write(trimmed) }
+                    ?: error("Unable to open destination")
+            }.onFailure {
+                Toast.makeText(context, "Could not save file", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
     val runLanguage = info.removeSuffix("-run").substringBefore(' ')
     val autoRun = info.endsWith(" run") || info.endsWith("-run")
     var showPreview by remember(code, language) { mutableStateOf(false) }
@@ -344,6 +370,14 @@ fun MonoCodeBlock(code: String, language: String?, modifier: Modifier = Modifier
                 modifier = Modifier.weight(1f),
             )
             if (runnable && !streaming) CodeRunChip(showingPreview = showPreview) { showPreview = !showPreview }
+            if (!streaming) Text(
+                "Save",
+                style = RowMeta,
+                color = Ink.I500,
+                modifier = Modifier.padding(horizontal = 7.dp).clickable {
+                    saveLauncher.launch("generated.$fileExtension")
+                },
+            )
             CopyChip(onCopy = { copyToClipboard(context, trimmed, "Code") })
         }
         Hairline()
