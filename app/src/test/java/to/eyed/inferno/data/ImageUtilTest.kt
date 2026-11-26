@@ -64,10 +64,10 @@ class ImageUtilTest {
         assertNull(ImageMath.idFromFileName("short.jpg"))
     }
 
-    @Test fun titleRuleSkipsGreetingsAndTruncatesSubstantiveFirstLine() {
+    @Test fun titleFallbackUsesFirstLineEvenForGreetingsAndTruncates() {
         assertEquals("", ChatRepository.titleFrom(""))
         assertEquals("", ChatRepository.titleFrom("  \n\n "))
-        assertEquals("", ChatRepository.titleFrom("\n  Hello there  \nsecond line"))
+        assertEquals("Hello there", ChatRepository.titleFrom("\n  Hello there  \nsecond line"))
         assertEquals("How to build Roblox rooms", ChatRepository.titleFrom("  How to build Roblox rooms  \nsecond line"))
         val longer = "word ".repeat(20).trim()
         val t = ChatRepository.titleFrom(longer)
