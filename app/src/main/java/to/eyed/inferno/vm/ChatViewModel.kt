@@ -619,17 +619,27 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
                                 )
                             }
                             val imageTask = async {
-                                roundImages.flatMap { query -> webSearchClient.searchImages(query) }
+                                roundImages.flatMap { query ->
+                                    try { webSearchClient.searchImages(query) }
+                                    catch (e: CancellationException) { throw e }
+                                    catch (_: Exception) { emptyList() }
+                                }
                             }
                             val foundSources = sourceTask.await()
                             webResults += foundSources
                             _toolSourceUrls.value = webResults.distinctBy { it.url }.map { it.url }
+                            val searchedImages = imageTask.await()
+                            val imageByHost = searchedImages.groupBy { image ->
+                                runCatching { java.net.URI(image.sourceUrl).host?.lowercase() }.getOrNull()
+                            }
                             webImages += foundSources.mapNotNull { source ->
                                 source.siteImageUrl?.let { imageUrl ->
-                                    to.eyed.inferno.data.WebImageResult(source.title, imageUrl, source.url)
+                                    val host = runCatching { java.net.URI(source.url).host?.lowercase() }.getOrNull()
+                                    val sameSiteFallback = imageByHost[host]?.firstOrNull { it.imageUrl != imageUrl }?.imageUrl
+                                    to.eyed.inferno.data.WebImageResult(source.title, imageUrl, source.url, sameSiteFallback)
                                 }
                             }
-                            webImages += imageTask.await()
+                            webImages += searchedImages
                         }
                     } catch (e: CancellationException) { throw e }
                     catch (_: Exception) { appVmRef?.notice(S.webSearchFailed) }
