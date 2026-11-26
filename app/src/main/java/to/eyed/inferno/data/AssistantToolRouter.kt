@@ -523,51 +523,6 @@ object AssistantToolRouter {
         return AssistantToolNotes(reasoning, search, local)
     }
 
-    /** Cheap gate so the tool-planning inference is only paid for when the user likely needs current or visual information. */
-    fun shouldConsiderWeb(text: String): Boolean {
-        val value = text.trim()
-        if (value.isBlank()) return false
-        if (fallbackSearchQuery(value) != null || fallbackImageQuery(value) != null) return true
-        val explicitLookup = Regex(
-            """\b(search|look up|research|find online|verify|check the official|official documentation|sources|citations|references)\b""",
-            RegexOption.IGNORE_CASE,
-        )
-        val changingFacts = Regex(
-            """\b(who is|who are|where is|where are|when did|when was|when is|how much|how many|how old|does .{1,80} support|is .{1,80} still|which .{1,80} is better|recommend|recommendation|alternatives|alternative|reviews?|specifications|specs)\b""",
-            RegexOption.IGNORE_CASE,
-        )
-        return explicitLookup.containsMatchIn(value) || changingFacts.containsMatchIn(value)
-    }
-
-    /** Hard fallback: obvious time-sensitive requests still search when a small local planner omits a query. */
-    fun fallbackSearchQuery(text: String): String? {
-        val value = text.trim()
-        val trigger = Regex("""\b(latest|newest|current|today|tonight|right now|rn|recent|this week|this month|this year|as of|price|prices|cost|release|released|release date|available|availability|news|weather|forecast|schedule|score|standings|ranking|rankings|review|reviews|compare|comparison|versus|vs|best|top|specification|specifications|specs|official|documentation|support|compatibility|search|look up|find online|who is the current|what happened)\b""", RegexOption.IGNORE_CASE)
-        if (value.isBlank() || !trigger.containsMatchIn(value)) return null
-        return value
-            .replace(Regex("""^(?:please\s+)?(?:can you\s+)?(?:search(?: the web)?(?: for)?|look up|find online|research)\s*""", RegexOption.IGNORE_CASE), "")
-            .trim().takeIf { it.length >= 2 }?.take(220)
-    }
-
-    /** Only request images when the user asks to see a subject or the prompt is explicitly visual. */
-    fun fallbackImageQuery(text: String): String? {
-        val value = text.trim()
-        if (value.isBlank()) return null
-        val productRequest = Regex("""\b(best|top|recommend|recommended|recommendations|compare|comparison|buy|buying|purchase|shopping|price|prices)\b""", RegexOption.IGNORE_CASE).containsMatchIn(value) &&
-            Regex("""\b(gaming\s*pcs?|desktop\s*pcs?|gaming\s*computers?|laptops?|notebooks?|graphics\s*cards?|gpus?|cpus?|processors?|monitors?|phones?|smartphones?|tablets?|consoles?|keyboards?|mice|headphones?|cameras?|televisions?|tvs?)\b""", RegexOption.IGNORE_CASE).containsMatchIn(value)
-        if (productRequest) return value.take(180)
-        val hasVisual = Regex("""\b(images?|pictures?|photos?|illustrations?|wallpapers?|visuals?)\b""", RegexOption.IGNORE_CASE).containsMatchIn(value)
-        val asksForVisual = Regex("""\b(show|find|search|look for|give me|send me|provide|need|want|free|royalty[- ]free|download)\b""", RegexOption.IGNORE_CASE).containsMatchIn(value)
-        val describesVisualSearch = Regex("""\b(what does .+ look like|show me .+)""", RegexOption.IGNORE_CASE).containsMatchIn(value)
-        return value.takeIf { hasVisual && (asksForVisual || describesVisualSearch) }?.take(180)
-    }
-
-    fun fallbackWeatherLocation(text: String): String? {
-        val value = text.trim()
-        val match = Regex("""\b(?:weather|forecast|temperature|conditions)\b.{0,28}?\b(?:in|for|at)\s+([^?.,!]+)""", RegexOption.IGNORE_CASE).find(value)
-        return match?.groupValues?.get(1)?.trim()?.trimEnd('.')?.take(100)?.takeIf { it.length >= 2 }
-    }
-
     /** Safe recursive-descent parser; no eval or executable model output. */
     private class ArithmeticParser(private val source: String) {
         private var index = 0
