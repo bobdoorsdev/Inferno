@@ -52,6 +52,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.font.FontWeight
 import com.composables.icons.lucide.ChevronDown
+import com.composables.icons.lucide.Search
 import com.composables.icons.lucide.Lucide
 import kotlinx.coroutines.delay
 import to.eyed.inferno.data.AssistantToolRouter

@@ -57,7 +57,16 @@ object AssistantToolRouter {
             Regex("""\d""").containsMatchIn(value) &&
             Regex("""[+\-*/%^×÷]|\b(plus|minus|times|multiplied|divided|percent|percentage|square root|fahrenheit|celsius|kilometers|miles|kilograms|pounds)\b""").containsMatchIn(value)
         val bareExpression = Regex("""\d+(?:\.\d+)?\s*[+\-*/%^×÷]\s*\d""").containsMatchIn(value)
-        val asksLocalUtility = Regex("""\b(convert|unit conversion|days between|date difference|add \d+ days|subtract \d+ days|format this json|pretty.?print json|validate json|test this regex|regex match|convert (?:hex|rgb|hsl|hsv)|color code)\b""", RegexOption.IGNORE_CASE).containsMatchIn(value)
+        val asksLocalUtility = Regex(
+            """\b(convert|unit conversion|days between|date difference|add \d+ (?:days?|weeks?|months?|years?)|subtract \d+ (?:days?|weeks?|months?|years?)|format this json|pretty.?print json|validate json|test this regex|regex match|regex tester|color code)\b""",
+            RegexOption.IGNORE_CASE,
+        ).containsMatchIn(value) || Regex(
+            """-?\d+(?:\.\d+)?\s*(?:°?[cfk]|km|cm|mm|mi|m|ft|in|yd|kg|g|mg|lb|oz|ml|l|gal|mph|kph|kb|mb|gb|tb|kib|mib|gib)\s+(?:to|in)\s+[a-z°/]+""",
+            RegexOption.IGNORE_CASE,
+        ).containsMatchIn(value) || Regex(
+            """\b(?:#(?:[0-9a-f]{3}|[0-9a-f]{6})|rgb\(|hsl\().{0,60}(?:to|convert|color)\b""",
+            RegexOption.IGNORE_CASE,
+        ).containsMatchIn(value)
         return asksTime || asksMath || bareExpression || asksLocalUtility
     }
 
@@ -74,7 +83,7 @@ On-device utilities:
 - json_action + json_text: action is format, minify, or validate. Include only the JSON payload, max 16 KB.
 - regex_pattern + regex_text + optional regex_flags: test a regex against supplied text; flags may include i, m, s. Pattern max 256 chars, text max 4 KB.
 - color_value: convert CSS HEX, rgb(), or hsl() to HEX, RGB, and HSL.
-Image search: choose up to three image_queries when pictures materially help. For product recommendations and hardware comparisons, search product images as well as factual pages. Never search for decorative images. The app displays returned images directly; do not invent image URLs or claim images were found when none were returned.
+Image search: choose up to three image_queries when pictures materially improve an answer. For product recommendations (gaming PCs, phones, laptops, GPUs, monitors, etc.), locations, animals, and visual comparisons, search for representative images alongside factual sources. Put exact returned image URLs into the final answer inline beside the paragraph they illustrate, using ![short factual description](exact image URL). Use images selectively; never invent URLs or claim an image is an exact listing/product variant when the source does not support that.
 Image generation: when the user explicitly asks you to create, draw, or generate an image, return a concise image_prompt describing the requested image. Do not set image_prompt for requests that merely discuss image generation or ask for image search.
 Calculator: use for exact arithmetic and expressions. Return only an expression with numbers, parentheses, + - * / % ^. Never guess changing rates.
 Device clock: request current_time for now/today or time-relative requests; the app injects local time privately into your context.

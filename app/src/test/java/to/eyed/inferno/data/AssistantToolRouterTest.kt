@@ -104,6 +104,53 @@ class AssistantToolRouterTest {
         assertFalse(ChatRepository.isTitleWorthy("Hello"))
     }
 
+    @Test fun localUnitConverterHandlesTemperatureLengthAndStorage() {
+        assertEquals("77 °F", AssistantToolRouter.convertUnits("25 C to F"))
+        assertEquals("1000 m", AssistantToolRouter.convertUnits("1 km to m"))
+        assertEquals("1 m", AssistantToolRouter.convertUnits("100 cm to m"))
+        assertEquals("1 GiB", AssistantToolRouter.convertUnits("1024 MiB to GiB"))
+        assertTrue(AssistantToolRouter.shouldRouteLocally("100 cm to m"))
+    }
+
+    @Test fun localDateCalculatorHandlesDifferencesAndOffsets() {
+        assertTrue(AssistantToolRouter.calculateDate("days between 2026-01-01 and 2026-01-03")!!.startsWith("2 days"))
+        assertTrue(AssistantToolRouter.calculateDate("2026-01-01 + 7 days")!!.startsWith("2026-01-08"))
+        assertNull(AssistantToolRouter.calculateDate("tomorrow"))
+    }
+
+    @Test fun localJsonToolValidatesFormatsAndMinifies() {
+        assertTrue(AssistantToolRouter.processJson("validate", """{"ok":true}""").startsWith("Valid JSON"))
+        assertTrue(AssistantToolRouter.processJson("format", """{"a":1}""").contains("\"a\": 1"))
+        assertEquals("""{"a":1}""", AssistantToolRouter.processJson("minify", """{ "a" : 1 }"""))
+        assertTrue(AssistantToolRouter.processJson("format", "{bad").startsWith("Invalid JSON"))
+    }
+
+    @Test fun localRegexTesterReturnsBoundedMatches() {
+        assertTrue(AssistantToolRouter.testRegex("""\\d+""", "a12 b3").contains("2 match(es)"))
+        assertTrue(AssistantToolRouter.testRegex("(", "test").startsWith("Regex error:"))
+        assertTrue(AssistantToolRouter.testRegex("""(a+)+""", "aaaa").startsWith("Regex error:"))
+    }
+
+    @Test fun localColorConverterReturnsHexRgbAndHsl() {
+        val orange = AssistantToolRouter.convertColor("#FF6600")!!
+        assertTrue(orange.contains("#FF6600"))
+        assertTrue(orange.contains("RGB(255, 102, 0)"))
+        assertTrue(orange.contains("HSL(24, 100%, 50%)"))
+        assertTrue(AssistantToolRouter.convertColor("hsl(120, 100%, 50%)")!!.contains("#00FF00"))
+        assertNull(AssistantToolRouter.convertColor("not a color"))
+    }
+
+    @Test fun imageSearchFallbackPlacesImagesBesideTheMatchingAnswerParagraph() {
+        val answer = "For a gaming PC, compare the GPU, CPU and cooling carefully.\n\nA good keyboard is a separate purchase."
+        val result = AssistantToolRouter.enrichAnswer(
+            answer,
+            emptyList(),
+            listOf(WebImageResult("Gaming PC", "https://images.example/gaming-pc.jpg", "https://source.example/pc")),
+        )
+        assertTrue(result.indexOf("gaming pc", ignoreCase = true) < result.indexOf("![Gaming PC]"))
+        assertTrue(result.indexOf("![Gaming PC]") < result.indexOf("A good keyboard"))
+    }
+
     @Test fun preservesImagesAlreadyEmbeddedAsMarkdown() {
         val answer = AssistantToolRouter.enrichAnswer(
             "![Already embedded](https://images.example/cup.jpg)",

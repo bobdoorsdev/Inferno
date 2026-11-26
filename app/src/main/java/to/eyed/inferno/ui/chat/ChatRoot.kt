@@ -70,6 +70,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.window.core.layout.WindowSizeClass
 import com.composables.icons.lucide.ChevronDown
 import com.composables.icons.lucide.Lucide
+import com.composables.icons.lucide.Bookmark
 import com.composables.icons.lucide.X
 import com.composables.icons.lucide.Bookmark
 import com.composables.icons.lucide.Trash2

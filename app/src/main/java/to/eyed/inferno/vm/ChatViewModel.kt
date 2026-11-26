@@ -37,6 +37,7 @@ import to.eyed.inferno.data.ChatRepository
 import to.eyed.inferno.data.ContextPolicy
 import to.eyed.inferno.data.Conversation
 import to.eyed.inferno.data.MessageStats
+import to.eyed.inferno.data.SavedAnswer
 import to.eyed.inferno.data.WebSearchClient
 import to.eyed.inferno.engine.ContextManager
 import to.eyed.inferno.engine.EngineState
@@ -96,6 +97,52 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
 
     val conversations: StateFlow<List<Conversation>> = c.chats.conversations
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    private val _searchMatches = MutableStateFlow<Set<String>>(emptySet())
+    val searchMatches: StateFlow<Set<String>> = _searchMatches.asStateFlow()
+    private var searchJob: Job? = null
+
+    fun searchChats(query: String) {
+        searchJob?.cancel()
+        if (query.trim().length < 2) {
+            _searchMatches.value = emptySet()
+            return
+        }
+        searchJob = viewModelScope.launch {
+            delay(120)
+            _searchMatches.value = c.chats.searchConversationIds(query)
+        }
+    }
+
+    fun toggleSavedAnswer(message: ChatMessage) = viewModelScope.launch {
+        val conversationId = activeId.value ?: return@launch
+        val current = c.prefs.settings.value.savedAnswers
+        val updated = if (current.any { it.id == message.id }) {
+            current.filterNot { it.id == message.id }
+        } else {
+            val title = c.chats.conversation(conversationId)?.displayTitle ?: "Saved answer"
+            listOf(SavedAnswer(message.id, conversationId, title, message.content, System.currentTimeMillis())) + current
+        }
+        c.prefs.setSavedAnswers(updated)
+    }
+
+    fun removeSavedAnswer(id: String) = viewModelScope.launch {
+        c.prefs.setSavedAnswers(c.prefs.settings.value.savedAnswers.filterNot { it.id == id })
+    }
+
+    fun exportMarkdown(id: String, onReady: (String) -> Unit) = viewModelScope.launch {
+        val conversation = c.chats.conversation(id) ?: return@launch
+        val history = c.chats.messagesOnce(id).filterNot { it.isSummary }
+        val markdown = buildString {
+            append("# ").append(conversation.displayTitle).append("\n\n")
+            history.forEach { message ->
+                val label = if (message.role == ChatRepository.ROLE_USER) "You" else "Assistant"
+                append("## ").append(label).append("\n\n")
+                append(message.content.trim()).append("\n\n")
+            }
+        }.trim()
+        onReady(markdown)
+    }
 
     val activeId: StateFlow<String?> = handle.getStateFlow<String?>(KEY_ACTIVE, null)
 
