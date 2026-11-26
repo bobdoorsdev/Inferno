@@ -77,7 +77,7 @@ class FileAttachmentStore(private val context: Context) {
     }
 
     fun decodeMarker(content: String): Pair<String, List<FileAttachment>> {
-        val match = Regex("""\\s*<!--INFERNO_FILES:([A-Za-z0-9~_;=-]+)-->$""").find(content)
+        val match = Regex("""\s*<!--INFERNO_FILES:([A-Za-z0-9~_;=-]+)-->$""").find(content)
             ?: return content to emptyList()
         val files = match.groupValues[1].split(';').mapNotNull { row ->
             val p = row.split('~')
