@@ -383,9 +383,9 @@ private fun SendButton(
     hasContent: Boolean, streaming: Boolean, loading: Boolean, queued: Boolean, enabled: Boolean,
     prefill: GenState.Prefill?, calibrating: Boolean, onSend: () -> Unit, onStop: () -> Unit,
 ) {
-    val active = enabled && (hasContent || streaming || queued)
-    val subdued = loading || calibrating || (!stopping && (prefill != null || !active))
     val stopping = streaming || queued
+    val active = enabled && (hasContent || stopping)
+    val subdued = loading || calibrating || (!stopping && (prefill != null || !active))
     val interaction = remember { MutableInteractionSource() }
     val bg by animateColorAsState(Ink.White.copy(alpha = if (subdued) 0.62f else 1f), fastEffectsSpec(), label = "sendBg")
     Box(
