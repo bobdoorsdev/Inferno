@@ -525,7 +525,7 @@ Return JSON only: {"search_queries":[],"max_sources":5,"image_queries":[],"image
                     val source = sources.getOrNull(label.toIntOrNull()?.minus(1) ?: -1)
                     if (source == null || !(source.url.startsWith("https://") || source.url.startsWith("http://"))) null
                     else "[" + label + "](" + markdownUrl(source.url) + ")"
-                }.joinToString(", ").ifBlank { match.value }
+                }.joinToString(", ")
             }
         }
         fun sanitizeGenericImageAlt(block: String): String {
@@ -609,7 +609,7 @@ Return JSON only: {"search_queries":[],"max_sources":5,"image_queries":[],"image
         if (search == null && calculation == null && localTools.isEmpty()) return null
         return buildString {
             append(NOTES_MARKER)
-            if (search != null) append("\n\n").append(SEARCH_MARKER).append("\n").append(search)
+            if (search != null) append("\n\n").append(SEARCH_MARKER).append("\n**Web search**\n").append(search)
             if (calculation != null || localTools.isNotEmpty()) {
                 append("\n\n").append(LOCAL_MARKER).append("\n")
                 if (calculation != null) append("**Calculator**\n").append(96.toChar()).append(calculation.expression).append(" = ").append(calculation.result).append(96.toChar()).append('\n')
