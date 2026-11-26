@@ -58,9 +58,21 @@ object AssistantToolRouter {
             Regex("""\b(image|picture|illustration|artwork|wallpaper|logo|imagem|desenho|ilustra[cç][aã]o|arte)\b""").containsMatchIn(value)
     }
 
-    fun needsApproximateCity(text: String): Boolean =
-        Regex("""\b(near me|nearby|around me|in my area|here|local weather|weather where i am|my city|where i am)\b""", RegexOption.IGNORE_CASE)
+    fun needsApproximateCity(text: String): Boolean {
+        val nearby = Regex("""\b(near me|nearby|around me|in my area|my city|where i am)\b""", RegexOption.IGNORE_CASE)
             .containsMatchIn(text)
+        if (nearby) return true
+        val weather = Regex("""\b(weather|forecast|temperature)\b""", RegexOption.IGNORE_CASE).containsMatchIn(text)
+        if (!weather) return false
+        val educational = Regex("""\b(explain|definition|meaning|how do|how does|why does|why do)\b""", RegexOption.IGNORE_CASE)
+            .containsMatchIn(text)
+        if (educational) return false
+        val explicitPlace = Regex(
+            """\b(?:in|near|for)\s+(?!the\b|next\b|coming\b|this\b|last\b|my\b|your\b|a\b|an\b)[\p{L}][\p{L}\p{M}'’.-]*(?:\s+[\p{L}][\p{L}\p{M}'’.-]*){0,2}""",
+            RegexOption.IGNORE_CASE,
+        ).containsMatchIn(text)
+        return !explicitPlace
+    }
 
     fun shouldRouteLocally(text: String): Boolean {
         val value = text.lowercase(Locale.ROOT)
