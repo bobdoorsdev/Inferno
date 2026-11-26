@@ -421,7 +421,7 @@ private fun extractCodeArtifacts(answer: String): List<AssistantCodeFile> {
         val safe = hinted.replace('\\', '/').split('/')
             .filter { it.isNotBlank() && it != "." && it != ".." }
             .joinToString("/") { it.replace(Regex("""[^A-Za-z0-9._-]"""), "_") }
-        if (safe.isBlank()) return@forEachIndexed
+        if (safe.isBlank()) return@forEach
         val path = if (safe.substringAfterLast('/').contains('.')) safe else safe + "." + extension
         if (files.none { it.path == path }) files += AssistantCodeFile(path, match.groupValues[3].trimEnd())
     }
