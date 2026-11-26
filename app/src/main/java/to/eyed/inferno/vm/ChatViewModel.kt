@@ -490,7 +490,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
         try {
             var history = c.chats.messagesOnce(conversationId)
             val latestUserText = history.lastOrNull { it.role == ChatRepository.ROLE_USER }?.content.orEmpty()
-            val coarseCity = if (AssistantToolRouter.needsApproximateCity(latestUserText)) c.coarseCity() else null
+            val coarseCity = if (c.hasCoarseLocationPermission() || AssistantToolRouter.needsApproximateCity(latestUserText)) c.coarseCity() else null
             val webIntent = settings.webSearchEnabled
             val imageIntent = AssistantToolRouter.shouldConsiderImageGeneration(latestUserText)
             val shouldRoute = latestUserText.isNotBlank() &&
