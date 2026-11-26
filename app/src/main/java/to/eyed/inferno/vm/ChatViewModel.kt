@@ -1,6 +1,8 @@
 package to.eyed.inferno.vm
 
 import android.net.Uri
+import android.os.SystemClock
+import android.util.Log
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -352,8 +354,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
 
     /** Ready/Suspended: run now; Loading: queue one turn (replacing an earlier queued one); Idle: "Choose a model first". */
     fun send(text: String) {
-        titleJobs.values.forEach { it.cancel() }
-        titleJobs.clear()
+        // A title job belongs to its conversation; it waits for that chat's next turn instead of being cancelled here.
         val current = gen.value
         if (current.isBusy && current !is GenState.Queued) { appVmRef?.notice(S.stopCurrentAnswer); return }
         if (imageBusy.value) { appVmRef?.notice(S.waitForImageFirst); return }
@@ -473,6 +474,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
                 (webIntent || imageIntent || AssistantToolRouter.shouldRouteLocally(latestUserText))
             _toolStatus.value = null
             _toolSearchNotes.value = null
+            val plannerStartedAt = SystemClock.elapsedRealtime()
             val toolPlan = if (shouldRoute) {
                 try {
                     chooseTools(history, thinking, detail, webIntent, imageIntent && history.count { it.role == ChatRepository.ROLE_USER } == 1)
@@ -480,6 +482,8 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
                     throw e
                 } catch (_: Exception) {
                     AssistantToolPlan()
+                }.also {
+                    Log.d("InfernoTiming", "stage=initial_tool_planner ms=${SystemClock.elapsedRealtime() - plannerStartedAt}")
                 }
             } else AssistantToolPlan()
             val imagePrompt = toolPlan.imagePrompt
@@ -568,6 +572,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
                     _toolStatus.value = "Searching: ${roundSearch.joinToString("; ")}"
                     _toolSearchNotes.value = AssistantToolRouter.searchNotes(webResults.toList(), visibleSearchQueries.toList(), webImages.toList())
                     val previousResultCount = webResults.size
+                    val searchStartedAt = SystemClock.elapsedRealtime()
                     try {
                         webResults += webSearchClient.searchAll(roundSearch) { partial ->
                             _toolSearchNotes.value = AssistantToolRouter.searchNotes(
@@ -586,6 +591,8 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
                     catch (e: Exception) {
                         searchFeedback = "The real web search failed for ${roundSearch.joinToString("; ")}: ${e.message ?: "network error"}. Retry a different query if appropriate; otherwise state that search failed."
                         appVmRef?.notice(S.webSearchFailed)
+                    } finally {
+                        Log.d("InfernoTiming", "stage=web_search round=$round queries=${roundSearch.size} ms=${SystemClock.elapsedRealtime() - searchStartedAt}")
                     }
                 }
                 if (roundImages.isNotEmpty()) {
@@ -615,7 +622,9 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
                     distinctResults, calculation, localTime, distinctImages, weather, localToolResults, searchFeedback,
                 )
                 if (round == MAX_TOOL_ROUNDS - 1 || !didWork) break
+                val replanStartedAt = SystemClock.elapsedRealtime()
                 val next = chooseTools(history, thinking, detail, allowWeb = webIntent, createTitle = false, priorToolResults = observation)
+                Log.d("InfernoTiming", "stage=followup_tool_planner round=$round ms=${SystemClock.elapsedRealtime() - replanStartedAt}")
                 if (next == AssistantToolPlan()) break
                 pendingPlan = next
             }
@@ -696,12 +705,18 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
             appVm.beginFirstTurn()
             setGen(conversationId, GenState.Prefill(0, 0, false, expectedEncodeMs))
             // (4) stream
+            val answerStartedAt = SystemClock.elapsedRealtime()
+            var firstTokenTimingLogged = false
             c.engine.generate(conversationId, messages, promptImages, params, thinking, settings.thinking, detail).collect { ev ->
                 when (ev) {
                     is GenerationEvent.Resuming -> setGen(conversationId, GenState.Prefill(0, 0, false, expectedEncodeMs))
                     is GenerationEvent.Prefill -> setGen(conversationId, GenState.Prefill(ev.done, ev.total, ev.encodingImage, expectedEncodeMs))
                     is GenerationEvent.Thinking -> { stream.thinking(ev.text); stream.publish(ev.text.contains('\n')) }
                     is GenerationEvent.Token -> {
+                        if (!firstTokenTimingLogged) {
+                            firstTokenTimingLogged = true
+                            Log.d("InfernoTiming", "stage=first_answer_token ms=${SystemClock.elapsedRealtime() - answerStartedAt}")
+                        }
                         if (settings.streamingAnimations && settings.streamingTokenDelayMs > 0) {
                             delay(settings.streamingTokenDelayMs.toLong())
                         }
@@ -711,6 +726,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
                         stream.publish(ev.text.contains('\n'))
                     }
                     is GenerationEvent.Done -> {
+                        Log.d("InfernoTiming", "stage=answer_generation_total ms=${SystemClock.elapsedRealtime() - answerStartedAt}")
                         val stats = toStats(ev.stats, ev.reason.name, model.id, loaded, params).copy(thinkingMs = stream.thinkingMs)
                         val finalThinking = listOfNotNull(
                             stream.reasoningOrNull()?.takeIf { it.isNotBlank() },
