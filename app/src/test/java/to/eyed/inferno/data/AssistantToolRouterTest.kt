@@ -240,8 +240,10 @@ class AssistantToolRouterTest {
     @Test fun approximateCityIsOnlyRequestedForExplicitLocalContext() {
         assertTrue(AssistantToolRouter.needsApproximateCity("Find coffee shops near me"))
         assertTrue(AssistantToolRouter.needsApproximateCity("What is the weather here?"))
+        assertTrue(AssistantToolRouter.needsApproximateCity("What's the weather today?"))
         assertFalse(AssistantToolRouter.needsApproximateCity("What is the weather in São Paulo?"))
         assertFalse(AssistantToolRouter.needsApproximateCity("Explain how weather forecasts work"))
+        assertFalse(AssistantToolRouter.needsApproximateCity("Here is the code you asked for"))
     }
 
     @Test fun citationEnrichmentLeavesCodeFenceReferencesUntouched() {
