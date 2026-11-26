@@ -279,6 +279,28 @@ Return JSON only: {"search_queries":[],"image_queries":[],"image_prompt":"","cal
             require(channels.all { it in 0..255 })
             return channels.toIntArray()
         }
+        val hsv = Regex("""hsv\(\s*(-?\d+(?:\.\d+)?)\s*(?:deg)?\s*,\s*(\d+(?:\.\d+)?)%\s*,\s*(\d+(?:\.\d+)?)%\s*\)""", RegexOption.IGNORE_CASE).matchEntire(value)
+        if (hsv != null) {
+            val h = ((hsv.groupValues[1].toDouble() % 360.0) + 360.0) % 360.0
+            val ss = hsv.groupValues[2].toDouble().coerceIn(0.0, 100.0) / 100.0
+            val v = hsv.groupValues[3].toDouble().coerceIn(0.0, 100.0) / 100.0
+            val c = v * ss
+            val x = c * (1 - kotlin.math.abs((h / 60.0) % 2 - 1))
+            val m = v - c
+            val rgbValues = when {
+                h < 60 -> Triple(c, x, 0.0)
+                h < 120 -> Triple(x, c, 0.0)
+                h < 180 -> Triple(0.0, c, x)
+                h < 240 -> Triple(0.0, x, c)
+                h < 300 -> Triple(x, 0.0, c)
+                else -> Triple(c, 0.0, x)
+            }
+            return intArrayOf(
+                ((rgbValues.first + m) * 255).roundToInt(),
+                ((rgbValues.second + m) * 255).roundToInt(),
+                ((rgbValues.third + m) * 255).roundToInt(),
+            )
+        }
         val hsl = Regex("""hsl\(\s*(-?\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)%\s*,\s*(\d+(?:\.\d+)?)%\s*\)""", RegexOption.IGNORE_CASE).matchEntire(value) ?: return null
         val h = ((hsl.groupValues[1].toDouble() % 360.0) + 360.0) % 360.0
         val ss = hsl.groupValues[2].toDouble().coerceIn(0.0, 100.0) / 100.0
