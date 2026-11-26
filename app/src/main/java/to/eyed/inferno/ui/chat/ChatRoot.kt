@@ -321,6 +321,7 @@ fun ChatRoot(appVm: AppViewModel, chatVm: ChatViewModel, onBeforeSend: () -> Uni
                                 bottomInset = if (composerHeight == 0) 132.dp else with(LocalDensity.current) { composerHeight.toDp() } - 8.dp,
                                 dev = ChatDevFlags(generationStats = settings.devGenerationStats, turnDetails = settings.devTurnDetails, tokenCounter = settings.devTokenCounter, tokenWords = settings.powerUser),
                                 toolStatus = toolStatus, toolSearchNotes = toolSearchNotes,
+                                streamingAnimations = settings.streamingAnimations,
                             )
                         }
                         Column(Modifier.align(Alignment.BottomCenter).widthIn(max = ChatContentMaxWidth), horizontalAlignment = Alignment.CenterHorizontally) {
