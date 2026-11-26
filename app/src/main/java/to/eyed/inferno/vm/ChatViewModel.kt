@@ -653,8 +653,12 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
                 val keep = images.map { it.id }.toSet()
                 val messages0 = view.prompt().map { it.copy(imageIds = it.imageIds.filter { id -> id in keep }) }
                 val baseSystem = ContextManager.systemWith(systemPrompt, view.summary?.content)
+                val languageInstruction = AssistantToolRouter.responseLanguageInstruction(latestUserText)
+                val offlineToolsNote = if (settings.webSearchEnabled && !c.network.wifiConnected.value) {
+                    "NETWORK LIMITATION: No validated Wi-Fi internet connection is available. Web search, image search, and weather lookup are disabled. Do not claim to have searched or present current facts as verified. Answer from local knowledge and clearly state when current information cannot be checked offline."
+                } else null
                 val runnerHints = CODE_RUNNER_INSTRUCTIONS.takeIf { needsBrowserPreview(latestUserText) }
-                val fullSystem = listOfNotNull(baseSystem, AssistantToolRouter.responseLanguageInstruction(latestUserText), toolContext, runnerHints).joinToString("\n\n").takeIf { it.isNotBlank() }
+                val fullSystem = listOfNotNull(baseSystem, languageInstruction, offlineToolsNote, toolContext, runnerHints).joinToString("\n\n").takeIf { it.isNotBlank() }
                 return Triple(fullSystem, messages0, images)
             }
             var (system, messages0, images) = parts()
