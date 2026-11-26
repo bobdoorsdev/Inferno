@@ -77,6 +77,7 @@ import com.composables.icons.lucide.Images
 import com.composables.icons.lucide.FileText
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Plus
+import com.composables.icons.lucide.Wand
 import com.composables.icons.lucide.Square
 import com.composables.icons.lucide.X
 import to.eyed.inferno.data.Attachment
@@ -117,6 +118,7 @@ fun InputBar(
     onPickPhotos: () -> Unit,
     onCapturePhoto: () -> Unit,
     onPickFile: () -> Unit,
+    onOpenTools: () -> Unit,
     onNoVision: (String) -> Unit,
     calibrating: Boolean = false,
     gen: GenState,
@@ -177,7 +179,7 @@ fun InputBar(
                         },
                 )
                 Row(Modifier.padding(start = 8.dp, end = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    AttachButton(canAttachImages, cameraAvailable, noVisionReason, idle, onPickPhotos, onCapturePhoto, onPickFile, onNoVision)
+                    AttachButton(canAttachImages, cameraAvailable, noVisionReason, idle, onPickPhotos, onCapturePhoto, onPickFile, onOpenTools, onNoVision)
                     Spacer(Modifier.width(2.dp))
                     Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
                         if (thinkingAvailable) ThinkChip(thinkingOn, onToggleThinking)
@@ -285,7 +287,8 @@ private fun FileStrip(files: List<FileAttachment>, onRemove: (Int) -> Unit) {
 @Composable
 private fun AttachButton(
     canAttachImages: Boolean, cameraAvailable: Boolean, noVisionReason: String?, idle: Boolean,
-    onPickPhotos: () -> Unit, onCapturePhoto: () -> Unit, onPickFile: () -> Unit, onNoVision: (String) -> Unit,
+    onPickPhotos: () -> Unit, onCapturePhoto: () -> Unit, onPickFile: () -> Unit,
+    onOpenTools: () -> Unit, onNoVision: (String) -> Unit,
 ) {
     var open by remember { mutableStateOf(false) }
     val haptics = rememberHaptics()
@@ -313,6 +316,9 @@ private fun AttachButton(
                 }
                 AttachmentMenuItem(Lucide.FileText, "Files", "Documents, PDFs, and code", enabled = !idle) {
                     open = false; onPickFile()
+                }
+                AttachmentMenuItem(Lucide.Wand, "AI tools", "Writing, coding, analysis, and more", enabled = !idle) {
+                    open = false; onOpenTools()
                 }
                 if (!canAttachImages) {
                     Text(noVisionReason ?: S.noVision, style = Typography.bodySmall, color = Ink.I500,
