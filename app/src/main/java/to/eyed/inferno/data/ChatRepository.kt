@@ -259,12 +259,12 @@ class ChatRepository(private val dao: ChatDao, private val imageUtil: ImageUtil,
             val line = text.lineSequence().firstOrNull { it.isNotBlank() }?.trim().orEmpty()
             if (line.isBlank()) return ""
             val cleaned = line
-                .replace(Regex("""^\\s*[-*#>]+\\s*"""), "")
-                .replace(Regex("""\\s+"""), " ")
+                .replace(Regex("""^\s*[-*#>]+\s*"""), "")
+                .replace(Regex("""\s+"""), " ")
                 .trim().trimEnd('.', '!', '?', ',', ':', ';')
             if (cleaned.isBlank()) return ""
             val words = cleaned.split(' ').take(7).joinToString(" ")
-            val sentenceEnd = Regex("""[.!?](?:\\s|$)""").find(words)?.range?.first
+            val sentenceEnd = Regex("""[.!?](?:\s|$)""").find(words)?.range?.first
             val candidate = (if (sentenceEnd == null) words else words.substring(0, sentenceEnd)).trim()
             return when {
                 candidate.length <= TITLE_MAX -> candidate.replaceFirstChar { it.uppercase() }
