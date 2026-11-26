@@ -118,7 +118,7 @@ fun MarkdownBody(text: String, modifier: Modifier = Modifier, streaming: Boolean
     val body = Typography.bodyLarge.copy(
         color = Ink.I100,
         textDirection = TextDirection.Content,
-        textMotion = androidx.compose.ui.text.style.TextMotion.Animated,
+        textMotion = if (streaming && animateStreaming) androidx.compose.ui.text.style.TextMotion.Animated else androidx.compose.ui.text.style.TextMotion.Static,
     )
     BetterSelectionContainer(modifier = modifier.fillMaxWidth()) {
         Markdown(
@@ -378,97 +378,5 @@ private fun CopyChip(onCopy: () -> Unit) {
             Icon(if (done) Lucide.Check else Lucide.Copy, contentDescription = if (done) "Copied" else S.copyCode,
                 Modifier.size(13.dp), tint = if (done) Ink.White else Ink.I500)
         }
-    }
-}
-
-
-object MarkdownChunker {
-    private val fenceStart = Regex("^(`{3,}|~{3,})(.*)$")
-
-    data class OpenFence(val language: String?, val code: String)
-
-    fun splitOpenFence(source: String): Pair<String, OpenFence?> {
-        val lines = source.split("\n")
-        var markerChar: Char? = null
-        var markerLength = 0
-        var start = -1
-        var language: String? = null
-        for ((index, line) in lines.withIndex()) {
-            val match = fenceStart.matchEntire(line.trim()) ?: continue
-            val marker = match.groupValues[1]
-            val rest = match.groupValues[2]
-            if (markerChar == null) {
-                if (marker[0] == 126.toChar() || !rest.contains(96.toChar())) {
-                    markerChar = marker[0]
-                    markerLength = marker.length
-                    start = index
-                    language = rest.trim().takeIf { it.isNotBlank() }
-                }
-            } else if (marker[0] == markerChar && marker.length >= markerLength && rest.isBlank()) {
-                markerChar = null
-                markerLength = 0
-                start = -1
-                language = null
-            }
-        }
-        if (markerChar == null || start < 0) return source to null
-        return lines.take(start).joinToString("\n").trimEnd('\n') to OpenFence(language, lines.drop(start + 1).joinToString("\n"))
-    }
-
-    fun chunks(source: String): List<String> {
-        val chunks = mutableListOf<String>()
-        val current = mutableListOf<String>()
-        // CommonMark fences: the opener is 3+ of one char (a backtick opener's info string may not contain a
-        // backtick, so "```ls``` lists files" is inline code); the closer is the same char, at least as long, alone.
-        // A plain toggle would flip on such lines and glue the rest of the answer into one re-parsed chunk.
-        var fenceChar: Char? = null
-        var fenceLen = 0
-        val lines = source.split("\n")
-
-        fun flush() {
-            if (current.any { it.isNotBlank() }) chunks.add(current.joinToString("\n"))
-            current.clear()
-        }
-
-        for ((index, line) in lines.withIndex()) {
-            val trimmed = line.trim()
-            val m = fenceStart.matchEntire(trimmed)
-            if (m != null) {
-                val marker = m.groupValues[1]
-                val rest = m.groupValues[2]
-                if (fenceChar == null) {
-                    if (marker[0] == '~' || !rest.contains('`')) {
-                        fenceChar = marker[0]; fenceLen = marker.length
-                        current.add(line); continue
-                    }
-                } else if (marker[0] == fenceChar && marker.length >= fenceLen && rest.isBlank()) {
-                    fenceChar = null; fenceLen = 0
-                    current.add(line); continue
-                }
-                // Otherwise ordinary content (inside a fence, or inline code text).
-            }
-            if (trimmed.isEmpty() && fenceChar == null) {
-                val prevIsItem = current.lastOrNull()?.let(::isListItem) ?: false
-                var nextIsItem = false
-                for (i in (index + 1) until lines.size) {
-                    if (lines[i].isNotBlank()) { nextIsItem = isListItem(lines[i]); break }
-                }
-                if (prevIsItem && nextIsItem) current.add(line) else flush()
-                continue
-            }
-            current.add(line)
-        }
-        flush()
-        return chunks
-    }
-
-    /** "- ", "* ", "+ ", "> " or "1." / "12)" style markers (an indented continuation counts too). */
-    fun isListItem(line: String): Boolean {
-        val t = line.trim()
-        if (t.startsWith("- ") || t.startsWith("* ") || t.startsWith("+ ") || t.startsWith("> ")) return true
-        if (line.startsWith("  ") && t.isNotEmpty()) return true
-        val mark = t.indexOfFirst { it == '.' || it == ')' }
-        if (mark <= 0 || mark > 3) return false
-        return t.substring(0, mark).all { it.isDigit() }
     }
 }
