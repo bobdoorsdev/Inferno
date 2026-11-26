@@ -175,8 +175,7 @@ class WebSearchClient(private val client: OkHttpClient = DEFAULT_CLIENT) {
                     if (!key.containsMatchIn(raw)) return@mapNotNull null
                     Regex("""content=["']([^"']+)["']""", RegexOption.IGNORE_CASE).find(raw)?.groupValues?.get(1)
                 }.firstOrNull() ?: return@use null
-                val uri = Uri.parse(image)
-                val absolute = if (uri.isRelative) Uri.parse(pageUrl).buildUpon().encodedPath(uri.encodedPath).build().toString() else image
+                val absolute = runCatching { java.net.URI(pageUrl).resolve(image).toString() }.getOrDefault(image)
                 val parsed = Uri.parse(absolute)
                 absolute.takeIf { parsed.scheme == "https" && !parsed.host.isNullOrBlank() && it.length < 2_048 }
             }
