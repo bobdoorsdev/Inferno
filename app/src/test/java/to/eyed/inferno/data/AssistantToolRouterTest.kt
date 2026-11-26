@@ -205,9 +205,88 @@ class AssistantToolRouterTest {
         )
         assertTrue(notes!!.startsWith(AssistantToolRouter.NOTES_MARKER))
         assertTrue(notes.contains("**Web search**"))
-        assertTrue(notes.contains("latest release"))
+        assertFalse(notes.contains("latest release"))
         assertTrue(notes.contains("**[Example](https://example.com)** · example.com"))
         assertTrue(notes.contains("2 + 2 = 4"))
         assertFalse(notes.contains("Wednesday, 25 November 2026"))
     }
+    @Test fun plannerChoosesSourceCountAndExecutableUtilities() {
+        val plan = AssistantToolRouter.parse(
+            """{"search_queries":["best gaming PC Brazil under budget"],"max_sources":9,"image_queries":["gaming PC product photo"],"base64_action":"encode","base64_text":"Inferno","hash_algorithm":"SHA-256","hash_text":"abc","csv_action":"stats","csv_text":"name,value\nGPU,1","read_url":"https://example.com"}"""
+        )
+        assertEquals(9, plan.maxSources)
+        assertEquals(listOf("best gaming PC Brazil under budget"), plan.searchQueries)
+        assertEquals(0, AssistantToolRouter.parse("""{"search_queries":[],"max_sources":0}""").maxSources)
+        assertEquals(listOf("gaming PC product photo"), plan.imageQueries)
+        assertEquals("encode", plan.base64Action)
+        assertEquals("SHA-256", plan.hashAlgorithm)
+        assertEquals("stats", plan.csvAction)
+        assertEquals("https://example.com", plan.readUrl)
+    }
+
+    @Test fun newLocalToolsExecuteCorrectly() {
+        assertEquals("SW5mZXJubw==", AssistantToolRouter.processBase64("encode", "Inferno"))
+        assertEquals("Inferno", AssistantToolRouter.processBase64("decode", "SW5mZXJubw=="))
+        assertTrue(AssistantToolRouter.processBase64("decode", "!!!").startsWith("Base64 error:"))
+        assertEquals(
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+            AssistantToolRouter.calculateHash("SHA-256", "abc"),
+        )
+        assertTrue(AssistantToolRouter.processCsv("validate", "name,value\nGPU,1").contains("2 rows, 2 columns"))
+        assertTrue(AssistantToolRouter.processCsv("stats", "name,value\nGPU,1").contains("4 non-empty cells"))
+        assertEquals("name,value\nGPU,\"fast, quiet\"", AssistantToolRouter.processCsv("format", "name,value\nGPU,\"fast, quiet\""))
+        assertTrue(AssistantToolRouter.processCsv("validate", "name,desc\nGPU,\"broken").startsWith("CSV error:"))
+    }
+
+    @Test fun approximateCityIsOnlyRequestedForExplicitLocalContext() {
+        assertTrue(AssistantToolRouter.needsApproximateCity("Find coffee shops near me"))
+        assertTrue(AssistantToolRouter.needsApproximateCity("What is the weather here?"))
+        assertTrue(AssistantToolRouter.needsApproximateCity("What's the weather today?"))
+        assertFalse(AssistantToolRouter.needsApproximateCity("What is the weather in São Paulo?"))
+        assertFalse(AssistantToolRouter.needsApproximateCity("Explain how weather forecasts work"))
+        assertFalse(AssistantToolRouter.needsApproximateCity("Here is the code you asked for"))
+    }
+
+    @Test fun genericImageAltTextUsesTheMatchedProductTitle() {
+        val image = WebImageResult(
+            "RTX 5090 Founders Edition",
+            "https://images.example.com/rtx5090.webp",
+            "https://example.com/products/rtx5090",
+            "https://images.example.com/rtx5090-thumb.webp",
+        )
+        val answer = "Recommended GPU: ![short description](https://images.example.com/rtx5090.webp)"
+        val enriched = AssistantToolRouter.enrichAnswer(answer, emptyList(), listOf(image))
+        assertTrue(enriched.contains("![RTX 5090 Founders Edition]"))
+        assertTrue(enriched.contains("https://images.example.com/rtx5090-thumb.webp"))
+        assertFalse(enriched.contains("short description"))
+    }
+
+    @Test fun citationEnrichmentLeavesCodeFenceReferencesUntouched() {
+        val source = WebSearchResult("Example source", "https://example.com/page", "Evidence")
+        val fence = 96.toChar().toString().repeat(3)
+        val answer = "Code:\n" + fence + "lua\nlocal values = { [1] = true }\n" + fence + "\nClaim [1]"
+        val enriched = AssistantToolRouter.enrichAnswer(answer, listOf(source), emptyList())
+        assertTrue(enriched.contains("local values = { [1] = true }"))
+        assertTrue(enriched.contains("Claim [1](https://example.com/page)"))
+    }
+
+    @Test fun sourcePanelUsesActualPublisherIconWhenAvailable() {
+        val notes = AssistantToolRouter.searchNotes(
+            listOf(WebSearchResult("Publisher", "https://example.com/page", "Snippet", siteIconUrl = "https://example.com/assets/icon.png")),
+        )!!
+        assertTrue(notes.contains("![__favicon__](https://example.com/assets/icon.png"))
+        assertTrue(notes.contains("https://www.google.com/s2/favicons?domain=example.com&sz=64"))
+    }
+
+    @Test fun sourcePanelHidesQueryListAndNumberingButRendersWebsiteFavicon() {
+        val notes = AssistantToolRouter.searchNotes(
+            listOf(WebSearchResult("Official product page", "https://example.com/product", "Product specification")),
+            listOf("internal planner query that must stay hidden"),
+        )!!
+        assertTrue(notes.contains("![__favicon__](https://www.google.com/s2/favicons?domain=example.com&sz=64)"))
+        assertTrue(notes.contains("**[Official product page](https://example.com/product)**"))
+        assertFalse(notes.contains("internal planner query"))
+        assertFalse(Regex("""(?m)^\s*\d+[.)]\s""").containsMatchIn(notes))
+    }
+
 }

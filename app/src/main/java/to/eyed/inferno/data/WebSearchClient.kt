@@ -20,7 +20,7 @@ import okhttp3.Request
 import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
 
-data class WebSearchResult(val title: String, val url: String, val snippet: String)
+data class WebSearchResult(val title: String, val url: String, val snippet: String, val siteImageUrl: String? = null, val siteIconUrl: String? = null)
 
 /** Small model-independent web search adapter. Search runs before local inference and returns cited excerpts. */
 class WebSearchClient(private val client: OkHttpClient = DEFAULT_CLIENT) {
@@ -31,9 +31,10 @@ class WebSearchClient(private val client: OkHttpClient = DEFAULT_CLIENT) {
     suspend fun searchAll(
         queries: List<String>,
         onResults: (List<WebSearchResult>) -> Unit = {},
+        maxResults: Int = 5,
     ): List<WebSearchResult> = coroutineScope {
         val collected = mutableListOf<WebSearchResult>()
-        queries.map(String::trim).filter { it.length >= 2 }.distinct().take(4)
+        queries.map(String::trim).filter { it.length >= 2 }.distinct().take(8)
             .map { query -> async {
                 val found = try {
                     search(query)
@@ -48,12 +49,14 @@ class WebSearchClient(private val client: OkHttpClient = DEFAULT_CLIENT) {
                         found.forEach { result ->
                             if (seen.add(canonicalUrl(result.url))) collected.add(result)
                         }
-                        rankResults(collected, queries).take(8)
+                        rankResults(collected, queries).take(maxResults.coerceIn(1, 12))
                     }
                     onResults(snapshot)
                 }
             } }.awaitAll()
-        synchronized(collected) { rankResults(collected, queries).take(8) }
+        val ranked = synchronized(collected) { rankResults(collected, queries).take(maxResults.coerceIn(1, 12)) }
+        ranked.map { result -> async { val visuals = fetchPageVisuals(result.url); result.copy(siteImageUrl = visuals.first, siteIconUrl = visuals.second) } }.awaitAll()
+            .also(onResults)
     }
 
     private fun rankResults(results: List<WebSearchResult>, queries: List<String>): List<WebSearchResult> {
@@ -116,10 +119,11 @@ class WebSearchClient(private val client: OkHttpClient = DEFAULT_CLIENT) {
                 val uri = url?.let { runCatching { Uri.parse(it) }.getOrNull() } ?: return false
                 return uri.scheme == "https" && !uri.host.isNullOrBlank()
             }
-            val image = thumbnail?.takeIf(::usable) ?: original?.takeIf(::usable) ?: return@mapNotNull null
-            val fallback = original?.takeIf { it != image && usable(it) }
+            val image = original?.takeIf(::usable) ?: thumbnail?.takeIf(::usable) ?: return@mapNotNull null
+            val fallback = thumbnail?.takeIf { it != image && usable(it) }
             val source = obj["url"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
-            val title = obj["title"]?.jsonPrimitive?.contentOrNull?.take(120).orEmpty().ifBlank { q }
+            val rawTitle = obj["title"]?.jsonPrimitive?.contentOrNull?.trim().orEmpty()
+            val title = rawTitle.takeIf { it.isNotBlank() && !it.equals("short description", true) && !it.equals("image", true) }?.take(120) ?: q
             WebImageResult(title, image, source, fallback)
         }.distinctBy { it.imageUrl }.take(3)
     }
@@ -156,6 +160,66 @@ class WebSearchClient(private val client: OkHttpClient = DEFAULT_CLIENT) {
         val code = current["weather_code"]?.jsonPrimitive?.intOrNull ?: -1
         val placeName = listOf(name, country).filter { it.isNotBlank() }.joinToString(", ")
         "$placeName: ${weatherDescription(code)}, ${value("temperature_2m")} °C, feels like ${value("apparent_temperature")} °C, humidity ${value("relative_humidity_2m")}%, precipitation ${value("precipitation")} mm, wind ${value("wind_speed_10m")} km/h. Local observation time: ${value("time")}."
+    }
+
+    /** Read both the product image and the real favicon from the publisher HTML in one request. */
+    private suspend fun fetchPageVisuals(pageUrl: String): Pair<String?, String?> = withContext(Dispatchers.IO) {
+        runCatching {
+            val request = Request.Builder().url(pageUrl).header("User-Agent", USER_AGENT).header("Accept", "text/html").build()
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return@use Pair(null, null)
+                val html = response.body?.string()?.take(1_500_000).orEmpty()
+                val finalPageUrl = response.request.url.toString()
+                fun resolve(raw: String?): String? {
+                    val value = raw?.trim()?.trim('\'', '"')?.takeIf(String::isNotBlank) ?: return null
+                    val absolute = runCatching { java.net.URI(finalPageUrl).resolve(value).toString() }.getOrDefault(value)
+                    val parsed = Uri.parse(absolute)
+                    return absolute.takeIf { parsed.scheme == "https" && !parsed.host.isNullOrBlank() && it.length < 2_048 }
+                }
+                val metaImage = Regex("""<meta\b[^>]*>""", RegexOption.IGNORE_CASE).findAll(html).mapNotNull { tag ->
+                    val raw = tag.value
+                    val key = Regex("""(?:property|name)=["'](?:og:image|twitter:image)["']""", RegexOption.IGNORE_CASE)
+                    if (!key.containsMatchIn(raw)) return@mapNotNull null
+                    Regex("""content=["']([^"']+)["']""", RegexOption.IGNORE_CASE).find(raw)?.groupValues?.get(1)
+                }.firstOrNull()
+                val icon = Regex("""<link\b[^>]*>""", RegexOption.IGNORE_CASE).findAll(html).mapNotNull { tag ->
+                    val raw = tag.value
+                    val rel = Regex("""rel=["']([^"']+)["']""", RegexOption.IGNORE_CASE).find(raw)?.groupValues?.get(1).orEmpty()
+                    if (!Regex("""(?:^|\s)(?:shortcut-)?icon(?:\s|$)|apple-touch-icon""", RegexOption.IGNORE_CASE).containsMatchIn(rel)) return@mapNotNull null
+                    Regex("""href=["']([^"']+)["']""", RegexOption.IGNORE_CASE).find(raw)?.groupValues?.get(1)?.let(::resolve)
+                }.firstOrNull()
+                resolve(metaImage) to icon
+            }
+        }.getOrNull() ?: (null to null)
+    }
+
+    /** Fetch and strip a public web page for questions about a specific URL. Private/local targets are rejected. */
+    suspend fun readPage(value: String): String? = withContext(Dispatchers.IO) {
+        runCatching {
+            val uri = Uri.parse(value.trim())
+            val host = uri.host?.lowercase() ?: return@runCatching null
+            fun privateHost(name: String): Boolean {
+                if (name == "localhost" || name.endsWith(".local") || name == "0.0.0.0") return true
+                val address = java.net.InetAddress.getByName(name)
+                return address.isAnyLocalAddress || address.isLoopbackAddress || address.isLinkLocalAddress ||
+                    address.isSiteLocalAddress || address.isMulticastAddress
+            }
+            require(uri.scheme == "https" || uri.scheme == "http") { "Only HTTP(S) URLs can be read." }
+            require(!privateHost(host)) { "Local and private network URLs are not allowed." }
+            val request = Request.Builder().url(value.trim()).header("User-Agent", USER_AGENT).header("Accept", "text/html").build()
+            client.newCall(request).execute().use { response ->
+                require(response.isSuccessful) { "Page returned HTTP " + response.code }
+                val finalHost = response.request.url.host
+                require(!privateHost(finalHost)) { "Redirect to a local or private host was blocked." }
+                val html = response.body?.string()?.take(1_500_000).orEmpty()
+                val title = Regex("""<title[^>]*>(.*?)</title>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+                    .find(html)?.groupValues?.get(1)?.let(::clean).orEmpty()
+                val body = Regex("""<body\b[^>]*>(.*?)</body>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+                    .find(html)?.groupValues?.get(1) ?: html
+                val text = clean(body).take(14_000)
+                if (text.isBlank()) null else (if (title.isBlank()) "" else title + "\n") + "URL: " + response.request.url + "\n\n" + text
+            }
+        }.getOrNull()
     }
 
     suspend fun search(query: String): List<WebSearchResult> = withContext(Dispatchers.IO) {

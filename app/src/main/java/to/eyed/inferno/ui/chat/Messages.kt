@@ -15,6 +15,10 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -67,6 +71,13 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.composables.icons.lucide.ChevronDown
+import com.composables.icons.lucide.Search
+import com.composables.icons.lucide.ShieldCheck
+import com.composables.icons.lucide.ListChecks
+import com.composables.icons.lucide.Lightbulb
+import com.composables.icons.lucide.Table
+import com.composables.icons.lucide.FileDown
+import com.composables.icons.lucide.Archive
 import com.composables.icons.lucide.Check
 import com.composables.icons.lucide.Copy
 import com.composables.icons.lucide.FileText
@@ -74,6 +85,7 @@ import com.composables.icons.lucide.Info
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.GitBranch
 import com.composables.icons.lucide.Bookmark
+import com.composables.icons.lucide.BookmarkCheck
 import com.composables.icons.lucide.Wand
 import com.composables.icons.lucide.NotebookPen
 import com.composables.icons.lucide.Pencil
@@ -100,6 +112,8 @@ import to.eyed.inferno.ui.theme.Radii
 import to.eyed.inferno.ui.theme.RowMeta
 import to.eyed.inferno.ui.theme.Typography
 import to.eyed.inferno.ui.theme.whiteA
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 import to.eyed.inferno.ui.theme.defaultEffectsSpec
 import to.eyed.inferno.ui.theme.defaultSpatialSpec
 import to.eyed.inferno.ui.theme.fastSpatialSpec
@@ -158,6 +172,7 @@ fun SharedTransitionScope.MessagesList(
     dev: ChatDevFlags = ChatDevFlags(),
     toolStatus: String? = null,
     toolSearchNotes: String? = null,
+    citationUrls: List<String> = emptyList(),
     streamingAnimations: Boolean = true,
     savedAnswerIds: Set<String> = emptySet(),
     onSaveAnswer: (ChatMessage) -> Unit = {},
@@ -185,7 +200,7 @@ fun SharedTransitionScope.MessagesList(
                     AssistantMessage(
                         text = gen.text, reasoning = gen.reasoning, thinkingMs = gen.thinkingMs, streaming = true, streamingAnimations = streamingAnimations,
                         stats = null, showActions = false, showRegenerate = false, announce = false,
-                        searchNotes = toolSearchNotes, toolStatus = toolStatus,
+                        searchNotes = toolSearchNotes, toolStatus = toolStatus, citationUrls = citationUrls,
                         onRegenerate = {}, onBranch = {}, onDetails = {}, liveMeta = liveMeta,
                     )
                 } else if (toolStatus != null || toolSearchNotes != null) {
@@ -220,6 +235,7 @@ fun SharedTransitionScope.MessagesList(
                             streamingAnimations = streamingAnimations,
                             searchNotes = if (streamingRow) toolSearchNotes else null,
                             toolStatus = if (streamingRow) toolStatus else null,
+                            citationUrls = citationUrls,
                             stats = m.stats,
                             showActions = !gen.isBusy,
                             showRegenerate = m.id == lastAssistantId,
@@ -384,6 +400,34 @@ private fun SharedTransitionScope.UserBubble(
     }
 }
 
+private data class AssistantCodeFile(val path: String, val content: String)
+private data class AssistantFileExport(val files: List<AssistantCodeFile>, val zip: Boolean)
+
+private fun extractCodeArtifacts(answer: String): List<AssistantCodeFile> {
+    val fence = Regex("""(?ms)^\x60{3,}([A-Za-z0-9_+.-]+)(?:[ \t]+([^\r\n]+))?[ \t]*\r?\n(.*?)^\x60{3,}\s*$""")
+    val extensions = mapOf(
+        "lua" to "lua", "luau" to "lua", "python" to "py", "javascript" to "js", "js" to "js",
+        "typescript" to "ts", "ts" to "ts", "kotlin" to "kt", "java" to "java", "json" to "json",
+        "html" to "html", "css" to "css", "xml" to "xml", "bash" to "sh", "shell" to "sh",
+        "sh" to "sh", "markdown" to "md", "md" to "md", "sql" to "sql", "yaml" to "yml",
+        "yml" to "yml", "toml" to "toml", "rust" to "rs", "go" to "go", "c" to "c", "cpp" to "cpp",
+    )
+    val files = mutableListOf<AssistantCodeFile>()
+    fence.findAll(answer).forEach { match ->
+        val language = match.groupValues[1].lowercase()
+        val extension = extensions[language] ?: "txt"
+        val hinted = match.groupValues[2].trim()
+        if (hinted.isBlank()) return@forEach
+        val safe = hinted.replace('\\', '/').split('/')
+            .filter { it.isNotBlank() && it != "." && it != ".." }
+            .joinToString("/") { it.replace(Regex("""[^A-Za-z0-9._-]"""), "_") }
+        if (safe.isBlank()) return@forEach
+        val path = if (safe.substringAfterLast('/').contains('.')) safe else safe + "." + extension
+        if (files.none { it.path == path }) files += AssistantCodeFile(path, match.groupValues[3].trimEnd())
+    }
+    return files
+}
+
 /**
  * Assistant turn, no bubble: reasoning panel, markdown, caret while streaming, then the action row
  * (fades in once the engine is idle) and - on the latest turn only - the meta line from MessageStats.
@@ -410,12 +454,52 @@ private fun AssistantMessage(
     liveMeta: String? = null,
     searchNotes: String? = null,
     toolStatus: String? = null,
+    citationUrls: List<String> = emptyList(),
     saved: Boolean = false,
     onToggleSaved: () -> Unit = {},
     onFollowUp: (String) -> Unit = {},
 ) {
     val context = LocalContext.current
     val haptics = rememberHaptics()
+    val codeArtifacts = remember(text) { extractCodeArtifacts(text) }
+    var markdownToExport by remember(text) { mutableStateOf<String?>(null) }
+    var filesToExport by remember(text) { mutableStateOf<AssistantFileExport?>(null) }
+    val markdownLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/markdown")) { uri ->
+        val payload = markdownToExport
+        if (uri != null && payload != null) runCatching {
+            context.contentResolver.openOutputStream(uri)?.bufferedWriter(Charsets.UTF_8)?.use { it.write(payload) }
+                ?: error("Unable to write the Markdown file")
+        }.onFailure { Toast.makeText(context, "Could not export Markdown", Toast.LENGTH_SHORT).show() }
+        markdownToExport = null
+    }
+    val filesLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+        val payload = filesToExport
+        if (uri != null && payload != null) runCatching {
+            val output = context.contentResolver.openOutputStream(uri) ?: error("Unable to open destination")
+            if (payload.zip) {
+                ZipOutputStream(output).use { zip ->
+                    payload.files.forEach { file ->
+                        zip.putNextEntry(ZipEntry(file.path))
+                        zip.write(file.content.toByteArray(Charsets.UTF_8))
+                        zip.closeEntry()
+                    }
+                }
+            } else {
+                output.use { it.write(payload.files.first().content.toByteArray(Charsets.UTF_8)) }
+            }
+        }.onFailure { Toast.makeText(context, "Could not export files", Toast.LENGTH_SHORT).show() }
+        filesToExport = null
+    }
+    fun startMarkdownExport() {
+        markdownToExport = text
+        markdownLauncher.launch("answer.md")
+    }
+    fun startCodeExport() {
+        if (codeArtifacts.isEmpty()) return
+        val zipped = codeArtifacts.size > 1
+        filesToExport = AssistantFileExport(codeArtifacts, zipped)
+        filesLauncher.launch(if (zipped) "project.zip" else codeArtifacts.first().path.substringAfterLast('/'))
+    }
     Column(modifier.fillMaxWidth()) {
         val activityContent = reasoning.isNotBlank() || !searchNotes.isNullOrBlank() || toolStatus != null
         if (activityContent) {
@@ -428,7 +512,7 @@ private fun AssistantMessage(
             )
             Spacer(Modifier.height(10.dp))
         }
-        if (text.isNotBlank()) MarkdownBody(text, streaming = streaming, animateStreaming = streamingAnimations)
+        if (text.isNotBlank()) MarkdownBody(text, streaming = streaming, animateStreaming = streamingAnimations, citationUrls = citationUrls)
         if (!streaming && stats?.finishReason == "CANCELLED") {
             Text("Stopped...", modifier = Modifier.padding(top = 5.dp), style = Typography.labelSmall, color = Ink.I500)
         }
@@ -454,19 +538,21 @@ private fun AssistantMessage(
                     runCatching { context.startActivity(Intent.createChooser(intent, "Share response")) }
                 }
                 AnimatedActionIcon(Lucide.GitBranch, "Branch from this reply") { haptics.tap(); onBranch() }
-                AnimatedActionIcon(Lucide.Bookmark, if (saved) "Remove saved answer" else "Save answer") { haptics.tap(); onToggleSaved() }
+                AnimatedActionIcon(if (saved) Lucide.BookmarkCheck else Lucide.Bookmark, if (saved) "Remove saved answer" else "Save answer", active = saved) { haptics.tap(); onToggleSaved() }
                 if (showRegenerate) AnimatedActionIcon(Lucide.RefreshCw, S.regenerate) { haptics.tap(); onRegenerate() }
                 Box {
                     AnimatedActionIcon(Lucide.ChevronDown, "More answer actions") { haptics.tap(); moreMenu = true }
                     GlassMenu(expanded = moreMenu, onDismiss = { moreMenu = false }, minWidth = 218.dp) {
-                        MenuActionRow(Lucide.Wand, "Explain step by step") { moreMenu = false; onFollowUp("Explain your previous answer step by step, with clear intermediate steps.") }
-                        MenuActionRow(Lucide.Wand, "Simplify answer") { moreMenu = false; onFollowUp("Rewrite your previous answer in simpler language while preserving the key facts.") }
-                        MenuActionRow(Lucide.NotebookPen, "Extract key points") { moreMenu = false; onFollowUp("Extract the key points from your previous answer as a concise list.") }
-                        MenuActionRow(Lucide.Pencil, "Make more concise") { moreMenu = false; onFollowUp("Rewrite your previous answer more concisely without losing important information.") }
-                        MenuActionRow(Lucide.Pencil, "Expand with detail") { moreMenu = false; onFollowUp("Expand your previous answer with useful details and examples.") }
+                        MenuActionRow(Lucide.Search, "Verify key claims") { moreMenu = false; onFollowUp("Verify the important factual claims in your previous answer using current primary and independent sources. Correct anything unsupported and provide citations.") }
+                        MenuActionRow(Lucide.ShieldCheck, "Find risks and gaps") { moreMenu = false; onFollowUp("Audit your previous answer for missing information, assumptions, risks, and possible errors. Be specific.") }
+                        MenuActionRow(Lucide.ListChecks, "Turn into a checklist") { moreMenu = false; onFollowUp("Convert your previous answer into a practical, ordered checklist with actionable items.") }
+                        MenuActionRow(Lucide.Lightbulb, "Give a concrete example") { moreMenu = false; onFollowUp("Add a realistic worked example that demonstrates the key points in your previous answer.") }
+                        MenuActionRow(Lucide.Table, "Compare alternatives") { moreMenu = false; onFollowUp("Compare the practical alternatives mentioned or implied in your previous answer in a clear decision table.") }
+                        MenuActionRow(Lucide.FileDown, "Export answer as Markdown") { moreMenu = false; startMarkdownExport() }
+                        if (codeArtifacts.isNotEmpty()) MenuActionRow(Lucide.Archive, if (codeArtifacts.size == 1) "Download generated file" else "Download project ZIP") { moreMenu = false; startCodeExport() }
                     }
                 }
-                if (stats != null && showDetails) GhostIconButton(Lucide.Info, S.details, onClick = { haptics.tap(); onDetails() }, size = 32.dp, iconSize = 15.dp, tint = Ink.I500)
+                if (stats != null && showDetails) AnimatedActionIcon(Lucide.Info, S.details) { haptics.tap(); onDetails() }
                 if (showMeta && stats != null) metaLine(stats, techMeta)?.let { meta ->
                     Spacer(Modifier.size(6.dp))
                     Text(meta, style = Meta, color = Ink.I500)
@@ -510,18 +596,18 @@ private fun AnimatedCopyButton(label: String, onCopy: () -> Unit) {
 
 /** Small press-and-release motion shared by Branch and Redo. */
 @Composable
-private fun AnimatedActionIcon(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
+private fun AnimatedActionIcon(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, active: Boolean = false, onClick: () -> Unit) {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(if (pressed) 0.90f else 1f, fastSpatialSpec(), label = "messageActionScale")
     val alpha by animateFloatAsState(if (pressed) 0.72f else 1f, fastSpatialSpec(), label = "messageActionAlpha")
     Box(
         Modifier.size(32.dp).graphicsLayer { scaleX = scale; scaleY = scale; this.alpha = alpha }
-            .clip(CircleShape).clickable(interactionSource = interaction, indication = null,
+            .clip(CircleShape).background(if (active) whiteA(0.15f) else androidx.compose.ui.graphics.Color.Transparent).clickable(interactionSource = interaction, indication = null,
                 role = Role.Button) { onClick() },
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, contentDescription = label, Modifier.size(15.dp), tint = Ink.I500)
+        Icon(icon, contentDescription = label, Modifier.size(15.dp), tint = if (active) Ink.White else Ink.I500)
     }
 }
 

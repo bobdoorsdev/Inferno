@@ -1,5 +1,6 @@
 package to.eyed.inferno.ui.chat
 
+import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -136,6 +137,7 @@ fun ChatRoot(appVm: AppViewModel, chatVm: ChatViewModel, onBeforeSend: () -> Uni
     val imageBusy by chatVm.imageBusy.collectAsStateWithLifecycle()
     val toolStatus by chatVm.toolStatus.collectAsStateWithLifecycle()
     val toolSearchNotes by chatVm.toolSearchNotes.collectAsStateWithLifecycle()
+    val toolSourceUrls by chatVm.toolSourceUrls.collectAsStateWithLifecycle()
     val loadInProgress by appVm.loadInProgress.collectAsStateWithLifecycle()
     val conversations by chatVm.conversations.collectAsStateWithLifecycle()
     val activeId by chatVm.activeId.collectAsStateWithLifecycle()
@@ -210,14 +212,34 @@ fun ChatRoot(appVm: AppViewModel, chatVm: ChatViewModel, onBeforeSend: () -> Uni
     // ---- send / stop ------------------------------------------------------------------------------------------
     /** Auto-follow the tail of the list (see the list section below); a send always re-arms it. */
     var follow by remember { mutableStateOf(true) }
+    var pendingLocationPrompt by rememberSaveable { mutableStateOf<String?>(null) }
+    val submitMessage: (String) -> Unit = { text ->
+        onBeforeSend()
+        val accepted = !(gen.isBusy && gen !is GenState.Queued) && !imageBusy
+        haptics.gestureEnd()
+        chatVm.send(text)
+        if (accepted) { draft = ""; follow = true }
+    }
+    val locationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        val prompt = pendingLocationPrompt
+        pendingLocationPrompt = null
+        if (granted && prompt != null) {
+            submitMessage(prompt)
+        } else if (prompt != null) {
+            appVm.notice("Approximate location was not allowed. You can still ask by naming your city.")
+        }
+    }
     val send = {
         val text = draft.trim()
         if (text.isNotEmpty() || pending.isNotEmpty() || pendingFiles.isNotEmpty()) {
-            onBeforeSend()
-            val accepted = !(gen.isBusy && gen !is GenState.Queued) && !imageBusy
-            haptics.gestureEnd()
-            chatVm.send(text)
-            if (accepted) { draft = ""; follow = true }
+            val needsApproximateCity = to.eyed.inferno.data.AssistantToolRouter.needsApproximateCity(text)
+            val hasApproximatePermission = context.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+            if (needsApproximateCity && !hasApproximatePermission) {
+                pendingLocationPrompt = text
+                locationPermission.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
+            } else {
+                submitMessage(text)
+            }
         }
     }
 
@@ -348,7 +370,7 @@ fun ChatRoot(appVm: AppViewModel, chatVm: ChatViewModel, onBeforeSend: () -> Uni
                                 // The composer starts with a 32 dp gradient; the last turn rests 8 dp into it, so it never fades yet still scrolls under.
                                 bottomInset = if (composerHeight == 0) 132.dp else with(LocalDensity.current) { composerHeight.toDp() } - 8.dp,
                                 dev = ChatDevFlags(generationStats = settings.devGenerationStats, turnDetails = settings.devTurnDetails, tokenCounter = settings.devTokenCounter, tokenWords = settings.powerUser),
-                                toolStatus = toolStatus, toolSearchNotes = toolSearchNotes,
+                                toolStatus = toolStatus, toolSearchNotes = toolSearchNotes, citationUrls = toolSourceUrls,
                                 streamingAnimations = settings.streamingAnimations,
                                 savedAnswerIds = settings.savedAnswers.map { it.id }.toSet(),
                                 onSaveAnswer = chatVm::toggleSavedAnswer,
@@ -426,6 +448,7 @@ fun ChatRoot(appVm: AppViewModel, chatVm: ChatViewModel, onBeforeSend: () -> Uni
 
     // ---- sheets -----------------------------------------------------------------------------------------------
     if (modelSheet) ModelSheet(appVm, onDismiss = { modelSheet = false }, onOpenManager = { appVm.navigate(Screen.MODELS) })
+
     if (showSavedAnswers) SavedAnswersSheet(
         answers = settings.savedAnswers,
         onDismiss = { showSavedAnswers = false },

@@ -6,6 +6,8 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.tween
@@ -25,6 +27,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.ClickableText
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -90,11 +93,18 @@ import to.eyed.inferno.ui.theme.whiteA
  * Embedded image links are rendered with Coil at their original position. `TextDirection.Content` keeps RTL readable.
  */
 @Composable
-fun MarkdownBody(text: String, modifier: Modifier = Modifier, streaming: Boolean = false, animateStreaming: Boolean = true) {
+fun MarkdownBody(
+    text: String,
+    modifier: Modifier = Modifier,
+    streaming: Boolean = false,
+    animateStreaming: Boolean = true,
+    citationUrls: List<String> = emptyList(),
+) {
+    val linkedText = remember(text, citationUrls) { linkInlineCitations(text, citationUrls) }
     if (streaming) {
-        StreamingMarkdownBody(text, modifier, animateStreaming)
+        StreamingMarkdownBody(linkedText, modifier, animateStreaming)
     } else {
-        val formatted = remember(text) { formatMarkdownChunk(text) }
+        val formatted = remember(linkedText) { formatMarkdownChunk(linkedText) }
         val split = remember(formatted) { MarkdownChunker.splitOpenFence(formatted) }
         val chunks = remember(split.first) { MarkdownChunker.chunks(split.first) }
         SelectionContainer {
@@ -108,6 +118,30 @@ fun MarkdownBody(text: String, modifier: Modifier = Modifier, streaming: Boolean
 
 private fun formatMarkdownChunk(source: String): String =
     runCatching { SafeMathMarkdown.sanitize(MarkdownMath.format(source)) }.getOrDefault(source)
+
+private fun linkInlineCitations(source: String, urls: List<String>): String {
+    if (urls.isEmpty()) return source
+    fun linkText(block: String): String {
+        val citation = Regex("""(?<!\!)\[(\d{1,2}(?:\s*[,;]\s*\d{1,2})*)](?!\s*\()""")
+        return citation.replace(block) { match ->
+        Regex("""\d{1,2}""").findAll(match.groupValues[1]).mapNotNull { item ->
+                val index = item.value.toIntOrNull()?.minus(1) ?: return@mapNotNull null
+                urls.getOrNull(index)?.takeIf { it.startsWith("https://") || it.startsWith("http://") }
+                    ?.let { "[" + item.value + "](" + it + ")" }
+            }.joinToString(", ").ifBlank { match.value }
+        }
+    }
+    val fences = Regex("""(?s)(?:\x60{3,}.*?\x60{3,}|~~~.*?~~~)""")
+    val out = StringBuilder(source.length + 64)
+    var cursor = 0
+    fences.findAll(source).forEach { fence ->
+        out.append(linkText(source.substring(cursor, fence.range.first)))
+        out.append(fence.value)
+        cursor = fence.range.last + 1
+    }
+    out.append(linkText(source.substring(cursor)))
+    return out.toString()
+}
 
 @Composable
 private fun StreamingMarkdownBody(text: String, modifier: Modifier, animateStreaming: Boolean) {
@@ -156,8 +190,30 @@ private fun MarkdownChunkView(chunk: String, animated: Boolean = false) {
                 val preceding = chunk.substring(cursor, start)
                 if (preceding.isNotBlank()) MarkdownTextChunk(preceding, animated)
             }
-            MarkdownImageCard(match.groupValues[1], match.groupValues[2], match.groupValues.getOrNull(3).orEmpty())
-            cursor = match.range.last + 1
+            if (match.groupValues[1] == "__favicon__") {
+                val lineEnd = chunk.indexOf('\n', match.range.last + 1).let { if (it < 0) chunk.length else it }
+                val fallbackIcon = match.groupValues.getOrNull(3).orEmpty()
+                var activeIcon by remember(match.groupValues[2], fallbackIcon) { mutableStateOf(match.groupValues[2]) }
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    AsyncImage(
+                        model = activeIcon,
+                        contentDescription = "Website icon",
+                        contentScale = ContentScale.Fit,
+                        onError = { if (fallbackIcon.isNotBlank() && activeIcon != fallbackIcon) activeIcon = fallbackIcon },
+                        modifier = Modifier.size(18.dp).clip(RoundedCornerShape(4.dp)),
+                    )
+                    val sourceLine = chunk.substring(match.range.last + 1, lineEnd).trim()
+                    if (sourceLine.isNotBlank()) Box(Modifier.weight(1f)) { MarkdownTextChunk(sourceLine, animated) }
+                }
+                cursor = if (lineEnd < chunk.length) lineEnd + 1 else lineEnd
+            } else {
+                MarkdownImageCard(match.groupValues[1], match.groupValues[2], match.groupValues.getOrNull(3).orEmpty())
+                cursor = match.range.last + 1
+            }
         }
         if (cursor < chunk.length) {
             val trailing = chunk.substring(cursor)
@@ -234,23 +290,61 @@ private fun StreamingMarkdownTail(chunk: String, animateStreaming: Boolean) {
             }
         }
         Box(Modifier.fillMaxWidth().graphicsLayer { alpha = tailFade.value }) {
-            StreamingMarkdownText(rendered)
+            StreamingMarkdownText(formatMarkdownChunk(rendered), animateStreaming)
         }
     }
 }
 
 @Composable
-private fun StreamingMarkdownText(chunk: String) {
+private fun StreamingMarkdownText(chunk: String, animateStreaming: Boolean) {
+    val uriHandler = LocalUriHandler.current
     val readable = remember(chunk) {
-        chunk.replace("**", "")
-            .replace("__", "")
-            .replace("~~", "")
-            .replace(Regex("""\[([^\]]+)]\((?:https?://[^)]+)\)"""), "$1")
-            .replace(96.toChar().toString(), "")
+        chunk.replace("**", "").replace("__", "").replace("~~", "").replace(96.toChar().toString(), "")
     }
-    Text(
-        readable,
+    var settled by remember { mutableStateOf("") }
+    var incoming by remember { mutableStateOf("") }
+    val fade = remember { Animatable(1f) }
+    LaunchedEffect(readable, animateStreaming) {
+        if (!animateStreaming || !readable.startsWith(settled) || readable.length <= settled.length) {
+            settled = readable
+            incoming = ""
+            fade.snapTo(1f)
+        } else {
+            incoming = readable.removePrefix(settled)
+            fade.snapTo(0f)
+            fade.animateTo(1f, tween(170, easing = LinearOutSlowInEasing))
+            settled = readable
+            incoming = ""
+        }
+    }
+    val fullText = settled + incoming
+    val annotated = remember(fullText, incoming, fade.value) {
+        buildAnnotatedString {
+            val links = Regex("""\[([^\]]+)\]\((https?://[^)\s]+)\)""")
+            var cursor = 0
+            links.findAll(fullText).forEach { match ->
+                append(fullText.substring(cursor, match.range.first))
+                val start = length
+                append(match.groupValues[1])
+                val end = length
+                addStringAnnotation("URL", match.groupValues[2], start, end)
+                addStyle(SpanStyle(color = Ink.White, textDecoration = TextDecoration.Underline), start, end)
+                cursor = match.range.last + 1
+            }
+            append(fullText.substring(cursor))
+            if (incoming.isNotEmpty()) {
+                addStyle(SpanStyle(color = Ink.I100.copy(alpha = fade.value)), (settled.length).coerceAtMost(length), length)
+            }
+        }
+    }
+    ClickableText(
+        text = annotated,
         style = Typography.bodyLarge.copy(color = Ink.I100, textDirection = TextDirection.Content),
+        onClick = { offset ->
+            annotated.getStringAnnotations("URL", offset, offset).firstOrNull()?.let { annotation ->
+                runCatching { uriHandler.openUri(annotation.item) }
+            }
+        },
     )
 }
 
@@ -322,6 +416,7 @@ fun MonoCodeBlock(code: String, language: String?, modifier: Modifier = Modifier
     val trimmed = code.trimEnd('\n')
     val info = language?.trim()?.lowercase().orEmpty()
     val runLanguage = info.removeSuffix("-run").substringBefore(' ')
+    val languageLabel = runLanguage.ifBlank { "text" }
     val autoRun = info.endsWith(" run") || info.endsWith("-run")
     var showPreview by remember(code, language) { mutableStateOf(false) }
     LaunchedEffect(streaming, autoRun, code) { if (autoRun && !streaming) showPreview = true }
@@ -338,7 +433,7 @@ fun MonoCodeBlock(code: String, language: String?, modifier: Modifier = Modifier
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                language?.trim()?.takeIf { it.isNotBlank() } ?: "text",
+                languageLabel,
                 style = RowMeta.copy(fontFamily = MonoBody.fontFamily),
                 color = Ink.I500,
                 modifier = Modifier.weight(1f),
@@ -349,14 +444,14 @@ fun MonoCodeBlock(code: String, language: String?, modifier: Modifier = Modifier
         Hairline()
         AnimatedContent(
             targetState = showPreview,
-            transitionSpec = { fadeIn(tween(120)) togetherWith fadeOut(tween(90)) },
+            transitionSpec = { (fadeIn(tween(160)) + scaleIn(initialScale = 0.985f)) togetherWith (fadeOut(tween(110)) + scaleOut(targetScale = 0.99f)) },
             label = "codePreviewInline",
         ) { preview ->
             if (preview) {
                 CodeRunnerInline(code = trimmed, language = runLanguage, modifier = Modifier.fillMaxWidth())
             } else {
                 Box(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
-                    val highlighted = if (streaming) AnnotatedString(trimmed) else highlightCode(trimmed, language)
+                    val highlighted = if (streaming) AnnotatedString(trimmed) else highlightCode(trimmed, languageLabel)
                     Text(highlighted, style = MonoBody.copy(color = CodePalette.Text), softWrap = false,
                         modifier = Modifier.padding(start = 18.dp, end = 14.dp, top = 14.dp, bottom = 14.dp))
                 }
@@ -375,8 +470,16 @@ private fun CodeRunChip(showingPreview: Boolean, onRun: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(5.dp),
     ) {
-        Icon(if (showingPreview) Lucide.Code else Lucide.Play, contentDescription = if (showingPreview) "Show code" else "Preview code", Modifier.size(13.dp), tint = Ink.I100)
-        Text(if (showingPreview) "Code" else "Preview", style = Typography.labelSmall, color = Ink.I100)
+        AnimatedContent(
+            targetState = showingPreview,
+            transitionSpec = { (fadeIn(tween(145)) + scaleIn(initialScale = 0.92f)) togetherWith (fadeOut(tween(90)) + scaleOut(targetScale = 0.96f)) },
+            label = "previewCodeToggle",
+        ) { preview ->
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                Icon(if (preview) Lucide.Code else Lucide.Play, contentDescription = if (preview) "Show code" else "Preview code", Modifier.size(13.dp), tint = Ink.I100)
+                Text(if (preview) "Code" else "Preview", style = Typography.labelSmall, color = Ink.I100)
+            }
+        }
     }
 }
 

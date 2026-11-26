@@ -1,6 +1,7 @@
 package to.eyed.inferno.ui.chat
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -152,6 +153,7 @@ fun InputBar(
                 Modifier
                     .fillMaxWidth()
                     .graphicsLayer { alpha = enabledCard }
+                    .animateContentSize(tween(220))
                     .surfaceRaised(RoundedCornerShape(Radii.composer)),
             ) {
                 BasicTextField(
@@ -285,7 +287,8 @@ private fun FileStrip(files: List<FileAttachment>, onRemove: (Int) -> Unit) {
 @Composable
 private fun AttachButton(
     canAttachImages: Boolean, cameraAvailable: Boolean, noVisionReason: String?, idle: Boolean,
-    onPickPhotos: () -> Unit, onCapturePhoto: () -> Unit, onPickFile: () -> Unit, onNoVision: (String) -> Unit,
+    onPickPhotos: () -> Unit, onCapturePhoto: () -> Unit, onPickFile: () -> Unit,
+    onNoVision: (String) -> Unit,
 ) {
     var open by remember { mutableStateOf(false) }
     val haptics = rememberHaptics()

@@ -1,11 +1,16 @@
 package to.eyed.inferno
 
 import android.app.Application
+import android.Manifest
+import android.content.pm.PackageManager
+import android.location.Geocoder
+import android.location.LocationManager
 import android.app.NotificationManager
 import android.content.Context
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import to.eyed.inferno.data.AppPrefs
 import to.eyed.inferno.data.ChatRepository
@@ -38,8 +43,28 @@ import java.util.concurrent.TimeUnit
  * ([isCpuSupported]) is read from /proc before anything could call System.loadLibrary, and both engines bind
  * their JNI objects lazily on first use, so an unsupported phone can still render UnsupportedCpuScreen.
  */
-class AppContainer(app: Application) {
+class AppContainer(private val app: Application) {
     val appScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    fun hasCoarseLocationPermission(): Boolean =
+        app.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+
+    /** Approximate city only. Reads cached Android coarse location; never uses IP geolocation or exposes coordinates. */
+    suspend fun coarseCity(): String? = withContext(Dispatchers.IO) {
+        runCatching {
+            if (app.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) return@runCatching null
+            val manager = app.getSystemService(LocationManager::class.java) ?: return@runCatching null
+            val location = runCatching { manager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER) }
+                .getOrNull() ?: runCatching { manager.getLastKnownLocation(LocationManager.PASSIVE_PROVIDER) }.getOrNull()
+                ?: return@runCatching null
+            if (!Geocoder.isPresent()) return@runCatching null
+            @Suppress("DEPRECATION")
+            val address = Geocoder(app, java.util.Locale.getDefault())
+                .getFromLocation(location.latitude, location.longitude, 1)?.firstOrNull() ?: return@runCatching null
+            listOfNotNull(address.locality ?: address.subAdminArea, address.adminArea, address.countryName)
+                .distinct().filter(String::isNotBlank).joinToString(", ").takeIf(String::isNotBlank)
+        }.getOrNull()
+    }
 
     val cpu = CpuTopology(app)
     /** dotprod + fp16: the .so files are built with -march=armv8.2-a+dotprod+fp16 and would SIGILL without them. */
