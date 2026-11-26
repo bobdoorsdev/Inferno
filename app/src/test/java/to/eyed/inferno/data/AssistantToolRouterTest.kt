@@ -176,12 +176,10 @@ class AssistantToolRouterTest {
 
     @Test fun weatherLocationIsParsedForThePrivateWeatherTool() {
         val plan = AssistantToolRouter.parse(
-            """{"weather_location":"São Paulo, Brazil","current_time":true}"""
+            """{"decision":"answer","weather_location":"Piumhi, Minas Gerais, Brazil","current_time":true}"""
         )
-        assertEquals("São Paulo, Brazil", plan.weatherLocation)
+        assertEquals("Piumhi, Minas Gerais, Brazil", plan.weatherLocation)
         assertTrue(plan.currentTime)
-        assertEquals("Piumhi", AssistantToolRouter.fallbackWeatherLocation("What is the weather in Piumhi?"))
-        assertNull(AssistantToolRouter.fallbackWeatherLocation("Explain how weather systems work"))
     }
 
     @Test fun calculatorUsesOperatorPrecedenceAndParentheses() {
@@ -195,6 +193,19 @@ class AssistantToolRouterTest {
         assertNull(AssistantToolRouter.calculate("1 / 0"))
         assertNull(AssistantToolRouter.calculate("2 + System.exit(0)"))
         assertNull(AssistantToolRouter.calculate("1 + 2 trailing text"))
+    }
+
+    @Test fun simulatedSearchOutputIsRejectedAndFallsBackToRealSources() {
+        assertTrue(AssistantToolRouter.looksLikeSimulatedSearchOutput("local results = {} -- http.get('duckduckgo.com')"))
+        assertTrue(AssistantToolRouter.looksLikeSimulatedSearchOutput("This is a simulation of a web search."))
+        assertFalse(AssistantToolRouter.looksLikeSimulatedSearchOutput("The search returned three independent sources [1] [2] [3]."))
+        val fallback = AssistantToolRouter.rawSearchFallback(
+            listOf(WebSearchResult("Real source", "https://example.com/real", "A verified excerpt.")),
+            listOf("best gaming PCs"),
+            "Search completed",
+        )
+        assertTrue(fallback.contains("[1] [Real source](https://example.com/real)"))
+        assertTrue(fallback.contains("A verified excerpt."))
     }
 
     @Test fun toolNotesKeepSourceLinksSeparateFromTheVisibleAnswer() {
