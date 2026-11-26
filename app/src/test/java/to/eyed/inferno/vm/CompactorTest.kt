@@ -110,10 +110,12 @@ class CompactorTest {
         assertTrue(view.recent.none { it.isSummary })
         val prompt = view.prompt()
         assertEquals("user", prompt.first().role); assertTrue(prompt.first().content.startsWith("question 6 "))
-        assertEquals("Summary of the earlier conversation (your own notes):\n- user is Carlo\n- wants a phone app",
-            ContextManager.systemWith(null, view.summary!!.content))
-        assertEquals("sys\n\nSummary of the earlier conversation (your own notes):\n- user is Carlo\n- wants a phone app",
-            ContextManager.systemWith("sys", view.summary!!.content))
+        val summarySystem = ContextManager.systemWith(null, view.summary!!.content)!!
+        assertTrue(summarySystem.startsWith("You are an on-device assistant."))
+        assertTrue(summarySystem.contains("Piumhi, Minas Gerais, Brazil"))
+        assertTrue(summarySystem.endsWith("Summary of the earlier conversation (your own notes):\n- user is Carlo\n- wants a phone app"))
+        val userSystem = ContextManager.systemWith("sys", view.summary!!.content)!!
+        assertTrue(userSystem.contains("\nsys\n\nSummary of the earlier conversation (your own notes):\n- user is Carlo\n- wants a phone app"))
     }
 
     @Test fun chainedCompactionFoldsThePreviousSummaryIn() = runBlocking {
