@@ -28,12 +28,12 @@ class SafeMathMarkdownTest {
     @Test fun formatsCommonLatexIdentifiersAsReadableUnicode() {
         val formatted = MarkdownMath.format("Value: $\\alpha + \\beta = \\frac{1}{2}$")
         assertTrue(formatted.contains("α + β"))
-        assertTrue(formatted.contains("1⁄2"))
+        assertTrue(formatted.contains("(1)/(2)"))
         assertFalse(formatted.contains("$"))
     }
 
     @Test fun formatsStyledNumberSetsAndCalculusSymbols() {
-        val formatted = MarkdownMath.format("\\mathbb{R} \\to \\mathcal{A}, \\int_0^1 x^2 \\, dx")
+        val formatted = MarkdownMath.format("""$\mathbb{R} \to \mathcal{A}, \int_0^1 x^2 \, dx$""")
         assertTrue(formatted.contains("ℝ"))
         assertTrue(formatted.contains("→"))
         assertTrue(formatted.contains("𝒜"))

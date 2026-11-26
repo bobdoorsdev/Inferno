@@ -502,12 +502,7 @@ internal object MarkdownMath {
         var value = raw.trim()
         repeat(5) {
             value = binomial.replace(value) { "C(${it.groupValues[1]}, ${it.groupValues[2]})" }
-            value = simpleFraction.replace(value) {
-                val top = it.groupValues[1].trim()
-                val bottom = it.groupValues[2].trim()
-                if (top.matches(Regex("""[A-Za-z0-9]+""")) && bottom.matches(Regex("""[A-Za-z0-9]+"""))) "$top⁄$bottom"
-                else "($top)/($bottom)"
-            }
+            value = simpleFraction.replace(value) { "(${it.groupValues[1].trim()})/(${it.groupValues[2].trim()})" }
             value = indexedRoot.replace(value) { "${mapIndex(it.groupValues[1], superscript, "⁽${it.groupValues[1]}⁾")}√(${it.groupValues[2]})" }
             value = squareRoot.replace(value) { "√(${it.groupValues[1]})" }
             value = overUnder.replace(value) { "${it.groupValues[2]}⁽${it.groupValues[1]}⁾" }
