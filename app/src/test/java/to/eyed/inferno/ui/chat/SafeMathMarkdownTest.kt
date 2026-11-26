@@ -68,7 +68,7 @@ class SafeMathMarkdownTest {
     }
 
     @Test fun formatsBareMathIdentifiersAndRemovesStrayDollarMarkers() {
-        val source = "The equation is " + '$' + "x^2 and x_1, with braces x^{3} and x_{2}."
+        val source = "The equation is " + 36.toChar() + "x^2 and x_1, with braces x^{3} and x_{2}."
         val formatted = MarkdownMath.format(source)
         assertTrue(formatted.contains("x²"))
         assertTrue(formatted.contains("x₁"))
