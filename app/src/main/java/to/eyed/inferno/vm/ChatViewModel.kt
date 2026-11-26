@@ -500,7 +500,6 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
                         if (ev.stats.imageEncodeMs > 0 && promptImages.isNotEmpty()) persistEncodeSample(model.id, detail, ev.stats.imageEncodeMs, promptImages)
                         appVm.markFirstTurnOk()
                         stream.close()
-                        setGen(conversationId, GenState.Idle)
                     }
                     GenerationEvent.NeedsTruncation -> { stream.close(); setGen(conversationId, GenState.Error(S.messageExceedsContext)) }
                     is GenerationEvent.Error -> {
@@ -511,6 +510,19 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
                 }
             }
             stream.close()
+            // Generate the chat title after the visible answer, so title planning never delays the first token.
+            // It runs only for the first user turn and uses the same local model; no network request is involved.
+            if (history.count { it.role == ChatRepository.ROLE_USER } == 1 && assistantId != null) {
+                setGen(conversationId, GenState.Thinking("Naming chat", 0f, 0L))
+                val title = try {
+                    chooseTools(history, thinking, detail, allowWeb = false, createTitle = true).title
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    null
+                }
+                if (!title.isNullOrBlank()) c.chats.setTitle(conversationId, title)
+            }
             if (genStates.value[conversationId]?.isBusy == true) setGen(conversationId, GenState.Idle)
         } catch (e: CancellationException) {
             // User Stop: keep whatever streamed, marked as stopped.
