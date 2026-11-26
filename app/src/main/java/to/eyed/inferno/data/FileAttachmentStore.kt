@@ -59,7 +59,7 @@ class FileAttachmentStore(private val context: Context) {
         if (!id.matches(Regex("[A-Za-z0-9-]{16,64}"))) return null
         val file = File(root, "$id.bin")
         if (!file.isFile) return null
-        return FileAttachment(id, file.path, name, mime, size, extractText(file, name, mime))
+        return FileAttachment(id, file.path, name, mime, size, null)
     }
 
     suspend fun delete(id: String) = withContext(Dispatchers.IO) {
@@ -105,6 +105,8 @@ class FileAttachmentStore(private val context: Context) {
 
     private fun encode(value: String): String = Base64.encodeToString(value.toByteArray(Charsets.UTF_8), Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
     private fun decode(value: String): String? = runCatching { String(Base64.decode(value, Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING), Charsets.UTF_8) }.getOrNull()
+
+    suspend fun extractText(file: FileAttachment): String? = withContext(Dispatchers.IO) { extractText(File(file.path), file.displayName, file.mimeType) }
 
     private fun extractText(file: File, name: String, mime: String): String? {
         if (file.length() > MAX_TEXT_BYTES) return null
