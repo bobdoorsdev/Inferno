@@ -51,6 +51,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import com.composables.icons.lucide.Braces
 import com.composables.icons.lucide.Check
 import com.composables.icons.lucide.Copy
 import com.composables.icons.lucide.Lucide
@@ -77,7 +78,7 @@ import to.eyed.inferno.ui.theme.rememberHaptics
 import to.eyed.inferno.ui.theme.whiteA
 
 /**
- * Compose-native GFM Markdown with KaTeX math. The library parses incrementally while streaming,
+ * Compose-native GFM Markdown with the library's LaTeX renderer. The library parses incrementally while streaming,
  * retains stable block nodes, leaves incomplete delimiters as literal text until they close, and provides selection.
  */
 @Composable
@@ -323,7 +324,7 @@ private fun CodeRunChip(showingPreview: Boolean, onSelect: (Boolean) -> Unit) {
                 .clip(RoundedCornerShape(6.dp)).background(whiteA(0.16f)),
         )
         Row(Modifier.fillMaxWidth().fillMaxHeight(), verticalAlignment = Alignment.CenterVertically) {
-            CodeToggleIcon(Lucide.Code, "Show code", !showingPreview, Modifier.weight(1f).fillMaxHeight()) { onSelect(false) }
+            CodeToggleIcon(Lucide.Braces, "Show code", !showingPreview, Modifier.weight(1f).fillMaxHeight()) { onSelect(false) }
             CodeToggleIcon(Lucide.Play, "Preview code", showingPreview, Modifier.weight(1f).fillMaxHeight()) { onSelect(true) }
         }
     }
