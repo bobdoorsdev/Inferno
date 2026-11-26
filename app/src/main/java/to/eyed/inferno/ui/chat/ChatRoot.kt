@@ -71,7 +71,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.window.core.layout.WindowSizeClass
-import com.composables.icons.lucide.Bookmark
 import com.composables.icons.lucide.ChevronDown
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.X
@@ -82,7 +81,6 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import to.eyed.inferno.data.ChatRepository
-import to.eyed.inferno.data.SavedAnswer
 import to.eyed.inferno.data.devBenchmark
 import to.eyed.inferno.data.devContextMeter
 import to.eyed.inferno.data.devGenerationStats
@@ -154,7 +152,6 @@ fun ChatRoot(appVm: AppViewModel, chatVm: ChatViewModel, onBeforeSend: () -> Uni
     var editId by rememberSaveable { mutableStateOf<String?>(null) }
     var renameId by rememberSaveable { mutableStateOf<String?>(null) }
     var modelSheet by rememberSaveable { mutableStateOf(false) }
-    var showSavedAnswers by rememberSaveable { mutableStateOf(false) }
     var cameraUri by rememberSaveable { mutableStateOf<String?>(null) }
     var announceId by remember { mutableStateOf<String?>(null) }
     var composerHeight by remember { mutableIntStateOf(0) }
@@ -284,7 +281,6 @@ fun ChatRoot(appVm: AppViewModel, chatVm: ChatViewModel, onBeforeSend: () -> Uni
             showBenchmark = settings.devBenchmark,
             searchMatches = searchMatches,
             onSearchQuery = chatVm::searchChats,
-            onOpenSavedAnswers = { showSavedAnswers = true },
             onExport = { conversation ->
                 chatVm.exportMarkdown(conversation.id) { markdown ->
                     val intent = Intent(Intent.ACTION_SEND).apply {
@@ -350,8 +346,6 @@ fun ChatRoot(appVm: AppViewModel, chatVm: ChatViewModel, onBeforeSend: () -> Uni
                                 dev = ChatDevFlags(generationStats = settings.devGenerationStats, turnDetails = settings.devTurnDetails, tokenCounter = settings.devTokenCounter, tokenWords = settings.powerUser),
                                 toolStatus = toolStatus, toolSearchNotes = toolSearchNotes,
                                 streamingAnimations = settings.streamingAnimations,
-                                savedAnswerIds = settings.savedAnswers.map { it.id }.toSet(),
-                                onSaveAnswer = chatVm::toggleSavedAnswer,
                                 onFollowUp = { prompt -> onBeforeSend(); haptics.gestureEnd(); chatVm.send(prompt) },
                             )
                         }
@@ -426,12 +420,6 @@ fun ChatRoot(appVm: AppViewModel, chatVm: ChatViewModel, onBeforeSend: () -> Uni
 
     // ---- sheets -----------------------------------------------------------------------------------------------
     if (modelSheet) ModelSheet(appVm, onDismiss = { modelSheet = false }, onOpenManager = { appVm.navigate(Screen.MODELS) })
-    if (showSavedAnswers) SavedAnswersSheet(
-        answers = settings.savedAnswers,
-        onDismiss = { showSavedAnswers = false },
-        onOpenChat = { id -> showSavedAnswers = false; chatVm.open(id); closeNav() },
-        onRemove = chatVm::removeSavedAnswer,
-    )
     detailsId?.let { id ->
         val m = messages.firstOrNull { it.id == id }
         val stats = m?.stats?.takeIf { settings.devTurnDetails }
@@ -447,48 +435,6 @@ fun ChatRoot(appVm: AppViewModel, chatVm: ChatViewModel, onBeforeSend: () -> Uni
         val m = messages.firstOrNull { it.id == id }
         if (m == null) editId = null
         else TextSheet(S.editMessage, S.chat, m.content, S.resend, multiline = true, onDismiss = { editId = null }) { chatVm.editAndResend(id, it); editId = null }
-    }
-}
-
-@Composable
-private fun SavedAnswersSheet(
-    answers: List<SavedAnswer>,
-    onDismiss: () -> Unit,
-    onOpenChat: (String) -> Unit,
-    onRemove: (String) -> Unit,
-) {
-    InfernoSheet(onDismiss = onDismiss) {
-        Column(
-            Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            SheetHeader("Saved answers", Lucide.X, onLeading = onDismiss)
-            if (answers.isEmpty()) {
-                Text("Bookmark an assistant answer to keep it here.", style = Typography.bodyMedium, color = Ink.I500)
-            } else {
-                Column(
-                    Modifier.fillMaxWidth().heightIn(max = 520.dp).verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    answers.forEach { answer ->
-                        Row(
-                            Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Ink.SurfaceHigh)
-                                .clickable { onOpenChat(answer.conversationId) }
-                                .padding(start = 12.dp, end = 6.dp, top = 10.dp, bottom = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        ) {
-                            Icon(Lucide.Bookmark, null, Modifier.size(16.dp), tint = Ink.I300)
-                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                                Text(answer.title, style = Typography.bodyMedium.copy(fontWeight = FontWeight.Medium), color = Ink.White, maxLines = 1)
-                                Text(answer.content, style = Typography.bodySmall, color = Ink.I500, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                            }
-                            GhostIconButton(Lucide.Trash2, "Remove saved answer", onClick = { onRemove(answer.id) }, size = 32.dp, iconSize = 14.dp, tint = Ink.I500)
-                        }
-                    }
-                }
-            }
-        }
     }
 }
 
