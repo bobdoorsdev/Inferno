@@ -91,7 +91,7 @@ class MarkdownChunkerTest {
 
     @Test
     fun `math delimiters and common latex identifiers render as unicode`() {
-        assertEquals("Result: (1)/(2) + α²", MarkdownMath.format("""Result: $\frac{1}{2} + \alpha^2$"""))
+        assertEquals("Result: (1)⁄(2) + α²", MarkdownMath.format("""Result: $\frac{1}{2} + \alpha^2$"""))
     }
 
     @Test

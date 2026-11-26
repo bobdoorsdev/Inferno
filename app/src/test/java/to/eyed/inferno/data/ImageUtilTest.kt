@@ -64,13 +64,12 @@ class ImageUtilTest {
         assertNull(ImageMath.idFromFileName("short.jpg"))
     }
 
-    @Test fun titleRuleUsesFirstLineTrimmedTo48() {
+    @Test fun titleRuleSkipsGreetingsAndTruncatesSubstantiveFirstLine() {
         assertEquals("", ChatRepository.titleFrom(""))
         assertEquals("", ChatRepository.titleFrom("  \n\n "))
-        assertEquals("Hello there", ChatRepository.titleFrom("\n  Hello there  \nsecond line"))
-        val long = "x".repeat(48)
-        assertEquals(long, ChatRepository.titleFrom(long))
-        val longer = "word ".repeat(20).trim()
+        assertEquals("", ChatRepository.titleFrom("\n  Hello there  \nsecond line"))
+        assertEquals("How to build Roblox rooms", ChatRepository.titleFrom("  How to build Roblox rooms  \nsecond line"))
+        val longer = "build ".repeat(20).trim()
         val t = ChatRepository.titleFrom(longer)
         assertEquals(49, t.length)
         assertEquals('…', t.last())
