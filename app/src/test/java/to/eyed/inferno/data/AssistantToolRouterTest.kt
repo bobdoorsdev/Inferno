@@ -47,23 +47,19 @@ class AssistantToolRouterTest {
 
     @Test fun plannerAcceptsImageSearchAndGeneratedTitle() {
         val plan = AssistantToolRouter.parse(
-            """{"search_queries":["current release"],"image_queries":["red panda"],"title":"Current Release"}"""
+            """{"decision":"answer","search_queries":["current release"],"image_queries":["red panda"],"title":"Current Release"}"""
         )
         assertEquals(listOf("red panda"), plan.imageQueries)
         assertEquals("Current Release", plan.title)
     }
 
-    @Test fun obviousCurrentRequestsHaveFallbackQueries() {
-        assertEquals("What is the latest Android release?", AssistantToolRouter.fallbackSearchQuery("What is the latest Android release?"))
-        assertNull(AssistantToolRouter.fallbackSearchQuery("Explain a neural network"))
-        assertEquals("Show me pictures of a red panda", AssistantToolRouter.fallbackImageQuery("Show me pictures of a red panda"))
-    }
-
-    @Test fun productRecommendationsAlsoRequestImages() {
-        assertEquals("Best gaming PCs online", AssistantToolRouter.fallbackImageQuery("Best gaming PCs online"))
-        assertEquals("Compare the best monitors", AssistantToolRouter.fallbackImageQuery("Compare the best monitors"))
-        assertNull(AssistantToolRouter.fallbackImageQuery("Explain how GPUs work"))
-        assertEquals("Free royalty-free images of the World Cup", AssistantToolRouter.fallbackImageQuery("Free royalty-free images of the World Cup"))
+    @Test fun imageSearchCanBeRequestedByTheModelWithoutKeywordFallbacks() {
+        val plan = AssistantToolRouter.parseStrict(
+            """{"decision":"search","search_queries":["best gaming PCs 2026"],"image_queries":["desktop gaming PCs"]}"""
+        )
+        assertEquals("search", plan?.decision)
+        assertEquals(listOf("best gaming PCs 2026"), plan?.searchQueries)
+        assertEquals(listOf("desktop gaming PCs"), plan?.imageQueries)
     }
 
     @Test fun finalAnswerMakesCitationsClickableAndActuallyShowsFoundImages() {
@@ -101,9 +97,9 @@ class AssistantToolRouterTest {
         assertFalse(answer.contains("[9]"))
     }
 
-    @Test fun greetingOnlyMessagesDoNotBecomeChatTitles() {
-        assertEquals("", ChatRepository.titleFrom("hi"))
-        assertEquals("", ChatRepository.titleFrom("Hello!"))
+    @Test fun everyFirstMessageGetsAFallbackTitleIncludingGreetings() {
+        assertEquals("Hi", ChatRepository.titleFrom("hi"))
+        assertEquals("Hello", ChatRepository.titleFrom("Hello!"))
         assertEquals("help with Roblox", ChatRepository.titleFrom("Hi, can you help with Roblox?"))
         assertTrue(ChatRepository.isTitleWorthy("Qwen model comparison"))
         assertFalse(ChatRepository.isTitleWorthy("Hello"))
