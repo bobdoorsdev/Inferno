@@ -476,15 +476,15 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
             _toolSearchNotes.value = null
             val plannerStartedAt = SystemClock.elapsedRealtime()
             val toolPlan = if (shouldRoute) {
-                try {
+                val planned = try {
                     chooseTools(history, thinking, detail, webIntent, imageIntent && history.count { it.role == ChatRepository.ROLE_USER } == 1)
                 } catch (e: CancellationException) {
                     throw e
                 } catch (_: Exception) {
                     AssistantToolPlan()
-                }.also {
-                    Log.d("InfernoTiming", "stage=initial_tool_planner ms=${SystemClock.elapsedRealtime() - plannerStartedAt}")
                 }
+                Log.d("InfernoTiming", "stage=initial_tool_planner ms=${SystemClock.elapsedRealtime() - plannerStartedAt}")
+                planned
             } else AssistantToolPlan()
             val imagePrompt = toolPlan.imagePrompt
             if (imageIntent && !imagePrompt.isNullOrBlank()) {
