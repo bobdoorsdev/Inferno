@@ -24,7 +24,6 @@ class SafeMathMarkdownTest {
         assertTrue(safe.contains("\u0060\\frac{1}{2}\u0060"))
     }
 
-    
     @Test fun formatsCommonLatexIdentifiersAsReadableUnicode() {
         val formatted = MarkdownMath.format("Value: $\\alpha + \\beta = \\frac{1}{2}$")
         assertTrue(formatted.contains("α + β"))
@@ -69,21 +68,7 @@ class SafeMathMarkdownTest {
     }
 
     @Test fun formatsBareMathIdentifiersAndRemovesStrayDollarMarkers() {
-        val source = "The equation is " + '
-        assertTrue(formatted.contains("x²"))
-        assertTrue(formatted.contains("x₁"))
-        assertTrue(formatted.contains("x³"))
-        assertTrue(formatted.contains("x₂"))
-        assertFalse(formatted.contains("$"))
-    }
-
-    @Test fun rendersGreekIdentifiersAndSubscriptsInTheSameExpression() {
-        val formatted = MarkdownMath.format("""\(\Delta = b^2 - 4ac,\quad x_1, x_2\)""")
-        assertTrue(formatted.contains("Δ = b² - 4ac"))
-        assertTrue(formatted.contains("x₁, x₂"))
-    }
-}
- + "x^2 and x_1, with braces x^{3} and x_{2}."
+        val source = "The equation is " + '$' + "x^2 and x_1, with braces x^{3} and x_{2}."
         val formatted = MarkdownMath.format(source)
         assertTrue(formatted.contains("x²"))
         assertTrue(formatted.contains("x₁"))
