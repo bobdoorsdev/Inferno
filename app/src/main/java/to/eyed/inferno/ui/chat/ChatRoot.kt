@@ -1,5 +1,6 @@
 package to.eyed.inferno.ui.chat
 
+import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -211,14 +212,36 @@ fun ChatRoot(appVm: AppViewModel, chatVm: ChatViewModel, onBeforeSend: () -> Uni
     // ---- send / stop ------------------------------------------------------------------------------------------
     /** Auto-follow the tail of the list (see the list section below); a send always re-arms it. */
     var follow by remember { mutableStateOf(true) }
+    var pendingLocationPrompt by rememberSaveable { mutableStateOf<String?>(null) }
+    val submitMessage: (String) -> Unit = { text ->
+        onBeforeSend()
+        val accepted = !(gen.isBusy && gen !is GenState.Queued) && !imageBusy
+        haptics.gestureEnd()
+        chatVm.send(text)
+        if (accepted) { draft = ""; follow = true }
+    }
+    val locationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        val prompt = pendingLocationPrompt
+        pendingLocationPrompt = null
+        if (granted && prompt != null) {
+            submitMessage(prompt)
+        } else if (prompt != null) {
+            appVm.notice("Approximate location was not allowed. You can still ask by naming your city.")
+        }
+    }
     val send = {
         val text = draft.trim()
         if (text.isNotEmpty() || pending.isNotEmpty() || pendingFiles.isNotEmpty()) {
-            onBeforeSend()
-            val accepted = !(gen.isBusy && gen !is GenState.Queued) && !imageBusy
-            haptics.gestureEnd()
-            chatVm.send(text)
-            if (accepted) { draft = ""; follow = true }
+            val needsApproximateCity = text.isNotBlank() &&
+                Regex("""\\b(near me|nearby|around me|in my area|here|local weather|weather where i am|my city|where i am)\\b""", RegexOption.IGNORE_CASE)
+                    .containsMatchIn(text)
+            val hasApproximatePermission = context.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+            if (needsApproximateCity && !hasApproximatePermission) {
+                pendingLocationPrompt = text
+                locationPermission.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
+            } else {
+                submitMessage(text)
+            }
         }
     }
 
