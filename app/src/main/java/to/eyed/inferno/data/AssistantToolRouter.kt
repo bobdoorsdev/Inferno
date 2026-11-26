@@ -46,6 +46,57 @@ object AssistantToolRouter {
     const val LOCAL_MARKER = "<!-- INFERNO_LOCAL -->"
     val EMPTY = AssistantToolPlan()
 
+    /** Keep the answer in the user's language, never the Android/device locale. */
+    fun responseLanguageInstruction(userText: String): String {
+        val words = userText.lowercase(Locale.ROOT).split(Regex("[^\\p{L}]+")).filter { it.isNotBlank() }
+        val english = setOf("the", "and", "you", "what", "how", "why", "is", "are", "for", "with", "please", "can", "make", "fix", "search", "best", "not", "instead", "this", "that", "it", "there", "did", "dont", "does", "your", "hello", "hi", "remember", "update", "move", "add", "remove", "show", "find", "need", "want")
+        val portuguese = setOf("que", "não", "uma", "para", "com", "você", "como", "por", "favor", "isso", "está", "melhor", "onde", "quando", "pesquise", "faça", "agora", "meu", "minha", "oi", "quero", "preciso", "mas", "também", "porque", "então", "pode", "mais")
+        val englishScore = words.count { it in english }
+        val portugueseScore = words.count { it in portuguese }
+        return when {
+            Regex("""\b(?:respond|reply|answer)\s+in\s+english\b""", RegexOption.IGNORE_CASE).containsMatchIn(userText) ->
+                "LANGUAGE REQUIREMENT: Answer exclusively in English. Do not use Brazilian Portuguese."
+            portugueseScore >= 2 && portugueseScore > englishScore ->
+                "LANGUAGE REQUIREMENT: Answer in Brazilian Portuguese (pt-BR), matching the user's language."
+            englishScore > 0 && englishScore >= portugueseScore ->
+                "LANGUAGE REQUIREMENT: Answer exclusively in English. The device language and previous conversation language must not override the language of this user message."
+            else ->
+                "LANGUAGE REQUIREMENT: Answer in the same language as the latest user message. Do not default to Portuguese or to the Android device language."
+        }
+    }
+
+    /**
+     * Rejects tool fields that do not correspond to an actual request in the latest user message.
+     * The planner may suggest tools, but it cannot create a conversion/calculation request on its own.
+     */
+    fun validateForRequest(plan: AssistantToolPlan, userText: String): AssistantToolPlan {
+        val unitPattern = Regex("""-?\d+(?:[.,]\d+)?\s*(?:°?[cfk]|km|cm|mm|mi|m|ft|in|yd|kg|g|mg|lb|oz|ml|l|gal|mph|kph|kb|mb|gb|tb|kib|mib|gib|meters?|metres?|centimeters?|centimetres?|millimeters?|millimetres?|kilometers?|kilometres?|miles?|pounds?|ounces?|liters?|litres?|gallons?)\s+(?:to|in)\s+[a-z°/]+""", RegexOption.IGNORE_CASE)
+        val explicitUnitConversion = unitPattern.containsMatchIn(userText) ||
+            Regex("""\b(?:convert|conversion|unit converter|unit conversion)\b.{0,80}\b-?\d""", RegexOption.IGNORE_CASE).containsMatchIn(userText)
+        val mathRequest = Regex("""\b(?:calculate|compute|evaluate|work out|solve)\b""", RegexOption.IGNORE_CASE).containsMatchIn(userText) ||
+            Regex("""\d+(?:\.\d+)?\s*[+*/%^×÷-]\s*\d""").containsMatchIn(userText)
+        val timeRequest = Regex("""\b(?:current time|time now|what time|current date|what date|today's date|what day is it|time zone|how long until)\b""", RegexOption.IGNORE_CASE).containsMatchIn(userText)
+        val dateRequest = Regex("""\b(?:days between|date difference|add \d+ days?|subtract \d+ days?|calculate.*date|date.*calculate)\b""", RegexOption.IGNORE_CASE).containsMatchIn(userText)
+        val jsonRequest = Regex("""\b(?:format|pretty.?print|minify|validate)\s+(?:this\s+)?json\b""", RegexOption.IGNORE_CASE).containsMatchIn(userText)
+        val regexRequest = Regex("""\b(?:test|check|validate)\s+(?:this\s+)?regex\b|\bregex tester\b""", RegexOption.IGNORE_CASE).containsMatchIn(userText)
+        val colorRequest = Regex("""\b(?:convert|identify|parse)\s+(?:this\s+)?(?:hex|rgb|hsl|hsv|color|colour)\b|#[0-9a-f]{3,8}.*\b(?:to|convert)\b""", RegexOption.IGNORE_CASE).containsMatchIn(userText)
+        val weatherRequest = Regex("""\b(?:weather|forecast|temperature outside|is it raining)\b""", RegexOption.IGNORE_CASE).containsMatchIn(userText)
+        return plan.copy(
+            calculation = plan.calculation.takeIf { mathRequest },
+            currentTime = plan.currentTime && timeRequest,
+            unitConversion = plan.unitConversion.takeIf { explicitUnitConversion },
+            dateCalculation = plan.dateCalculation.takeIf { dateRequest },
+            jsonAction = plan.jsonAction.takeIf { jsonRequest },
+            jsonText = plan.jsonText.takeIf { jsonRequest },
+            regexPattern = plan.regexPattern.takeIf { regexRequest },
+            regexText = plan.regexText.takeIf { regexRequest },
+            regexFlags = plan.regexFlags.takeIf { regexRequest },
+            colorValue = plan.colorValue.takeIf { colorRequest },
+            weatherLocation = plan.weatherLocation.takeIf { weatherRequest },
+            imagePrompt = plan.imagePrompt.takeIf { shouldConsiderImageGeneration(userText) },
+        )
+    }
+
     fun shouldConsiderImageGeneration(text: String): Boolean {
         val value = text.lowercase(Locale.ROOT)
         return Regex("""\b(generate|create|draw|make|render|crie|gere|desenhe|fa[cç]a)\b""").containsMatchIn(value) &&
@@ -77,16 +128,16 @@ object AssistantToolRouter {
 
     fun prompt(allowWeb: Boolean, createTitle: Boolean = false): String {
         val webRule = if (allowWeb) """
-            Decide for every user request whether current external evidence is needed. Choose "search" for current
-            events, recent facts, anything that may have happened after training, prices, product recommendations,
-            reviews, availability, schedules, sports results, laws, releases, current software documentation, explicit
-            search requests, or any claim you are uncertain about. Choose "answer" for stable explanations,
-            ordinary conversation, creative tasks, and exact local calculations when external evidence is unnecessary.
-            An explicit request to search must produce a "search" decision. Never say that you cannot access the web.
-            After results arrive, assess whether the actual titles and excerpts support the requested answer. If they do
-            not, choose "search" again using a materially different, narrower query. Continue until evidence is
-            sufficient or the configured high round limit is reached; the mere existence of results is not enough.
-            Never write simulated browser output, Lua/Python/JavaScript scripts, or pretend code in place of a search.
+            Decide whether the user's actual request needs current external evidence. Search only when the user
+            explicitly asks for web research, or when the answer materially depends on changing/current facts such
+            as live events, current prices, current availability, current schedules, current laws, recent releases,
+            or current product listings. Answer ordinary questions, small talk, stable explanations, creative requests,
+            coding help, and general knowledge directly without searching.
+            IMPORTANT: uncertainty by itself is NOT a reason to search. Do not search just because a question is broad,
+            unfamiliar, conversational, or contains a name/date/number. Prefer "answer" by default.
+            Never search for a stable fact merely to make the answer look researched. An explicit request to search
+            must produce "search". After results arrive, search again only if the user-requested current evidence is
+            still missing or materially insufficient. Never invent search needs or simulate browser output.
         """.trimIndent() else "Web search is disabled. Choose \"answer\" and never request web or image search."
         val titleRule = if (createTitle) "Set title to a concise 2–6 word title for the user's first substantive request; use an empty title for small talk."
             else "Set title to an empty string."
@@ -102,11 +153,12 @@ object AssistantToolRouter {
             User: "Search the web for best gaming PCs" -> {"decision":"search","search_queries":["best gaming desktop PCs 2026 independent reviews","gaming PC prices Brazil 2026 retailer listings"]}
             User: "What is 25 C in F?" -> {"decision":"answer","unit_conversion":"25 C to F"}
             On-device tools:
-            - unit_conversion: exact length, mass, volume, speed, time, temperature and decimal/binary storage.
-            - date_calculation: ISO date differences or adding/subtracting days, weeks, months or years.
-            - json_action + json_text: format, minify or validate; include only the JSON payload, max 16 KB.
-            - regex_pattern + regex_text + regex_flags: test a regex against supplied text; flags i, m, s.
-            - color_value: convert CSS HEX, rgb(), hsl() or hsv().
+            - Local utilities are allowed only when the latest user message clearly asks for that operation.
+            - unit_conversion: only an explicit numeric value + source unit + target unit, or an explicit unit-conversion request.
+            - calculation: only when the user asks to calculate/solve or submits a bare numeric expression.
+            - date_calculation/current_time: only for an explicit date-arithmetic or current-time/date request.
+            - json_action, regex_* and color_value: only for the exact operation explicitly requested by the user.
+            Never infer a utility task from a passing mention, quoted text, example, or unrelated question.
             Image search: use image_queries only when real pictures materially improve an answer.
             Image generation: set image_prompt only when the user explicitly asks to create or generate an image.
             Calculator: use only a numeric expression with + - * / % ^. Never guess changing rates.
