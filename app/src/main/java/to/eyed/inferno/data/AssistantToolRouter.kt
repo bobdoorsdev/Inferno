@@ -71,12 +71,11 @@ object AssistantToolRouter {
      */
     fun validateForRequest(plan: AssistantToolPlan, userText: String): AssistantToolPlan {
         val unitPattern = Regex("""-?\d+(?:[.,]\d+)?\s*(?:°?[cfk]|km|cm|mm|mi|m|ft|in|yd|kg|g|mg|lb|oz|ml|l|gal|mph|kph|kb|mb|gb|tb|kib|mib|gib|meters?|metres?|centimeters?|centimetres?|millimeters?|millimetres?|kilometers?|kilometres?|miles?|pounds?|ounces?|liters?|litres?|gallons?)\s+(?:to|in)\s+[a-z°/]+""", RegexOption.IGNORE_CASE)
-        val explicitUnitConversion = unitPattern.containsMatchIn(userText) ||
-            Regex("""\b(?:convert|conversion|unit converter|unit conversion)\b.{0,80}\b-?\d""", RegexOption.IGNORE_CASE).containsMatchIn(userText)
+        val explicitUnitConversion = unitPattern.containsMatchIn(userText)
         val mathRequest = Regex("""\b(?:calculate|compute|evaluate|work out|solve)\b""", RegexOption.IGNORE_CASE).containsMatchIn(userText) ||
             Regex("""\d+(?:\.\d+)?\s*[+*/%^×÷-]\s*\d""").containsMatchIn(userText)
-        val timeRequest = Regex("""\b(?:current time|time now|what time|current date|what date|today's date|what day is it|time zone|how long until)\b""", RegexOption.IGNORE_CASE).containsMatchIn(userText)
-        val dateRequest = Regex("""\b(?:days between|date difference|add \d+ days?|subtract \d+ days?|calculate.*date|date.*calculate)\b""", RegexOption.IGNORE_CASE).containsMatchIn(userText)
+        val timeRequest = Regex("""\\b(?:current time|real time|time now|what time(?: is it)?|what's the time|time right now|current date|what date(?: is it)?|today's date|date today|what day is it|day of the week|time zone|timezone|how long until|how many days until)\\b""", RegexOption.IGNORE_CASE).containsMatchIn(userText)
+        val dateRequest = Regex("""\\b(?:days between|date difference|add \\d+ (?:days?|weeks?|months?|years?)|subtract \\d+ (?:days?|weeks?|months?|years?)|calculate.*date|date.*calculate)\\b""", RegexOption.IGNORE_CASE).containsMatchIn(userText) || Regex("""\\b\\d{4}-\\d{2}-\\d{2}\\s*[+-]\\s*\\d+\\s*(?:days?|weeks?|months?|years?)\\b""", RegexOption.IGNORE_CASE).containsMatchIn(userText)
         val jsonRequest = Regex("""\b(?:format|pretty.?print|minify|validate)\s+(?:this\s+)?json\b""", RegexOption.IGNORE_CASE).containsMatchIn(userText)
         val regexRequest = Regex("""\b(?:test|check|validate)\s+(?:this\s+)?regex\b|\bregex tester\b""", RegexOption.IGNORE_CASE).containsMatchIn(userText)
         val colorRequest = Regex("""\b(?:convert|identify|parse)\s+(?:this\s+)?(?:hex|rgb|hsl|hsv|color|colour)\b|#[0-9a-f]{3,8}.*\b(?:to|convert)\b""", RegexOption.IGNORE_CASE).containsMatchIn(userText)
