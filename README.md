@@ -9,7 +9,8 @@ about photos, and generate images, all on the device's CPU. Nothing leaves the p
 
 ## Features
 
-* **Chat** with streaming Markdown, code blocks, and an optional thinking mode.
+* **Chat** with streaming Markdown, code blocks, an optional thinking mode, and 20 one-tap AI workflow shortcuts.
+* **Downloadable outputs.** Save assistant code blocks directly to a device-selected file; the suggested extension follows the code fence language.
 * **Vision.** Attach photos from the gallery, the camera, or the share sheet and ask about them.
 * **Image generation** with two on-device models: DreamShaper 8 LCM for quality, SDXS-512 for speed.
 * **Nine curated models** from 0.5 GB to 3.9 GB, downloaded on demand from Hugging Face.

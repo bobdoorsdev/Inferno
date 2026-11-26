@@ -130,6 +130,7 @@ fun ChatRoot(appVm: AppViewModel, chatVm: ChatViewModel, onBeforeSend: () -> Uni
     var editId by rememberSaveable { mutableStateOf<String?>(null) }
     var renameId by rememberSaveable { mutableStateOf<String?>(null) }
     var modelSheet by rememberSaveable { mutableStateOf(false) }
+    var toolsSheet by rememberSaveable { mutableStateOf(false) }
     var cameraUri by rememberSaveable { mutableStateOf<String?>(null) }
     var announceId by remember { mutableStateOf<String?>(null) }
     var composerHeight by remember { mutableIntStateOf(0) }
@@ -327,7 +328,7 @@ fun ChatRoot(appVm: AppViewModel, chatVm: ChatViewModel, onBeforeSend: () -> Uni
                                         value = draft, onValueChange = { draft = it },
                                         attachments = pending, onRemoveAttachment = chatVm::removeAttachment,
                                         canAttachImages = canAttachImages, cameraAvailable = cameraAvailable, noVisionReason = noVisionReason,
-                                        onPickPhotos = pickPhotos, onCapturePhoto = capturePhoto, onNoVision = appVm::notice,
+                                        onPickPhotos = pickPhotos, onCapturePhoto = capturePhoto, onOpenTools = { toolsSheet = true }, onNoVision = appVm::notice,
                                         gen = gen, engine = engine, disabledReason = disabledReason, imageBusy = imageBusy,
                                         onSend = send, onStop = chatVm::cancel,
                                         // The Think chip is a power-user control (Settings > Generation owns the same switch).
@@ -376,6 +377,13 @@ fun ChatRoot(appVm: AppViewModel, chatVm: ChatViewModel, onBeforeSend: () -> Uni
 
     // ---- sheets -----------------------------------------------------------------------------------------------
     if (modelSheet) ModelSheet(appVm, onDismiss = { modelSheet = false }, onOpenManager = { appVm.navigate(Screen.MODELS) })
+    if (toolsSheet) AiToolsSheet(
+        onDismiss = { toolsSheet = false },
+        onSelect = { prompt ->
+            draft = if (draft.isBlank()) prompt else prompt + "\n\n" + draft.trimStart()
+            toolsSheet = false
+        },
+    )
     detailsId?.let { id ->
         val m = messages.firstOrNull { it.id == id }
         val stats = m?.stats?.takeIf { settings.devTurnDetails }

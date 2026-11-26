@@ -15,6 +15,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -23,6 +26,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -38,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.composables.icons.lucide.Check
 import com.composables.icons.lucide.Copy
+import com.composables.icons.lucide.Download
 import com.composables.icons.lucide.Lucide
 import com.mikepenz.markdown.compose.components.markdownComponents
 import com.mikepenz.markdown.compose.elements.MarkdownCodeBlock
@@ -50,7 +56,10 @@ import com.mikepenz.markdown.m3.markdownColor
 import com.mikepenz.markdown.m3.markdownTypography
 import com.mikepenz.markdown.model.markdownDimens
 import com.mikepenz.markdown.model.rememberMarkdownState
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import to.eyed.inferno.ui.S
 import to.eyed.inferno.ui.components.Hairline
 import to.eyed.inferno.ui.components.copyToClipboard
@@ -162,12 +171,69 @@ fun MonoCodeBlock(code: String, language: String?, modifier: Modifier = Modifier
                 modifier = Modifier.weight(1f),
             )
             CopyChip(onCopy = { copyToClipboard(context, trimmed, "Code") })
+            SaveCodeChip(code = trimmed, language = language, context = context)
         }
         Hairline()
         Box(Modifier.horizontalScroll(rememberScrollState())) {
             Text(trimmed, style = MonoBody, color = Ink.I100, softWrap = false, modifier = Modifier.padding(14.dp))
         }
     }
+}
+
+
+/** Exports a generated code block through Android's document picker, without broad storage permissions. */
+@Composable
+private fun SaveCodeChip(code: String, language: String?, context: android.content.Context) {
+    val scope = rememberCoroutineScope()
+    val latestCode by rememberUpdatedState(code)
+    val (mimeType, extension) = codeFileType(language)
+    val contract = remember(mimeType) { ActivityResultContracts.CreateDocument(mimeType) }
+    val launcher = rememberLauncherForActivityResult(contract) { uri ->
+        if (uri != null) scope.launch {
+            val saved = runCatching {
+                withContext(Dispatchers.IO) {
+                    context.contentResolver.openOutputStream(uri, "wt")?.use {
+                        it.write(latestCode.toByteArray(Charsets.UTF_8))
+                    } ?: error("Could not open the selected file")
+                }
+            }.isSuccess
+            Toast.makeText(context, if (saved) "File saved" else "Could not save file", Toast.LENGTH_LONG).show()
+        }
+    }
+    Row(
+        Modifier.clip(RoundedCornerShape(8.dp))
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, role = Role.Button) {
+                launcher.launch("inferno-code.$extension")
+            }
+            .padding(horizontal = 8.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Icon(Lucide.Download, contentDescription = "Save file", modifier = Modifier.size(12.dp), tint = Ink.I500)
+        Text("Save", style = RowMeta, color = Ink.I500)
+    }
+}
+
+private fun codeFileType(language: String?): Pair<String, String> = when (language?.trim()?.lowercase()?.substringBefore(' ')) {
+    "json" -> "application/json" to "json"
+    "csv" -> "text/csv" to "csv"
+    "html", "htm" -> "text/html" to "html"
+    "xml" -> "application/xml" to "xml"
+    "svg" -> "image/svg+xml" to "svg"
+    "md", "markdown" -> "text/markdown" to "md"
+    "yaml", "yml" -> "text/yaml" to "yaml"
+    "css" -> "text/css" to "css"
+    "javascript", "js" -> "text/javascript" to "js"
+    "python", "py" -> "text/x-python" to "py"
+    "lua" -> "text/plain" to "lua"
+    "luau" -> "text/plain" to "luau"
+    "kotlin", "kt" -> "text/plain" to "kt"
+    "java" -> "text/plain" to "java"
+    "cpp", "c++" -> "text/plain" to "cpp"
+    "rust", "rs" -> "text/plain" to "rs"
+    "bash", "sh", "shell" -> "text/plain" to "sh"
+    "sql" -> "text/plain" to "sql"
+    else -> "text/plain" to "txt"
 }
 
 /** "Copy" -> "Copied" for 1.6 s; the system clipboard overlay on API 33+ is the only other feedback. */
