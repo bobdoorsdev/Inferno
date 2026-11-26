@@ -469,7 +469,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
             val latestUserText = history.lastOrNull { it.role == ChatRepository.ROLE_USER }?.content.orEmpty()
             // The model decides whether web search is needed on every non-empty user turn.
             // No keyword gate can suppress the planner for a current or unfamiliar fact.
-            val webIntent = settings.webSearchEnabled
+            val webIntent = settings.webSearchEnabled && c.network.wifiConnected.value
             val imageIntent = AssistantToolRouter.shouldConsiderImageGeneration(latestUserText)
             val shouldRoute = latestUserText.isNotBlank() &&
                 (webIntent || imageIntent || AssistantToolRouter.shouldRouteLocally(latestUserText))
@@ -485,7 +485,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
                     AssistantToolPlan()
                 }
                 Log.d("InfernoTiming", "stage=initial_tool_planner ms=${SystemClock.elapsedRealtime() - plannerStartedAt}")
-                planned
+                AssistantToolRouter.validateForRequest(planned, latestUserText)
             } else AssistantToolPlan()
             val imagePrompt = toolPlan.imagePrompt
             if (imageIntent && !imagePrompt.isNullOrBlank()) {
@@ -537,18 +537,19 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
             // Re-plan after every batch so the model can request follow-up searches/tools. The fixed
             // round ceiling prevents a malformed planner response from creating an unbounded loop.
             for (round in 0 until MAX_TOOL_ROUNDS) {
+                val onlineToolsAvailable = settings.webSearchEnabled && c.network.wifiConnected.value
                 val plannedSearchQueries = if (pendingPlan.decision == "search" && pendingPlan.searchQueries.isEmpty()) {
                     listOf(latestUserText)
                 } else pendingPlan.searchQueries
-                val roundSearch = if (settings.webSearchEnabled && pendingPlan.decision == "search") {
+                val roundSearch = if (onlineToolsAvailable && pendingPlan.decision == "search") {
                     plannedSearchQueries.map { it.trim() }
                         .filter { it.length >= 2 && usedSearchQueries.add(it.lowercase()) }.take(4)
                 } else emptyList()
-                val roundImages = if (settings.webSearchEnabled) {
+                val roundImages = if (onlineToolsAvailable) {
                     pendingPlan.imageQueries.map { it.trim() }
                         .filter { it.length >= 2 && usedImageQueries.add(it.lowercase()) }.take(4)
                 } else emptyList()
-                val requestedWeather = if (settings.webSearchEnabled) {
+                val requestedWeather = if (onlineToolsAvailable) {
                     pendingPlan.weatherLocation?.takeIf { it.isNotBlank() && usedWeatherLocations.add(it.lowercase()) }
                 } else null
                 var didWork = false
@@ -624,7 +625,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
                 )
                 if (round == MAX_TOOL_ROUNDS - 1 || !didWork) break
                 val replanStartedAt = SystemClock.elapsedRealtime()
-                val next = chooseTools(history, thinking, detail, allowWeb = webIntent, createTitle = false, priorToolResults = observation)
+                val next = AssistantToolRouter.validateForRequest(chooseTools(history, thinking, detail, allowWeb = onlineToolsAvailable, createTitle = false, priorToolResults = observation), latestUserText)
                 Log.d("InfernoTiming", "stage=followup_tool_planner round=$round ms=${SystemClock.elapsedRealtime() - replanStartedAt}")
                 if (next == AssistantToolPlan()) break
                 pendingPlan = next
@@ -653,7 +654,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
                 val messages0 = view.prompt().map { it.copy(imageIds = it.imageIds.filter { id -> id in keep }) }
                 val baseSystem = ContextManager.systemWith(systemPrompt, view.summary?.content)
                 val runnerHints = CODE_RUNNER_INSTRUCTIONS.takeIf { needsBrowserPreview(latestUserText) }
-                val fullSystem = listOfNotNull(baseSystem, toolContext, runnerHints).joinToString("\n\n").takeIf { it.isNotBlank() }
+                val fullSystem = listOfNotNull(baseSystem, AssistantToolRouter.responseLanguageInstruction(latestUserText), toolContext, runnerHints).joinToString("\n\n").takeIf { it.isNotBlank() }
                 return Triple(fullSystem, messages0, images)
             }
             var (system, messages0, images) = parts()
