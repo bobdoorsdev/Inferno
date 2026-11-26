@@ -132,6 +132,8 @@ object S {
     const val dangerZone = "Danger zone"
     const val systemPrompt = "System prompt"
     const val streamingAnimations = "Streaming animations"
+    const val streamingTokenDelay = "Token reveal delay"
+    fun streamingTokenDelayDesc(ms: Int) = "$ms ms per token"
     const val haptics = "Haptics"
     const val webSearch = "Web search"
     const val webSearchDesc = "The model decides when a web search is useful."
