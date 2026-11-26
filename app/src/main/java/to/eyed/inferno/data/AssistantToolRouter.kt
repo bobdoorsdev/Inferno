@@ -535,7 +535,7 @@ Return JSON only: {"search_queries":[],"max_sources":5,"image_queries":[],"image
                 val matched = images.firstOrNull { markdownUrl(it.imageUrl) == url || it.imageUrl == url }
                 val title = matched?.title?.replace("[", "(")?.replace("]", ")")?.replace("\n", " ")?.take(100)?.takeIf(String::isNotBlank) ?: "Relevant image"
                 val fallback = match.groupValues.getOrNull(2)?.takeIf(String::isNotBlank)
-                    ?: matched?.fallbackImageUrl?.takeIf { it.startsWith("https://") && it != matched.imageUrl }?.let(::markdownUrl)
+                    ?: matched?.fallbackImageUrl?.takeIf { it.startsWith("https://") && it != matched?.imageUrl }?.let(::markdownUrl)
                 buildString {
                     append("![").append(title).append("](").append(url)
                     fallback?.let { append(" \"").append(it).append("\"") }
