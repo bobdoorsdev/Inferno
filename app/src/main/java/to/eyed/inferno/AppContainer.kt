@@ -11,6 +11,7 @@ import to.eyed.inferno.data.AppPrefs
 import to.eyed.inferno.data.ChatRepository
 import to.eyed.inferno.data.GeneratedImageStoreImpl
 import to.eyed.inferno.data.ImageUtil
+import to.eyed.inferno.data.NetworkStatus
 import to.eyed.inferno.data.FileAttachmentStore
 import to.eyed.inferno.data.db.ChatDatabase
 import to.eyed.inferno.engine.ContextManager
@@ -46,6 +47,8 @@ class AppContainer(app: Application) {
     val isCpuSupported: Boolean = cpu.isSupported
 
     val prefs = AppPrefs(app)
+    /** Validated Wi-Fi state used to enable/disable online tools. */
+    val network = NetworkStatus(app)
     val prefsLoaded: Boolean get() = prefs.loaded.value
 
     val thermal = ThermalGovernor(app, appScope)
