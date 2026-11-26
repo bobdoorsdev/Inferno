@@ -408,14 +408,14 @@ object AssistantToolRouter {
         val explicitSimulation = listOf(
             "this is a simulation", "simulated search output", "mock search results",
             "fake browser results", "pretend search", "simulation of a web search",
-        ).any(lower::contains)
+        ).any { lower.contains(it) }
         if (explicitSimulation) return true
         val codeFence = listOf("\u0060\u0060\u0060lua", "\u0060\u0060\u0060python", "\u0060\u0060\u0060javascript", "\u0060\u0060\u0060js").any(lower::contains)
         val scriptMarkers = listOf(
             "local results", "local searchresults", "search_results =", "searchresults =",
             "http.get(", "http.request(", "requests.get(", "duckduckgo.com", "fetch(",
         ).any(lower::contains)
-        return codeFence && scriptMarkers
+        return scriptMarkers && (codeFence || lower.contains("local results =") || lower.contains("local searchresults"))
     }
 
     /** Safe fallback: display the real returned sources rather than allowing fabricated tool output. */
