@@ -39,7 +39,6 @@ jobs:
       - name: Install Android native toolchain
         shell: bash
         run: |
-          yes | sdkmanager --licenses >/dev/null
           sdkmanager \
             "platforms;android-37" \
             "platforms;android-37.1" \
