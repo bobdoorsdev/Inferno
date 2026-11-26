@@ -15,6 +15,10 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -74,6 +78,7 @@ import com.composables.icons.lucide.Info
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.GitBranch
 import com.composables.icons.lucide.Bookmark
+import com.composables.icons.lucide.BookmarkCheck
 import com.composables.icons.lucide.Wand
 import com.composables.icons.lucide.NotebookPen
 import com.composables.icons.lucide.Pencil
@@ -100,6 +105,8 @@ import to.eyed.inferno.ui.theme.Radii
 import to.eyed.inferno.ui.theme.RowMeta
 import to.eyed.inferno.ui.theme.Typography
 import to.eyed.inferno.ui.theme.whiteA
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 import to.eyed.inferno.ui.theme.defaultEffectsSpec
 import to.eyed.inferno.ui.theme.defaultSpatialSpec
 import to.eyed.inferno.ui.theme.fastSpatialSpec
@@ -158,6 +165,7 @@ fun SharedTransitionScope.MessagesList(
     dev: ChatDevFlags = ChatDevFlags(),
     toolStatus: String? = null,
     toolSearchNotes: String? = null,
+    citationUrls: List<String> = emptyList(),
     streamingAnimations: Boolean = true,
     savedAnswerIds: Set<String> = emptySet(),
     onSaveAnswer: (ChatMessage) -> Unit = {},
@@ -185,7 +193,7 @@ fun SharedTransitionScope.MessagesList(
                     AssistantMessage(
                         text = gen.text, reasoning = gen.reasoning, thinkingMs = gen.thinkingMs, streaming = true, streamingAnimations = streamingAnimations,
                         stats = null, showActions = false, showRegenerate = false, announce = false,
-                        searchNotes = toolSearchNotes, toolStatus = toolStatus,
+                        searchNotes = toolSearchNotes, toolStatus = toolStatus, citationUrls = citationUrls,
                         onRegenerate = {}, onBranch = {}, onDetails = {}, liveMeta = liveMeta,
                     )
                 } else if (toolStatus != null || toolSearchNotes != null) {
@@ -220,6 +228,7 @@ fun SharedTransitionScope.MessagesList(
                             streamingAnimations = streamingAnimations,
                             searchNotes = if (streamingRow) toolSearchNotes else null,
                             toolStatus = if (streamingRow) toolStatus else null,
+                            citationUrls = citationUrls,
                             stats = m.stats,
                             showActions = !gen.isBusy,
                             showRegenerate = m.id == lastAssistantId,
@@ -410,6 +419,7 @@ private fun AssistantMessage(
     liveMeta: String? = null,
     searchNotes: String? = null,
     toolStatus: String? = null,
+    citationUrls: List<String> = emptyList(),
     saved: Boolean = false,
     onToggleSaved: () -> Unit = {},
     onFollowUp: (String) -> Unit = {},
@@ -428,7 +438,7 @@ private fun AssistantMessage(
             )
             Spacer(Modifier.height(10.dp))
         }
-        if (text.isNotBlank()) MarkdownBody(text, streaming = streaming, animateStreaming = streamingAnimations)
+        if (text.isNotBlank()) MarkdownBody(text, streaming = streaming, animateStreaming = streamingAnimations, citationUrls = citationUrls)
         if (!streaming && stats?.finishReason == "CANCELLED") {
             Text("Stopped...", modifier = Modifier.padding(top = 5.dp), style = Typography.labelSmall, color = Ink.I500)
         }
@@ -454,16 +464,18 @@ private fun AssistantMessage(
                     runCatching { context.startActivity(Intent.createChooser(intent, "Share response")) }
                 }
                 AnimatedActionIcon(Lucide.GitBranch, "Branch from this reply") { haptics.tap(); onBranch() }
-                AnimatedActionIcon(Lucide.Bookmark, if (saved) "Remove saved answer" else "Save answer") { haptics.tap(); onToggleSaved() }
+                AnimatedActionIcon(if (saved) Lucide.BookmarkCheck else Lucide.Bookmark, if (saved) "Remove saved answer" else "Save answer", active = saved) { haptics.tap(); onToggleSaved() }
                 if (showRegenerate) AnimatedActionIcon(Lucide.RefreshCw, S.regenerate) { haptics.tap(); onRegenerate() }
                 Box {
                     AnimatedActionIcon(Lucide.ChevronDown, "More answer actions") { haptics.tap(); moreMenu = true }
                     GlassMenu(expanded = moreMenu, onDismiss = { moreMenu = false }, minWidth = 218.dp) {
-                        MenuActionRow(Lucide.Wand, "Explain step by step") { moreMenu = false; onFollowUp("Explain your previous answer step by step, with clear intermediate steps.") }
-                        MenuActionRow(Lucide.Wand, "Simplify answer") { moreMenu = false; onFollowUp("Rewrite your previous answer in simpler language while preserving the key facts.") }
-                        MenuActionRow(Lucide.NotebookPen, "Extract key points") { moreMenu = false; onFollowUp("Extract the key points from your previous answer as a concise list.") }
-                        MenuActionRow(Lucide.Pencil, "Make more concise") { moreMenu = false; onFollowUp("Rewrite your previous answer more concisely without losing important information.") }
-                        MenuActionRow(Lucide.Pencil, "Expand with detail") { moreMenu = false; onFollowUp("Expand your previous answer with useful details and examples.") }
+                        MenuActionRow(Lucide.Search, "Verify key claims") { moreMenu = false; onFollowUp("Verify the important factual claims in your previous answer using current primary and independent sources. Correct anything unsupported and provide citations.") }
+                        MenuActionRow(Lucide.ShieldCheck, "Find risks and gaps") { moreMenu = false; onFollowUp("Audit your previous answer for missing information, assumptions, risks, and possible errors. Be specific.") }
+                        MenuActionRow(Lucide.ListChecks, "Turn into a checklist") { moreMenu = false; onFollowUp("Convert your previous answer into a practical, ordered checklist with actionable items.") }
+                        MenuActionRow(Lucide.Lightbulb, "Give a concrete example") { moreMenu = false; onFollowUp("Add a realistic worked example that demonstrates the key points in your previous answer.") }
+                        MenuActionRow(Lucide.Table, "Compare alternatives") { moreMenu = false; onFollowUp("Compare the practical alternatives mentioned or implied in your previous answer in a clear decision table.") }
+                        MenuActionRow(Lucide.FileDown, "Export answer as Markdown") { moreMenu = false; startMarkdownExport() }
+                        if (codeArtifacts.isNotEmpty()) MenuActionRow(Lucide.Archive, if (codeArtifacts.size == 1) "Download code file" else "Download project ZIP") { moreMenu = false; startCodeExport() }
                     }
                 }
                 if (stats != null && showDetails) GhostIconButton(Lucide.Info, S.details, onClick = { haptics.tap(); onDetails() }, size = 32.dp, iconSize = 15.dp, tint = Ink.I500)
@@ -510,18 +522,18 @@ private fun AnimatedCopyButton(label: String, onCopy: () -> Unit) {
 
 /** Small press-and-release motion shared by Branch and Redo. */
 @Composable
-private fun AnimatedActionIcon(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
+private fun AnimatedActionIcon(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, active: Boolean = false, onClick: () -> Unit) {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(if (pressed) 0.90f else 1f, fastSpatialSpec(), label = "messageActionScale")
     val alpha by animateFloatAsState(if (pressed) 0.72f else 1f, fastSpatialSpec(), label = "messageActionAlpha")
     Box(
         Modifier.size(32.dp).graphicsLayer { scaleX = scale; scaleY = scale; this.alpha = alpha }
-            .clip(CircleShape).clickable(interactionSource = interaction, indication = null,
+            .clip(CircleShape).background(if (active) whiteA(0.15f) else androidx.compose.ui.graphics.Color.Transparent).clickable(interactionSource = interaction, indication = null,
                 role = Role.Button) { onClick() },
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, contentDescription = label, Modifier.size(15.dp), tint = Ink.I500)
+        Icon(icon, contentDescription = label, Modifier.size(15.dp), tint = if (active) Ink.White else Ink.I500)
     }
 }
 
