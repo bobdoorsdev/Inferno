@@ -106,8 +106,16 @@ class ChatRepository(private val dao: ChatDao, private val imageUtil: ImageUtil,
         val rows = attachments.distinctBy { it.id }.mapIndexed { i, a -> MessageImageEntity(m.id, a.id, i, a.width, a.height) }
         dao.insertMessage(m, rows)
         val conv = dao.conversation(conversationId)
-        if (conv != null && conv.title.isBlank() && text.isNotBlank()) dao.rename(conversationId, titleFrom(text), now)
-        else dao.touch(conversationId, now)
+        if (conv != null && conv.title.isBlank()) {
+            val titleSeed = text.takeIf { it.isNotBlank() }
+                ?: when {
+                    attachments.isNotEmpty() -> "Image attachment"
+                    files.isNotEmpty() -> "File attachment"
+                    else -> ""
+                }
+            val fallback = titleFrom(titleSeed)
+            if (fallback.isNotBlank()) dao.rename(conversationId, fallback, now) else dao.touch(conversationId, now)
+        } else dao.touch(conversationId, now)
         flushHeldBack()     // after the insert: ids re-attached by an edit have their reference back
         return MessageWithImages(m, rows).toChatMessage().copy(files = files)
     }
@@ -243,22 +251,26 @@ class ChatRepository(private val dao: ChatDao, private val imageUtil: ImageUtil,
         const val TITLE_MAX = 48
 
         /**
-         * Titles are derived from the user's actual topic. Greeting-only turns remain untitled;
-         * the asynchronous planner can then name the chat when a substantive request arrives.
+         * A deterministic fallback is persisted as soon as the first message arrives, including greetings.
+         * A later planner pass may improve substantive titles, but a failed/empty model response can never
+         * leave the conversation at "New chat".
          */
         fun titleFrom(text: String): String {
-            val firstLine = text.lineSequence().firstOrNull { it.isNotBlank() } ?: return ""
-            val line = firstLine.trim()
-                .replace(Regex("""^\s*[-*#>]+\s*"""), "")
-                .replace(Regex("""^(?:hi|hello|hey)\b[,!?.:\s-]*""", RegexOption.IGNORE_CASE), "")
-                .replace(Regex("""^(?:please\s+)?(?:can|could|would)\s+you\s+""", RegexOption.IGNORE_CASE), "")
+            val line = text.lineSequence().firstOrNull { it.isNotBlank() }?.trim().orEmpty()
+            if (line.isBlank()) return ""
+            val cleaned = line
+                .replace(Regex("""^\\s*[-*#>]+\\s*"""), "")
+                .replace(Regex("""\\s+"""), " ")
                 .trim().trimEnd('.', '!', '?', ',', ':', ';')
-            if (!isTitleWorthy(line)) return ""
-            val end = Regex("""[.!?](?:\s|$)""").find(line)?.range?.first
-            val sentence = if (end == null) line else line.substring(0, end)
-            return if (sentence.length <= TITLE_MAX) sentence else sentence.take(TITLE_MAX).trimEnd() + "…"
+            if (cleaned.isBlank()) return ""
+            val words = cleaned.split(' ').take(7).joinToString(" ")
+            val sentenceEnd = Regex("""[.!?](?:\\s|$)""").find(words)?.range?.first
+            val candidate = (if (sentenceEnd == null) words else words.substring(0, sentenceEnd)).trim()
+            return when {
+                candidate.length <= TITLE_MAX -> candidate.replaceFirstChar { it.uppercase() }
+                else -> candidate.take(TITLE_MAX - 1).trimEnd() + "…"
+            }
         }
-
 
         fun isTitleWorthy(text: String): Boolean {
             val normalized = text.lowercase(java.util.Locale.ROOT)
