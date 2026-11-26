@@ -233,7 +233,7 @@ fun ChatRoot(appVm: AppViewModel, chatVm: ChatViewModel, onBeforeSend: () -> Uni
         val text = draft.trim()
         if (text.isNotEmpty() || pending.isNotEmpty() || pendingFiles.isNotEmpty()) {
             val needsApproximateCity = text.isNotBlank() &&
-                Regex("""\\b(near me|nearby|around me|in my area|here|local weather|weather where i am|my city|where i am)\\b""", RegexOption.IGNORE_CASE)
+                Regex("""\b(near me|nearby|around me|in my area|here|local weather|weather where i am|my city|where i am)\b""", RegexOption.IGNORE_CASE)
                     .containsMatchIn(text)
             val hasApproximatePermission = context.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
             if (needsApproximateCity && !hasApproximatePermission) {
