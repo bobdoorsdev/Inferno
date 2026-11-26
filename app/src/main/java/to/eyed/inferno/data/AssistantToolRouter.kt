@@ -153,7 +153,7 @@ Return JSON only: {"search_queries":[],"max_sources":5,"image_queries":[],"image
         val regexText = root["regex_text"]?.jsonPrimitive?.contentOrNull?.take(4_096)?.takeIf(String::isNotEmpty)
         val regexFlags = root["regex_flags"]?.jsonPrimitive?.contentOrNull?.take(8)
         val colorValue = root["color_value"]?.jsonPrimitive?.contentOrNull?.trim()?.take(80)?.takeIf(String::isNotEmpty)
-        val maxSources = root["max_sources"]?.jsonPrimitive?.intOrNull?.coerceIn(1, 12) ?: 5
+        val maxSources = root["max_sources"]?.jsonPrimitive?.intOrNull?.coerceIn(0, 12) ?: 5
         val base64Action = root["base64_action"]?.jsonPrimitive?.contentOrNull?.trim()?.lowercase()?.takeIf { it in setOf("encode", "decode") }
         val base64Text = root["base64_text"]?.jsonPrimitive?.contentOrNull?.take(16_000)?.takeIf(String::isNotEmpty)
         val hashAlgorithm = root["hash_algorithm"]?.jsonPrimitive?.contentOrNull?.trim()?.uppercase()?.replace('_', '-')?.takeIf { it in setOf("SHA-256", "SHA-1", "MD5") }
@@ -486,7 +486,7 @@ Return JSON only: {"search_queries":[],"max_sources":5,"image_queries":[],"image
                 results.forEachIndexed { index, result ->
                     val title = result.title.replace("[", "").replace("]", "").replace("\n", " ").take(120)
                     val host = runCatching { java.net.URI(result.url).host?.removePrefix("www.") }.getOrNull().orEmpty()
-                    val icon = host.takeIf { it.isNotBlank() }?.let { "https://www.google.com/s2/favicons?domain=" + it + "&sz=64" }
+                    val icon = result.siteIconUrl ?: host.takeIf { it.isNotBlank() }?.let { "https://www.google.com/s2/favicons?domain=" + it + "&sz=64" }
                     if (icon != null) append("![__favicon__](").append(icon).append(") ")
                     append("**[").append(title).append("](").append(result.url).append(")**")
                     if (host.isNotBlank()) append(" · ").append(host)
