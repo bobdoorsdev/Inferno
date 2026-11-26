@@ -46,6 +46,8 @@ bool Engine::bench(int n_prompt, int n_gen, int reps, Progress cb, void * ud, do
     std::mt19937 rng(42);
     std::uniform_int_distribution<int> dist(0, n_vocab - 1);
     std::vector<double> pp_tps, tg_tps, pp_ms, tg_ms;
+    const int total_work = reps * (n_prompt + n_gen);
+    int work_done = 0;
 
     auto fail = [&](const std::string & msg) { set_error(msg); kv_clear(); return false; };
 
@@ -74,6 +76,8 @@ bool Engine::bench(int n_prompt, int n_gen, int reps, Progress cb, void * ud, do
             const int32_t ret = llama_decode(ctx_, batch_);
             if (ret == 2) return fail("bench cancelled");
             if (ret != 0) return fail("bench: prompt decode failed: " + std::to_string(ret));
+            work_done += cur;
+            if (cb && !cb(work_done, total_work, PHASE_BENCH, ud)) return fail("bench cancelled");
         }
         const int64_t t1 = ggml_time_us();
         // generation: each step feeds the greedy argmax of the previous single logits row
@@ -89,6 +93,8 @@ bool Engine::bench(int n_prompt, int n_gen, int reps, Progress cb, void * ud, do
             if (ret == 2) return fail("bench cancelled");
             if (ret != 0) return fail("bench: gen decode failed: " + std::to_string(ret));
             tok = argmax(llama_get_logits_ith(ctx_, -1), n_vocab);
+            work_done++;
+            if (cb && !cb(work_done, total_work, PHASE_BENCH, ud)) return fail("bench cancelled");
         }
         const int64_t t2 = ggml_time_us();
         pp_ms.push_back((t1 - t0) / 1000.0);
@@ -96,9 +102,6 @@ bool Engine::bench(int n_prompt, int n_gen, int reps, Progress cb, void * ud, do
         pp_tps.push_back(n_prompt * 1e6 / (double) std::max<int64_t>(t1 - t0, 1));
         tg_tps.push_back(n_gen * 1e6 / (double) std::max<int64_t>(t2 - t1, 1));
         llama_memory_clear(mem, true);
-        if (cb && !cb(rep + 1, reps, PHASE_BENCH, ud)) {
-            return fail("bench cancelled");
-        }
     }
     kv_clear();
     out[0] = median(pp_tps);
