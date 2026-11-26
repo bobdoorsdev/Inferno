@@ -1,5 +1,10 @@
 package to.eyed.inferno.ui.chat
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -48,6 +53,7 @@ import coil3.compose.AsyncImage
 import com.composables.icons.lucide.Check
 import com.composables.icons.lucide.Copy
 import com.composables.icons.lucide.Lucide
+import com.composables.icons.lucide.Play
 import com.mikepenz.markdown.compose.components.markdownComponents
 import com.mikepenz.markdown.compose.elements.MarkdownCodeBlock
 import com.mikepenz.markdown.compose.elements.MarkdownCodeFence
@@ -79,7 +85,9 @@ import to.eyed.inferno.ui.theme.whiteA
  */
 @Composable
 fun MarkdownBody(text: String, modifier: Modifier = Modifier, streaming: Boolean = false) {
-    val formatted = remember(text, streaming) { if (streaming) text else SafeMathMarkdown.sanitize(MarkdownMath.format(text)) }
+    // Parse the live tail with the same safe markdown/math pipeline as completed messages.
+    // Previously streaming bypassed it, so headings (###), emphasis (**...**) and formulas were shown literally.
+    val formatted = remember(text) { SafeMathMarkdown.sanitize(MarkdownMath.format(text)) }
     val split = remember(formatted) { MarkdownChunker.splitOpenFence(formatted) }
     val chunks = remember(split.first) { MarkdownChunker.chunks(split.first) }
     SelectionContainer {
@@ -169,11 +177,12 @@ private fun StreamingMarkdownTail(chunk: String) {
         val trailing = lines.drop(closeIndex + 1).joinToString("\n")
         if (trailing.isNotBlank()) MarkdownTextChunk(trailing)
     } else {
-        Text(
-            chunk,
-            style = Typography.bodyLarge.copy(color = Ink.I100, textDirection = TextDirection.Content),
-            color = Ink.I100,
-        )
+        val rendered = remember(chunk) { SafeMathMarkdown.sanitize(MarkdownMath.format(chunk)) }
+        AnimatedContent(
+            targetState = rendered,
+            transitionSpec = { fadeIn(tween(110)) togetherWith fadeOut(tween(55)) },
+            label = "streamingMarkdown",
+        ) { current -> MarkdownChunkView(current) }
     }
 }
 
@@ -243,6 +252,8 @@ fun MonoCodeBlock(code: String, language: String?, modifier: Modifier = Modifier
     val shape = RoundedCornerShape(Radii.row)
     val context = LocalContext.current
     val trimmed = code.trimEnd('\n')
+    var showRunner by remember(code, language) { mutableStateOf(false) }
+    val runnable = language?.trim()?.lowercase()?.substringBefore(' ') in setOf("html", "htm", "svg", "xml", "javascript", "js", "css")
     Column(
         modifier
             .fillMaxWidth()
@@ -260,6 +271,7 @@ fun MonoCodeBlock(code: String, language: String?, modifier: Modifier = Modifier
                 color = Ink.I500,
                 modifier = Modifier.weight(1f),
             )
+            if (runnable && !streaming) CodeRunChip { showRunner = true }
             CopyChip(onCopy = { copyToClipboard(context, trimmed, "Code") })
         }
         Hairline()
@@ -267,34 +279,41 @@ fun MonoCodeBlock(code: String, language: String?, modifier: Modifier = Modifier
             Text(highlightCode(trimmed, language), style = MonoBody.copy(color = CodePalette.Text), softWrap = false, modifier = Modifier.padding(14.dp))
         }
     }
+    if (showRunner) CodeRunnerDialog(code = trimmed, language = language, onDismiss = { showRunner = false })
 }
 
-/** "Copy" -> "Copied" for 1.6 s; the system clipboard overlay on API 33+ is the only other feedback. */
+/** Run affordance beside Copy. Only self-contained browser formats are enabled. */
+@Composable
+private fun CodeRunChip(onRun: () -> Unit) {
+    Row(
+        Modifier.clip(RoundedCornerShape(10.dp)).background(whiteA(0.06f))
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, role = Role.Button, onClick = onRun)
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+    ) {
+        Icon(Lucide.Play, contentDescription = "Run code", Modifier.size(15.dp), tint = Ink.I100)
+        Text("Run", style = RowMeta, color = Ink.I100)
+    }
+}
+
+/** Copy becomes a checkmark only; no expanding "Copied" label. */
 @Composable
 private fun CopyChip(onCopy: () -> Unit) {
     var copied by remember { mutableStateOf(false) }
     val haptics = rememberHaptics()
-    LaunchedEffect(copied) { if (copied) { delay(1_600); copied = false } }
-    Row(
-        Modifier
-            .clip(RoundedCornerShape(10.dp))
-            .background(whiteA(0.06f))
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                role = Role.Button,
-            ) { haptics.tap(); onCopy(); copied = true }
-            .padding(horizontal = 11.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    LaunchedEffect(copied) { if (copied) { delay(1_100); copied = false } }
+    Box(
+        Modifier.size(32.dp).clip(RoundedCornerShape(10.dp)).background(whiteA(0.06f))
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, role = Role.Button) {
+                haptics.tap(); onCopy(); copied = true
+            },
+        contentAlignment = Alignment.Center,
     ) {
-        Icon(
-            if (copied) Lucide.Check else Lucide.Copy,
-            contentDescription = S.copyCode,
-            Modifier.size(16.dp),
-            tint = if (copied) Ink.White else Ink.I500,
-        )
-        Text(if (copied) S.copied else S.copy, style = RowMeta, color = if (copied) Ink.White else Ink.I500)
+        AnimatedContent(copied, transitionSpec = { fadeIn(tween(130)) togetherWith fadeOut(tween(80)) }, label = "codeCopy") { done ->
+            Icon(if (done) Lucide.Check else Lucide.Copy, contentDescription = if (done) "Copied" else S.copyCode,
+                Modifier.size(16.dp), tint = if (done) Ink.White else Ink.I500)
+        }
     }
 }
 
