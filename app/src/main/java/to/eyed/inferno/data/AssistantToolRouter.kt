@@ -388,7 +388,6 @@ Return JSON only: {"search_queries":[],"max_sources":5,"image_queries":[],"image
                     if (icon != null) append("![__favicon__](").append(icon).append(") ")
                     append("**[").append(title).append("](").append(result.url).append(")**")
                     if (host.isNotBlank()) append(" · ").append(host)
-                    append("<!-- INFERNO_CITATION:").append(index + 1).append(":").append(result.url).append(" -->")
                     if (result.snippet.isNotBlank()) append("\n   ").append(result.snippet)
                     append('\n')
                 }
