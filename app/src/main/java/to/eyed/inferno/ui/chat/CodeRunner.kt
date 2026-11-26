@@ -107,11 +107,11 @@ try{$safe}catch(e){out.textContent+='Error: '+(e&&e.stack||e)}
         "css" -> """<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">$csp
 <style>$source</style></head><body><h2>CSS preview</h2><p>Sample text</p><button>Button</button><div class="preview">Preview element</div></body></html>"""
         else -> {
+            val headTag = Regex("(?i)<head\\b[^>]*>").find(source)?.value
+            val htmlTag = Regex("(?i)<html\\b[^>]*>").find(source)?.value
             when {
-                Regex("(?i)<head\\b").containsMatchIn(source) ->
-                    Regex("(?i)<head\\b[^>]*>").replaceFirst(source) { it.value + csp }
-                Regex("(?i)<html\\b").containsMatchIn(source) ->
-                    Regex("(?i)<html\\b[^>]*>").replaceFirst(source) { it.value + "<head>$csp</head>" }
+                headTag != null -> source.replaceFirst(headTag, headTag + csp)
+                htmlTag != null -> source.replaceFirst(htmlTag, htmlTag + "<head>$csp</head>")
                 else -> "<!doctype html><html><head>$csp</head><body style='margin:0'>$source</body></html>"
             }
         }
