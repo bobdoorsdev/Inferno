@@ -561,7 +561,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
                     pendingPlan.searchQueries.map { it.trim() }
                         .filter { it.length >= 2 && usedSearchQueries.add(it.lowercase()) }.take(8)
                 } else emptyList()
-                val roundImages = if (settings.webSearchEnabled && pendingPlan.maxSources > 0) {
+                val roundImages = if (settings.webSearchEnabled) {
                     pendingPlan.imageQueries.map { it.trim() }
                         .filter { it.length >= 2 && usedImageQueries.add(it.lowercase()) }.take(4)
                 } else emptyList()
