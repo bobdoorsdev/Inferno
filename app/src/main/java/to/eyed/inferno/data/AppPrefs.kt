@@ -9,7 +9,6 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.datastore.preferences.core.remove
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -131,7 +130,7 @@ class AppPrefs(
     private val store: DataStore<Preferences> = context.applicationContext.settingsStore,
 ) : EtaStore, DownloadPrefs {
     // One-time cleanup for installs that previously stored Saved answers.
-    init { scope.launch { store.edit { remove(stringPreferencesKey("savedAnswers")) } } }
+    init { scope.launch { store.edit { prefs -> prefs.remove(stringPreferencesKey("savedAnswers")) } } }
 
     private val _loaded = MutableStateFlow(false)
     /** False until the first value has been read from disk (splash keep-on condition, 5.1). */
