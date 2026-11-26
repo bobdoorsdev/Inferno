@@ -15,6 +15,7 @@ coroutines = "1.11.0"
 serializationJson = "1.11.0"
 okhttp = "5.5.0"
 markdownRenderer = "0.45.0"
+bettertext = "25d181c"
 coil = "3.6.2"
 lucide = "1.1.0"
 junit = "4.13.2"
@@ -51,6 +52,10 @@ kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
 mockwebserver3 = { group = "com.squareup.okhttp3", name = "mockwebserver3", version.ref = "okhttp" }
 markdown-renderer-m3 = { group = "com.mikepenz", name = "multiplatform-markdown-renderer-m3", version.ref = "markdownRenderer" }
+bettertext-bom = { module = "com.github.re-ovo.bettertext:bom", version.ref = "bettertext" }
+bettertext-text = { module = "com.github.re-ovo.bettertext:text" }
+bettertext-markdown = { module = "com.github.re-ovo.bettertext:markdown" }
+bettertext-latex = { module = "com.github.re-ovo.bettertext:latex" }
 coil-compose = { group = "io.coil-kt.coil3", name = "coil-compose", version.ref = "coil" }
 icons-lucide = { group = "com.composables", name = "icons-lucide", version.ref = "lucide" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
