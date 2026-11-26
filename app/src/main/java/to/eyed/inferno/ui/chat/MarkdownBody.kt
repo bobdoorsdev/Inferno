@@ -413,6 +413,7 @@ fun MonoCodeBlock(code: String, language: String?, modifier: Modifier = Modifier
     val trimmed = code.trimEnd('\n')
     val info = language?.trim()?.lowercase().orEmpty()
     val runLanguage = info.removeSuffix("-run").substringBefore(' ')
+    val languageLabel = runLanguage.ifBlank { "text" }
     val autoRun = info.endsWith(" run") || info.endsWith("-run")
     var showPreview by remember(code, language) { mutableStateOf(false) }
     LaunchedEffect(streaming, autoRun, code) { if (autoRun && !streaming) showPreview = true }
@@ -429,7 +430,7 @@ fun MonoCodeBlock(code: String, language: String?, modifier: Modifier = Modifier
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                language?.trim()?.takeIf { it.isNotBlank() } ?: "text",
+                languageLabel,
                 style = RowMeta.copy(fontFamily = MonoBody.fontFamily),
                 color = Ink.I500,
                 modifier = Modifier.weight(1f),
@@ -447,7 +448,7 @@ fun MonoCodeBlock(code: String, language: String?, modifier: Modifier = Modifier
                 CodeRunnerInline(code = trimmed, language = runLanguage, modifier = Modifier.fillMaxWidth())
             } else {
                 Box(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
-                    val highlighted = if (streaming) AnnotatedString(trimmed) else highlightCode(trimmed, language)
+                    val highlighted = if (streaming) AnnotatedString(trimmed) else highlightCode(trimmed, languageLabel)
                     Text(highlighted, style = MonoBody.copy(color = CodePalette.Text), softWrap = false,
                         modifier = Modifier.padding(start = 18.dp, end = 14.dp, top = 14.dp, bottom = 14.dp))
                 }
