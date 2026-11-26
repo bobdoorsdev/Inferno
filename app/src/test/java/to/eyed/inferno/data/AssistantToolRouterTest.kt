@@ -105,6 +105,28 @@ class AssistantToolRouterTest {
         assertFalse(ChatRepository.isTitleWorthy("Hello"))
     }
 
+    @Test fun modelInventedUtilitiesAreRejectedUnlessTheUserAskedForThem() {
+        val invented = AssistantToolPlan(
+            unitConversion = "25 C to F",
+            calculation = "25 * 2",
+            currentTime = true,
+        )
+        val rejected = AssistantToolRouter.validateForRequest(invented, "Explain why the sky is blue.")
+        assertNull(rejected.unitConversion)
+        assertNull(rejected.calculation)
+        assertFalse(rejected.currentTime)
+
+        val explicit = AssistantToolRouter.validateForRequest(invented, "Convert 25 C to F.")
+        assertEquals("25 C to F", explicit.unitConversion)
+        assertNull(explicit.calculation)
+        assertFalse(explicit.currentTime)
+    }
+
+    @Test fun responseLanguageFollowsTheLatestUserMessageNotTheDeviceLocale() {
+        assertTrue(AssistantToolRouter.responseLanguageInstruction("Please fix this code and explain what changed.").contains("exclusively in English"))
+        assertTrue(AssistantToolRouter.responseLanguageInstruction("Por favor, explique como isso funciona para mim.").contains("Brazilian Portuguese"))
+    }
+
     @Test fun localUnitConverterHandlesTemperatureLengthAndStorage() {
         assertEquals("77 °F", AssistantToolRouter.convertUnits("25 C to F"))
         assertEquals("1000 m", AssistantToolRouter.convertUnits("1 km to m"))
