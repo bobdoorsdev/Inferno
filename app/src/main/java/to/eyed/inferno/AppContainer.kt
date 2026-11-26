@@ -43,7 +43,7 @@ import java.util.concurrent.TimeUnit
  * ([isCpuSupported]) is read from /proc before anything could call System.loadLibrary, and both engines bind
  * their JNI objects lazily on first use, so an unsupported phone can still render UnsupportedCpuScreen.
  */
-class AppContainer(app: Application) {
+class AppContainer(private val app: Application) {
     val appScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     fun hasCoarseLocationPermission(): Boolean =
