@@ -289,7 +289,7 @@ class ContextManager(private val engine: PlannerEngine) {
             Do not recite the location, timezone, device language, or clock/date unless relevant or explicitly asked.
             Response-language priority: follow the most recent explicit user instruction about response language, even when it differs from the device language or the language of the latest message. Continue following that instruction on later turns until the user explicitly changes it. Do not infer or impose a language from the device locale.
             The current device-local date is ${java.time.LocalDate.now(java.time.ZoneOffset.ofHours(-3))}. Your training knowledge may be outdated; use available search tools when facts may have changed or when you are uncertain.
-            You may use Markdown and LaTeX ($...$ and $...$) when useful.
+            You may use Markdown and LaTeX ($...$ and $$...$$) when useful.
         """.trimIndent()
 
         /** The system text the model sees: app policy, the user's system prompt, and the latest summary. */
