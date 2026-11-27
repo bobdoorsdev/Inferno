@@ -1,93 +1,121 @@
 package to.eyed.inferno.ui.chat
 
 /**
- * The markdown renderer is not a TeX engine. Keep TeX delimiters out of its block parser and
- * present formulas as readable inline / display code instead of letting partial delimiters
- * corrupt the markdown tree during streaming.
+ * Normalizes the two common LaTeX delimiter styles for the native math renderer.
+ * Fenced and inline code are deliberately opaque: a command in code is never math.
  */
 object SafeMathMarkdown {
-    private val fence = Regex("^\\s*([~]{3,}|\\x60{3,}).*$")
+    private val fenceStart = Regex("""^\\s*(`{3,}|~{3,}).*$""")
+    private val inlineParen = Regex("""\\\\\\((.+?)\\\\\\)""")
+    private val inlineBracket = Regex("""\\\\\\[(.+?)\\\\\\]""")
+    private val bareCommand = Regex("""\\\\(alpha|beta|gamma|delta|epsilon|varepsilon|theta|vartheta|lambda|mu|pi|rho|sigma|tau|phi|varphi|omega|Gamma|Delta|Theta|Lambda|Pi|Sigma|Phi|Omega|frac|dfrac|tfrac|sqrt|sum|prod|int|oint|cdot|times|div|pm|mp|leq|geq|neq|approx|infty|partial|nabla|degree)(?:\\\\\{[^{}\\n]*})(?:\\\\\{[^{}\\n]*})?""")
 
-    fun sanitize(source: String): String {
-        val out = StringBuilder(source.length + 32)
-        val display = StringBuilder()
+    fun containsMath(source: String): Boolean {
         var fenceChar: Char? = null
         var fenceSize = 0
-        var displayClose: String? = null
-        fun emitDisplay() {
-            out.append("\u0060\u0060\u0060math\n")
-            out.append(display.toString().trimEnd('\n'))
-            out.append("\n\u0060\u0060\u0060\n")
-            display.setLength(0)
-            displayClose = null
-        }
-        for (line in source.split('\n')) {
-            if (displayClose != null) {
-                if (line.trim() == displayClose) emitDisplay()
-                else display.append(line).append('\n')
-                continue
-            }
-            val marker = fence.matchEntire(line)
+        for (line in source.split('\\n')) {
+            val marker = fenceStart.matchEntire(line)
             if (marker != null) {
-                val raw = marker.groupValues[1]
+                val token = marker.groupValues[1]
                 if (fenceChar == null) {
-                    fenceChar = raw[0]
-                    fenceSize = raw.length
-                } else if (raw[0] == fenceChar && raw.length >= fenceSize) {
+                    fenceChar = token[0]
+                    fenceSize = token.length
+                } else if (token[0] == fenceChar && token.length >= fenceSize) {
                     fenceChar = null
                     fenceSize = 0
                 }
-                out.append(line).append('\n')
                 continue
             }
-            if (fenceChar != null) {
-                out.append(line).append('\n')
-                continue
-            }
-            val trimmed = line.trim()
-            when {
-                trimmed == "$$" -> { displayClose = "$$"; continue }
-                trimmed == "\\[" -> { displayClose = "\\]"; continue }
-                trimmed.startsWith("$$") && trimmed.length > 4 && trimmed.endsWith("$$") ->
-                    out.append("\u0060\u0060\u0060math\n").append(trimmed.substring(2, trimmed.length - 2)).append("\n\u0060\u0060\u0060\n")
-                trimmed.startsWith("\\[") && trimmed.endsWith("\\]") && trimmed.length > 4 ->
-                    out.append("\u0060\u0060\u0060math\n").append(trimmed.substring(2, trimmed.length - 2)).append("\n\u0060\u0060\u0060\n")
-                else -> out.append(inlineMath(line)).append('\n')
-            }
+            if (fenceChar != null) continue
+            val prose = stripInlineCode(line)
+            if (prose.trim() == "$$" || prose.trim() == "\\\\[" || prose.trim() == "\\\\]") return true
+            if (Regex("""(?<!\\\\)\\$[^\\$\\n]+\\$""").containsMatchIn(prose)) return true
+            if (inlineParen.containsMatchIn(prose) || inlineBracket.containsMatchIn(prose)) return true
+            if (bareCommand.containsMatchIn(prose)) return true
         }
-        if (displayClose != null) emitDisplay()
-        return out.toString().trimEnd('\n')
+        return false
     }
 
-    private fun inlineMath(line: String): String {
-        val out = StringBuilder(line.length + 16)
+    fun normalize(source: String): String {
+        val output = StringBuilder(source.length + 16)
+        var fenceChar: Char? = null
+        var fenceSize = 0
+        var inDisplayMath = false
+        for ((index, line) in source.split('\\n').withIndex()) {
+            val marker = fenceStart.matchEntire(line)
+            if (marker != null) {
+                val token = marker.groupValues[1]
+                if (fenceChar == null) {
+                    fenceChar = token[0]
+                    fenceSize = token.length
+                } else if (token[0] == fenceChar && token.length >= fenceSize) {
+                    fenceChar = null
+                    fenceSize = 0
+                }
+                output.append(line)
+            } else if (fenceChar != null) {
+                output.append(line)
+            } else {
+                val trimmed = line.trim()
+                when (trimmed) {
+                    "\\\\[" -> { output.append("$$"); inDisplayMath = true }
+                    "\\\\]" -> { output.append("$$"); inDisplayMath = false }
+                    "$$" -> { output.append(line); inDisplayMath = !inDisplayMath }
+                    else -> {
+                        var normalized = inlineParen.replace(line) { "\\$" + it.groupValues[1] + "\\$" }
+                        normalized = inlineBracket.replace(normalized) { "\\$" + it.groupValues[1] + "\\$" }
+                        if (!inDisplayMath) normalized = wrapBareCommands(normalized)
+                        output.append(normalized)
+                    }
+                }
+            }
+            if (index != source.count { it == '\\n' }) output.append('\\n')
+        }
+        return output.toString()
+    }
+
+    /** Wrap un-delimited LaTeX commands (for example \\delta) as inline math. */
+    private fun wrapBareCommands(line: String): String {
+        val out = StringBuilder(line.length + 8)
         var i = 0
+        var inMath = false
+        var mathDelimiter = 0
+        var codeTicks = 0
         while (i < line.length) {
-            val start: Int
-            val close: String
-            when {
-                line.startsWith("\\(", i) -> { start = i + 2; close = "\\)" }
-                line[i] == '$' && !line.startsWith("$$", i) -> { start = i + 1; close = "$" }
-                else -> { out.append(line[i++]); continue }
+            val c = line[i]
+            if (c == '`') {
+                var end = i
+                while (end < line.length && line[end] == '`') end++
+                val count = end - i
+                if (codeTicks == 0) codeTicks = count else if (codeTicks == count) codeTicks = 0
+                out.append(line, i, end)
+                i = end
+                continue
             }
-            val end = line.indexOf(close, start)
-            if (end < 0) {
-                out.append(line.substring(i, start - if (close == "$") 1 else 2))
-                out.append(codeSpan(line.substring(start)))
-                return out.toString()
+            if (codeTicks == 0 && c == '$' && (i == 0 || line[i - 1] != '\\\\')) {
+                var end = i
+                while (end < line.length && line[end] == '$') end++
+                val count = end - i
+                if (mathDelimiter == 0) { mathDelimiter = count; inMath = true }
+                else if (mathDelimiter == count) { mathDelimiter = 0; inMath = false }
+                out.append(line, i, end)
+                i = end
+                continue
             }
-            val content = line.substring(start, end)
-            out.append(line.substring(i, start - if (close == "$") 1 else 2))
-            out.append(codeSpan(content))
-            i = end + close.length
+            if (codeTicks == 0 && !inMath && c == '\\\\') {
+                val match = bareCommand.find(line, i)
+                if (match != null && match.range.first == i) {
+                    out.append('$').append(match.value).append('$')
+                    i = match.range.last + 1
+                    continue
+                }
+            }
+            out.append(c)
+            i++
         }
         return out.toString()
     }
 
-    private fun codeSpan(value: String): String {
-        val longest = Regex("\\x60+").findAll(value).maxOfOrNull { it.value.length } ?: 0
-        val tick = "\u0060".repeat(longest + 1)
-        val pad = value.startsWith('\u0060') || value.endsWith('\u0060')
-        return if (pad) "$tick $value $tick" else "$tick$value$tick"
-    }
+    private fun stripInlineCode(line: String): String =
+        Regex("""(`+).*?\\1""").replace(line, "")
 }
