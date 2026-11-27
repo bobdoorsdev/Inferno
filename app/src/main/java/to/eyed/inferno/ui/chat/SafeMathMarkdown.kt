@@ -66,7 +66,7 @@ object SafeMathMarkdown {
                     else -> {
                         var normalized = inlineParen.replace(line) { "\$" + it.groupValues[1] + "\$" }
                         normalized = inlineBracket.replace(normalized) { "\$" + it.groupValues[1] + "\$" }
-                        val incompleteParenMath = line.contains("\\\\(") && !line.contains("\\\\)")
+                                                val incompleteParenMath = line.contains("\\(") && !line.contains("\\)")
                         if (!inDisplayMath && !incompleteParenMath) normalized = wrapBareCommands(normalized)
                         output.append(normalized)
                     }
@@ -86,9 +86,9 @@ object SafeMathMarkdown {
         var codeTicks = 0
         while (i < line.length) {
             val c = line[i]
-            if (c == '\x60') {
+            if (c == '\u0060') {
                 var end = i
-                while (end < line.length && line[end] == '\x60') end++
+                while (end < line.length && line[end] == '\u0060') end++
                 val count = end - i
                 if (codeTicks == 0) codeTicks = count else if (codeTicks == count) codeTicks = 0
                 out.append(line, i, end)
