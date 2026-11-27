@@ -450,7 +450,7 @@ fun MonoCodeBlock(
                 color = Ink.I500,
                 modifier = Modifier.weight(1f),
             )
-            CopyIconButton(S.copy, onCopy = { copyToClipboard(context, trimmed, "Code") }, size = 32.dp, iconSize = 15.dp, tint = Ink.I500)
+            CopyIconButton(S.copy, onCopy = { copyToClipboard(context, trimmed, "Code") }, size = 32.dp, iconSize = 15.dp, tint = Ink.I500, backgroundEnabled = false)
         }
         Hairline()
         Box(Modifier.horizontalScroll(rememberScrollState())) {

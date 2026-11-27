@@ -110,13 +110,14 @@ fun CopyIconButton(
     size: Dp = 32.dp,
     iconSize: Dp = 16.dp,
     tint: Color = Ink.I500,
+    backgroundEnabled: Boolean = true,
 ) {
     var copied by remember { mutableStateOf(false) }
     val haptics = rememberHaptics()
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val background by animateColorAsState(
-        if (pressed) Ink.SurfaceHigh else Color.Transparent,
+        if (backgroundEnabled && pressed) Ink.SurfaceHigh else Color.Transparent,
         fastEffectsSpec(),
         label = "copyButtonBg",
     )
