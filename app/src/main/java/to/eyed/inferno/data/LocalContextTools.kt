@@ -93,8 +93,8 @@ object LocalToolCommandParser {
         // This prevents an unverified guessed time/weather sentence from appearing before the tool runs.
         if (command.find(source) != null || legacyCommand.find(source) != null) return ""
         return stripLeadingThought(source)
-            .replace(Regex("""\[\[(?:time|location|weather)]]"""), "")
-            .replace(Regex("""\[\[inferno_widget:[^\]]*]]"""), "")
+            .replace(Regex("""\s*\[\[(?:time|location|weather)]]"""), "")
+            .replace(Regex("""\s*\[\[inferno_widget:[^\]]*]]"""), "")
     }
 
     private fun stripLeadingThought(source: String): String {
