@@ -38,16 +38,6 @@ class MarkdownBodyTest {
         assertTrue(normalizeMarkdownForRenderer("Formula: \\(x + y\\)").contains("\\(x + y\\)"))
     }
 
-    @Test fun typingRevealAdvancesGraduallyAndCatchesUpWithoutSkippingCharacters() {
-        assertEquals(1, nextTypingRevealLength(0, 1))
-        assertEquals(1, nextTypingRevealLength(0, 2))
-        assertEquals(2, nextTypingRevealLength(0, 13))
-        assertEquals(4, nextTypingRevealLength(0, 33))
-        assertEquals(8, nextTypingRevealLength(0, 97))
-        assertEquals(104, nextTypingRevealLength(100, 140))
-        assertEquals(140, nextTypingRevealLength(140, 140))
-    }
-
     @Test fun incompleteCodeFenceIsRenderedAsLiveCodeUntilTheStreamFinishes() {
         val partial = "```html\n<h1>World Cup</h1>"
         val live = normalizeMarkdownForRenderer(partial, streaming = true)

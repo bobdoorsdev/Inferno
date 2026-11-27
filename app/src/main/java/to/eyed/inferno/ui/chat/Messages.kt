@@ -408,14 +408,16 @@ private fun AssistantMessage(
     val context = LocalContext.current
     val haptics = rememberHaptics()
     Column(modifier.fillMaxWidth()) {
-        val activityContent = reasoning.isNotBlank() || !searchNotes.isNullOrBlank() || toolStatus != null
+        val activityNotes = remember(reasoning) { AssistantToolRouter.splitNotes(reasoning) }
+        val activityContent = activityNotes.reasoning.isNotBlank() || !activityNotes.local.isNullOrBlank()
         if (activityContent) {
             AssistantActivityPanel(
                 reasoning = reasoning,
-                searchNotes = searchNotes,
-                status = toolStatus,
+                searchNotes = null,
+                status = null,
                 live = streaming,
                 thinkingMs = thinkingMs.takeIf { it > 0 } ?: 0L,
+                showSearchResults = false,
             )
             Spacer(Modifier.height(10.dp))
         }
@@ -428,7 +430,7 @@ private fun AssistantMessage(
         AnimatedVisibility(showActions, enter = fadeIn(defaultEffectsSpec()), exit = fadeOut(defaultEffectsSpec())) {
             Row(
                 Modifier.padding(top = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(3.dp),
+                horizontalArrangement = Arrangement.spacedBy(0.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 AnimatedCopyButton(S.copyMessage) { copyToClipboard(context, text, "Inferno message") }
@@ -465,7 +467,7 @@ private fun AnimatedCopyButton(label: String, onCopy: () -> Unit) {
         if (copied) { delay(1_050); copied = false }
     }
     Box(
-        Modifier.size(34.dp).graphicsLayer { scaleX = scale; scaleY = scale; rotationZ = if (pressed) -5f else 0f }
+        Modifier.size(30.dp).graphicsLayer { scaleX = scale; scaleY = scale; rotationZ = if (pressed) -5f else 0f }
             .clip(RoundedCornerShape(9.dp)).background(Ink.SurfaceHigh.copy(alpha = if (pressed) 0.95f else 0f))
             .clickable(interactionSource = interaction, indication = null,
                 role = Role.Button) { haptics.tap(); onCopy(); copied = true },
@@ -495,13 +497,13 @@ private fun AnimatedActionIcon(icon: androidx.compose.ui.graphics.vector.ImageVe
     val alpha by animateFloatAsState(if (pressed) 0.62f else 1f, fastSpatialSpec(), label = "messageActionAlpha")
     val rotation by animateFloatAsState(if (pressed) 7f else 0f, fastSpatialSpec(), label = "messageActionRotation")
     Box(
-        Modifier.size(34.dp).graphicsLayer { scaleX = scale; scaleY = scale; this.alpha = alpha; rotationZ = rotation }
+        Modifier.size(30.dp).graphicsLayer { scaleX = scale; scaleY = scale; this.alpha = alpha; rotationZ = rotation }
             .clip(CircleShape).background(Ink.SurfaceHigh.copy(alpha = if (pressed) 0.85f else 0f))
             .clickable(interactionSource = interaction, indication = null,
                 role = Role.Button) { onClick() },
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, contentDescription = label, Modifier.size(17.dp), tint = Ink.I500)
+        Icon(icon, contentDescription = label, Modifier.size(16.dp), tint = Ink.I500)
     }
 }
 

@@ -128,6 +128,8 @@ class AssistantToolRouterTest {
         assertTrue(htmlPrompt.contains("English"))
         assertTrue(htmlPrompt.contains("every user-facing string"))
         assertTrue(AssistantToolRouter.responseLanguageInstruction("Por favor, explique como isso funciona para mim.").contains("Brazilian Portuguese"))
+        assertTrue(AssistantToolRouter.responseLanguageInstruction("ho").contains("exclusively in English"))
+        assertTrue(AssistantToolRouter.responseLanguageInstruction("ho").contains("Do not infer or mention the user's city"))
     }
 
     @Test fun explicitImageSearchIsForcedForDirectPictureRequests() {
@@ -135,6 +137,27 @@ class AssistantToolRouterTest {
         assertEquals("the 2026 World Cup final", AssistantToolRouter.explicitImageSearchQuery("Find photos of the 2026 World Cup final"))
         assertNull(AssistantToolRouter.explicitImageSearchQuery("Generate an image of the 2026 World Cup"))
         assertNull(AssistantToolRouter.explicitImageSearchQuery("Explain how image search works"))
+    }
+
+
+    @Test fun productRecommendationsAutomaticallyRequestProductPhotos() {
+        assertTrue(AssistantToolRouter.automaticProductImageSearchQuery("Find the best prebuilt gaming PC for 2026")!!.contains("product photos"))
+        assertTrue(AssistantToolRouter.automaticProductImageSearchQuery("Compare the best laptops under $900")!!.contains("product photos"))
+        assertNull(AssistantToolRouter.automaticProductImageSearchQuery("Explain how GPUs work"))
+    }
+
+    @Test fun nativeWidgetContractExposesAtLeastTenRenderableWidgetTypes() {
+        val instructions = AssistantToolRouter.widgetInstructions()
+        val types = listOf("weather", "clock", "countdown", "timer", "stopwatch", "calculator", "unit_converter", "currency", "date", "progress", "bar_chart")
+        assertTrue(types.all { instructions.contains("\"type\":\"$it\"") })
+    }
+
+    @Test fun imageFallbackCanPlaceSeveralImagesInline() {
+        val images = (1..6).map { index ->
+            WebImageResult("Gaming PC $index", "https://images.example/pc$index.jpg", "https://source.example/pc$index")
+        }
+        val answer = AssistantToolRouter.enrichAnswer("Compare these six prebuilt gaming PCs.", emptyList(), images)
+        assertEquals(6, Regex("!\\[").findAll(answer).count())
     }
 
     @Test fun localUnitConverterHandlesTemperatureLengthAndStorage() {

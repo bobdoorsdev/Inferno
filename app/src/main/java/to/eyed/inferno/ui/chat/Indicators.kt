@@ -99,12 +99,13 @@ fun AssistantActivityPanel(
     live: Boolean,
     thinkingMs: Long,
     modifier: Modifier = Modifier,
+    showSearchResults: Boolean = false,
 ) {
     val parsed = remember(reasoning) { AssistantToolRouter.splitNotes(reasoning) }
-    val search = searchNotes?.takeIf { it.isNotBlank() } ?: parsed.search
+    val search = if (showSearchResults) searchNotes?.takeIf { it.isNotBlank() } ?: parsed.search else null
     val think = listOfNotNull(parsed.reasoning.takeIf { it.isNotBlank() }, parsed.local?.takeIf { it.isNotBlank() }).joinToString("\n\n")
     val hasThink = think.isNotBlank()
-    val hasSearch = !search.isNullOrBlank() || status != null
+    val hasSearch = showSearchResults && (!search.isNullOrBlank() || status != null)
     var expanded by rememberSaveable { mutableStateOf(live) }
     var selected by rememberSaveable { mutableStateOf(if (hasSearch && !hasThink) "search" else "think") }
     LaunchedEffect(live) { if (live) expanded = true else expanded = false }

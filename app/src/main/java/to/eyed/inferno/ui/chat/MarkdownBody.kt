@@ -5,6 +5,8 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -36,12 +38,19 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.Role
@@ -59,6 +68,7 @@ import com.composables.icons.lucide.Copy
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Play
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import me.rerere.bettertext.latex.LatexBlock
 import me.rerere.bettertext.latex.LatexInline
 import me.rerere.bettertext.markdown.LocalMarkdownTextStyle
@@ -88,24 +98,21 @@ fun MarkdownBody(text: String, modifier: Modifier = Modifier, streaming: Boolean
     val context = LocalContext.current
     val latestText by rememberUpdatedState(text)
     val latestStreaming by rememberUpdatedState(streaming && animateStreaming)
-    var revealedText by remember { mutableStateOf(if (streaming && animateStreaming) "" else text) }
-    LaunchedEffect(text, streaming, animateStreaming) {
-        if (!streaming || !animateStreaming) revealedText = text
-    }
+    val revealProgress = remember { Animatable(if (streaming && animateStreaming) 0f else 1f) }
     LaunchedEffect(streaming, animateStreaming) {
         if (streaming && animateStreaming) {
-            while (latestStreaming) {
-                val target = latestText
-                if (!target.startsWith(revealedText)) revealedText = ""
-                val nextLength = nextTypingRevealLength(revealedText.length, target.length)
-                if (nextLength > revealedText.length) revealedText = target.substring(0, nextLength)
-                delay(12)
+            revealProgress.snapTo(0f)
+            snapshotFlow { latestText.isNotBlank() || !latestStreaming }.first { it }
+            if (latestStreaming && latestText.isNotBlank()) {
+                revealProgress.animateTo(1f, animationSpec = tween(880, easing = LinearEasing))
+            } else {
+                revealProgress.snapTo(1f)
             }
         } else {
-            revealedText = latestText
+            revealProgress.snapTo(1f)
         }
     }
-    val source = remember(revealedText, streaming) { normalizeMarkdownForRenderer(revealedText, streaming) }
+    val source = remember(text, streaming) { normalizeMarkdownForRenderer(text, streaming) }
     val theme = remember {
         val body = Typography.bodyLarge.copy(color = Ink.I100, textDirection = TextDirection.Content)
         MarkdownTheme(
@@ -140,12 +147,12 @@ fun MarkdownBody(text: String, modifier: Modifier = Modifier, streaming: Boolean
     val body = Typography.bodyLarge.copy(
         color = Ink.I100,
         textDirection = TextDirection.Content,
-        textMotion = if (streaming && animateStreaming) androidx.compose.ui.text.style.TextMotion.Animated else androidx.compose.ui.text.style.TextMotion.Static,
+        textMotion = androidx.compose.ui.text.style.TextMotion.Static,
     )
     BetterSelectionContainer(modifier = modifier.fillMaxWidth()) {
         Markdown(
             content = source,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().softSweepMask(revealProgress.value),
             style = body,
             theme = theme,
             components = components,
@@ -154,16 +161,33 @@ fun MarkdownBody(text: String, modifier: Modifier = Modifier, streaming: Boolean
     }
 }
 
-/** Adaptive reveal cadence: smooth at normal output speed, catch up quickly after slow frames. */
-internal fun nextTypingRevealLength(currentLength: Int, targetLength: Int): Int {
-    val remaining = (targetLength - currentLength).coerceAtLeast(0)
-    val step = when {
-        remaining > 96 -> 8
-        remaining > 32 -> 4
-        remaining > 12 -> 2
-        else -> 1
+/**
+ * Soft alpha-mask sweep over stable Markdown. No characters are withheld and the Markdown tree
+ * is not reparsed for each animation frame, so streaming remains responsive.
+ */
+@Composable
+private fun Modifier.softSweepMask(progress: Float): Modifier {
+    if (progress >= 1f) return this
+    val density = LocalDensity.current
+    val feather = with(density) { 18.dp.toPx() }
+    return graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen).drawWithContent {
+        drawContent()
+        val width = size.width.coerceAtLeast(1f)
+        val edge = width * progress.coerceIn(0f, 1f)
+        val start = (edge - feather).coerceIn(0f, width)
+        val finish = (edge + feather).coerceIn(0f, width)
+        val mask = Brush.horizontalGradient(
+            colorStops = arrayOf(
+                0f to Color.White,
+                (start / width) to Color.White,
+                (finish / width) to Color.Transparent,
+                1f to Color.Transparent,
+            ),
+            startX = 0f,
+            endX = width,
+        )
+        drawRect(brush = mask, blendMode = BlendMode.DstIn)
     }
-    return (currentLength + step).coerceAtMost(targetLength)
 }
 
 /** Repair common heading syntax and escape currency tokens without touching fenced/inline code. */

@@ -58,10 +58,10 @@ object AssistantToolRouter {
             "svg", "website", "page", "english", "explain", "button", "text", "css", "javascript"
         )
         val portuguese = setOf(
-            "que", "não", "nao", "uma", "para", "com", "você", "voce", "como", "por", "favor", "isso",
-            "está", "esta", "melhor", "onde", "quando", "pesquise", "faça", "faca", "agora", "meu",
-            "minha", "oi", "quero", "preciso", "mas", "também", "tambem", "porque", "então", "entao",
-            "pode", "mais", "crie", "gere", "coloque", "adicione", "remova", "escreva", "pagina"
+            "oi", "olá", "ola", "não", "nao", "uma", "para", "com", "você", "voce", "como", "por", "favor",
+            "isso", "está", "esta", "melhor", "onde", "quando", "pesquise", "faça", "faca", "agora", "meu",
+            "minha", "quero", "preciso", "mas", "também", "tambem", "porque", "então", "entao", "pode",
+            "mais", "crie", "gere", "coloque", "adicione", "remova", "escreva", "pagina", "obrigado", "obrigada"
         )
         val explicitEnglish = Regex(
             """\b(?:in|written\s+in|using|as|language(?:\s+should\s+be)?\s*[:=]?)\s*english\b|\benglish[- ]language\b""",
@@ -71,15 +71,16 @@ object AssistantToolRouter {
         val portugueseScore = words.count { it in portuguese }
         val language = when {
             explicitEnglish -> "English"
-            portugueseScore >= 2 && portugueseScore > englishScore -> "Brazilian Portuguese (pt-BR)"
-            englishScore > 0 && englishScore >= portugueseScore -> "English"
-            else -> "the same language as the latest user message"
+            portugueseScore > 0 && portugueseScore > englishScore -> "Brazilian Portuguese (pt-BR)"
+            else -> "English"
         }
         return "LANGUAGE REQUIREMENT: Respond exclusively in " + language +
             ". The latest user message overrides the Android device locale and all earlier conversation language. " +
             "For generated HTML, SVG, CSS, JavaScript, or other code, write every user-facing string " +
             "(page title, headings, labels, buttons, placeholders, alt text, and comments) in " + language +
-            " too. Never translate an English request into Brazilian Portuguese."
+            " too. Never translate an English request into Brazilian Portuguese. " +
+            "Do not infer or mention the user's city, state, or country from device locale, IP, or metadata; " +
+            "mention a country only when the user asks for it or it is essential to the answer."
     }
 
     /** Direct picture-search requests must not depend on a small model's planner guess. */
@@ -98,6 +99,20 @@ object AssistantToolRouter {
             .trimEnd('.', '?', '!', ' ')
             .take(160)
         return query.takeIf { it.length >= 2 }
+    }
+
+    /** Adds image lookup to physical-product recommendation requests even when a small planner omits it. */
+    fun automaticProductImageSearchQuery(userText: String): String? {
+        val category = Regex(
+            """\b(?:gaming\s+(?:desktop\s+)?pcs?|prebuilt\s+(?:gaming\s+)?pcs?|desktop\s+pcs?|laptops?|notebooks?|smartphones?|mobile\s+phones?|tablets?|gpus?|graphics\s+cards?|monitors?|headphones?|earbuds?|cameras?|televisions?|tvs?)\b""",
+            RegexOption.IGNORE_CASE,
+        )
+        val intent = Regex(
+            """\b(?:best|top|recommend(?:ation)?s?|compare|comparison|which|find|buy|purchase|looking\s+for|price|under\s+\$?\d+)\b""",
+            RegexOption.IGNORE_CASE,
+        )
+        if (!category.containsMatchIn(userText) || !intent.containsMatchIn(userText)) return null
+        return (userText.trim().take(150) + " product photos").take(180)
     }
 
     /**
@@ -160,6 +175,30 @@ object AssistantToolRouter {
         return asksTime || asksMath || bareExpression || asksLocalUtility
     }
 
+
+    /** Native inline widget syntax understood by MarkdownBody; model output is strict JSON, never executable HTML. */
+    fun widgetInstructions(): String = """
+        NATIVE INLINE WIDGETS:
+        You can embed live or interactive app-native widgets anywhere in your Markdown answer. Each widget must be its own fenced block:
+        ```inferno-widget
+        {"type":"weather","location":"Piumhi, Minas Gerais"}
+        ```
+        Multiple widget blocks are allowed. Place each beside its relevant explanation. Do not describe live weather conditions in prose when a weather widget is requested; show the widget instead.
+        Supported types:
+        - weather: {"type":"weather","location":"city, region","title":"optional"} — current conditions auto-refresh about every two minutes.
+        - clock: {"type":"clock","timezone":"America/Sao_Paulo"} — live world clock.
+        - countdown: {"type":"countdown","target":"2026-12-31T23:59:00-03:00"} — live countdown to an ISO date/time or date.
+        - timer: {"type":"timer","duration_seconds":300} — interactive start, pause, and reset timer.
+        - stopwatch: {"type":"stopwatch"} — interactive stopwatch.
+        - calculator: {"type":"calculator","expression":"(25*4)+10"} — on-device arithmetic.
+        - unit_converter: {"type":"unit_converter","request":"25 C to F"} — on-device unit conversion.
+        - currency: {"type":"currency","amount":100,"from":"USD","to":"BRL"} — current exchange-rate conversion, periodically refreshed.
+        - date: {"type":"date","request":"days between 2026-01-01 and 2026-12-31"} — date calculation.
+        - progress: {"type":"progress","label":"Download","value":72,"max":100} — visual progress meter.
+        - bar_chart: {"type":"bar_chart","labels":["A","B","C"],"values":[12,18,9]} — compact native bar chart.
+        Rules: use valid JSON only; never fabricate live weather or exchange-rate values. Do not guess a city, country, or user location; ask for a city if the user did not provide one. Keep surrounding prose minimal when the widget communicates the result.
+    """.trimIndent()
+
     fun prompt(allowWeb: Boolean, createTitle: Boolean = false): String {
         val webRule = if (allowWeb) """
             Decide whether the user's actual request needs current external evidence. Search only when the user
@@ -194,7 +233,8 @@ object AssistantToolRouter {
             - json_action, regex_* and color_value: only for the exact operation explicitly requested by the user.
             Never infer a utility task from a passing mention, quoted text, example, or unrelated question.
             Image search: when the user explicitly asks to search, find, or show images/photos/pictures, MUST set image_queries to a focused subject query, even if a normal text search is not needed. Never replace requested pictures with links to stock-photo search pages.
-            Otherwise use image_queries only when real pictures materially improve an answer.
+            Otherwise use image_queries when real pictures materially improve an answer, especially when recommending or comparing physical products.
+            Product recommendations should include several inline photos from retrieved image URLs beside the matching products rather than only giving store links.
             Image generation: set image_prompt only when the user explicitly asks to create or generate an image.
             Calculator: use only a numeric expression with + - * / % ^. Never guess changing rates.
             Clock: request current_time only when current local time/date is relevant or explicitly asked.
@@ -227,7 +267,7 @@ object AssistantToolRouter {
             searchQueries = stringList("search_queries", 4, 180),
             calculation = string("calculation", 128),
             currentTime = (root["current_time"] as? JsonPrimitive)?.booleanOrNull == true,
-            imageQueries = stringList("image_queries", 2, 180),
+            imageQueries = stringList("image_queries", 4, 180),
             title = string("title", 48)?.replace(Regex("""\s+"""), " "),
             imagePrompt = string("image_prompt", 600),
             weatherLocation = string("weather_location", 100),
@@ -479,7 +519,7 @@ object AssistantToolRouter {
                 }
             }
             if (images.isNotEmpty()) {
-                append("\nOPTIONAL WEB IMAGE RESULTS — real image URLs returned by image search. When a picture materially improves the answer (product recommendations, places, animals, visual comparisons), place one or two relevant images inline next to the matching explanation using exactly ![short description](image URL). Choose placement yourself; do not dump an unrelated gallery at the end. Never invent URLs, counts, licensing, or exclusivity.\n")
+                append("\nOPTIONAL WEB IMAGE RESULTS — real image URLs returned by image search. When a picture materially improves the answer (product recommendations, places, animals, visual comparisons), place up to six relevant images inline next to the exact matching item using exactly ![short description](image URL). Choose placement yourself; do not dump an unrelated gallery at the end. Never invent URLs, counts, licensing, or exclusivity.\n")
                 images.forEach { image ->
                     append("Image: ").append(image.title).append("\nImage URL: ").append(image.imageUrl).append("\nSource page: ").append(image.sourceUrl).append('\n')
                 }
@@ -575,7 +615,7 @@ object AssistantToolRouter {
             .filter { it.imageUrl.startsWith("https://") && it.sourceUrl.startsWith("https://") }
             .distinctBy { it.imageUrl }
             .filterNot { result.contains("](" + markdownUrl(it.imageUrl)) }
-            .take(2)
+            .take(6)
             .toList()
         if (missingImages.isEmpty()) return result.trimEnd()
 

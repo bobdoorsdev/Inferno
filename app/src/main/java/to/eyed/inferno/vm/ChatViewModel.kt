@@ -487,8 +487,9 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
                 }
                 Log.d("InfernoTiming", "stage=initial_tool_planner ms=${SystemClock.elapsedRealtime() - plannerStartedAt}")
                 val validated = AssistantToolRouter.validateForRequest(planned, latestUserText)
-                if (webIntent && explicitImageQuery != null) {
-                    validated.copy(imageQueries = (listOf(explicitImageQuery) + validated.imageQueries).distinct().take(2))
+                val requiredImageQuery = explicitImageQuery ?: AssistantToolRouter.automaticProductImageSearchQuery(latestUserText)
+                if (webIntent && requiredImageQuery != null) {
+                    validated.copy(imageQueries = (listOf(requiredImageQuery) + validated.imageQueries).distinct().take(4))
                 } else validated
             } else AssistantToolPlan()
             val imagePrompt = toolPlan.imagePrompt
@@ -662,7 +663,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
                     "NETWORK LIMITATION: No validated Wi-Fi internet connection is available. Web search, image search, and weather lookup are disabled. Do not claim to have searched or present current facts as verified. Answer from local knowledge and clearly state when current information cannot be checked offline."
                 } else null
                 val runnerHints = CODE_RUNNER_INSTRUCTIONS.takeIf { needsBrowserPreview(latestUserText) }
-                val fullSystem = listOfNotNull(baseSystem, languageInstruction, offlineToolsNote, toolContext, runnerHints).joinToString("\n\n").takeIf { it.isNotBlank() }
+                val fullSystem = listOfNotNull(baseSystem, languageInstruction, AssistantToolRouter.widgetInstructions(), offlineToolsNote, toolContext, runnerHints).joinToString("\n\n").takeIf { it.isNotBlank() }
                 return Triple(fullSystem, messages0, images)
             }
             var (system, messages0, images) = parts()
@@ -726,9 +727,6 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
                         if (!firstTokenTimingLogged) {
                             firstTokenTimingLogged = true
                             Log.d("InfernoTiming", "stage=first_answer_token ms=${SystemClock.elapsedRealtime() - answerStartedAt}")
-                        }
-                        if (settings.streamingAnimations && settings.streamingTokenDelayMs > 0) {
-                            delay(settings.streamingTokenDelayMs.toLong())
                         }
                         stream.token(ev.text)
                         if (assistantId == null) assistantId = c.chats.appendAssistant(conversationId, stream.textStr, stream.reasoningOrNull(), null).id
@@ -1070,7 +1068,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
         const val MAX_PENDING_FILE_BYTES = 64L * 1024 * 1024
         const val MAX_PROMPT_IMAGES = 8
         const val MAX_TOOL_ROUNDS = 24
-        const val PUBLISH_NS = 16_000_000L
+        const val PUBLISH_NS = 33_000_000L
         const val TPS_NS = 500_000_000L
         const val PERSIST_NS = 2_000_000_000L
         const val PERSIST_TOKENS = 200

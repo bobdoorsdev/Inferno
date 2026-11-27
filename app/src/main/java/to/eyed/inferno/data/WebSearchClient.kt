@@ -121,7 +121,7 @@ class WebSearchClient(private val client: OkHttpClient = DEFAULT_CLIENT) {
             val source = obj["url"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
             val title = obj["title"]?.jsonPrimitive?.contentOrNull?.take(120).orEmpty().ifBlank { q }
             WebImageResult(title, image, source, fallback)
-        }.distinctBy { it.imageUrl }.take(3)
+        }.distinctBy { it.imageUrl }.take(4)
     }
 
 
