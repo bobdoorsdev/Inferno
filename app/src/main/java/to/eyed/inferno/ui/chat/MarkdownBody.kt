@@ -21,21 +21,39 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextDirection
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.swmansion.enriched.markdown.compose.CodeBlockLayout
+import com.swmansion.enriched.markdown.compose.EnrichedMarkdownText
+import com.swmansion.enriched.markdown.compose.MarkdownTheme
+import com.swmansion.enriched.markdown.compose.markdownStyle
+import com.swmansion.enriched.markdown.math.LatexMathPlugin
+import com.swmansion.enriched.markdown.math.compose.inlineMath
+import com.swmansion.enriched.markdown.math.compose.math
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import java.text.BreakIterator
 import com.composables.icons.lucide.Check
 import com.composables.icons.lucide.Copy
 import com.composables.icons.lucide.Lucide
@@ -69,104 +87,227 @@ import to.eyed.inferno.ui.theme.whiteA
  * chunk's parse alive. `TextDirection.Content` keeps RTL answers readable inside the LTR chrome.
  */
 @Composable
-fun MarkdownBody(text: String, modifier: Modifier = Modifier, streaming: Boolean = false) {
+fun MarkdownBody(
+    text: String,
+    modifier: Modifier = Modifier,
+    streaming: Boolean = false,
+    selectable: Boolean = true,
+    textColor: Color = Ink.I100,
+) {
     val chunks = remember(text) { MarkdownChunker.chunks(text) }
-    SelectionContainer {
+    val content: @Composable () -> Unit = {
         Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             chunks.forEachIndexed { index, chunk ->
                 key(index) {
-                    if (streaming && index == chunks.lastIndex) StreamingMarkdownTail(chunk)
-                    else MarkdownChunkView(SafeMathMarkdown.sanitize(chunk))
+                    if (streaming && index == chunks.lastIndex) {
+                        StreamingMarkdownTail(chunk)
+                    } else {
+                        MarkdownChunkView(chunk, textColor = textColor, selectable = selectable)
+                    }
                 }
             }
         }
     }
+    if (selectable) SelectionContainer { content() } else content()
 }
 
-/** Lightweight live tail: completed code fences get the custom lexer; prose avoids reparsing Markdown per token. */
+/**
+ * The live tail is revealed at a fixed cadence, independently of native token arrival and markdown
+ * parsing. A fractional final grapheme creates the soft scan boundary; no visible scan-line is drawn.
+ */
+@Composable
+private fun StreamingRevealText(
+    text: String,
+    style: TextStyle,
+    color: Color,
+    modifier: Modifier = Modifier,
+) {
+    val boundaries = remember(text) {
+        val iterator = BreakIterator.getCharacterInstance()
+        iterator.setText(text)
+        buildList {
+            var boundary = iterator.first()
+            add(boundary)
+            boundary = iterator.next()
+            while (boundary != BreakIterator.DONE) {
+                add(boundary)
+                boundary = iterator.next()
+            }
+        }.ifEmpty { listOf(0) }
+    }
+    val targetCount = boundaries.size - 1
+    val latestTarget by rememberUpdatedState(targetCount)
+    var progress by remember { mutableFloatStateOf(0f) }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            if (progress < latestTarget) {
+                progress = (progress + 0.5f).coerceAtMost(latestTarget.toFloat())
+                delay(8)
+            } else {
+                snapshotFlow { latestTarget }.first { it.toFloat() > progress }
+            }
+        }
+    }
+
+    val whole = progress.toInt().coerceIn(0, targetCount)
+    val fraction = (progress - whole).coerceIn(0f, 1f)
+    val shownEnd = boundaries.getOrElse(whole) { text.length }
+    val nextEnd = boundaries.getOrElse(whole + 1) { text.length }
+    val revealed = remember(text, shownEnd, nextEnd, fraction, color) {
+        buildAnnotatedString {
+            if (shownEnd > 0) append(text.substring(0, shownEnd))
+            if (shownEnd < text.length) {
+                withStyle(SpanStyle(color = color.copy(alpha = fraction))) {
+                    append(text.substring(shownEnd, nextEnd))
+                }
+                if (nextEnd < text.length) {
+                    withStyle(SpanStyle(color = color.copy(alpha = 0f))) {
+                        append(text.substring(nextEnd))
+                    }
+                }
+            }
+        }
+    }
+
+    Text(revealed, modifier = modifier, style = style.copy(color = color), color = color)
+}
+
+/** Lightweight live tail: code fences retain their card; prose avoids reparsing incomplete Markdown. */
 @Composable
 private fun StreamingMarkdownTail(chunk: String) {
     val first = chunk.lineSequence().firstOrNull()?.trim().orEmpty()
-    val opener = Regex("^(\u0060{3,}|~{3,})([A-Za-z0-9_+.-]*)$").matchEntire(first)
+    val opener = Regex("^(\\\\u0060{3,}|~{3,})([A-Za-z0-9_+.-]*)$").matchEntire(first)
     if (opener != null) {
         val marker = opener.groupValues[1]
         val closeIndex = chunk.lines().withIndex().firstOrNull { (index, line) ->
             index > 0 && line.trim().let { it.length >= marker.length && it.all { c -> c == marker[0] } }
         }?.index ?: -1
         val codeLines = chunk.lines().drop(1).let { lines -> if (closeIndex > 0) lines.take(closeIndex - 1) else lines }
-        MonoCodeBlock(codeLines.joinToString("\n"), opener.groupValues[2])
+        MonoCodeBlock(codeLines.joinToString("\n"), opener.groupValues[2], streaming = true)
     } else {
-        Text(
-            chunk,
-            style = Typography.bodyLarge.copy(color = Ink.I100, textDirection = TextDirection.Content),
+        StreamingRevealText(
+            text = chunk,
+            style = Typography.bodyLarge.copy(textDirection = TextDirection.Content),
             color = Ink.I100,
         )
     }
 }
 
 @Composable
-private fun MarkdownChunkView(chunk: String) {
-    val body = Typography.bodyLarge.copy(color = Ink.I100, textDirection = TextDirection.Content)
-    // immediate parses the first composition synchronously (no blank frame) and retainState keeps the
-    // previous tree on screen during the async re-parse; without both, each publish flashes the
-    // library's placeholder, which reads as violent flicker at streaming rate.
-    val state = rememberMarkdownState(content = chunk, retainState = true, immediate = true)
-    Markdown(
-        markdownState = state,
-        colors = markdownColor(
-            text = Ink.I100,
-            codeBackground = Ink.I900,
-            inlineCodeBackground = whiteA(0.10f),
-            dividerColor = whiteA(0.10f),
-            tableBackground = whiteA(0.03f),
-        ),
-        typography = markdownTypography(
-            h1 = body.copy(fontSize = 22.sp, lineHeight = 28.sp, fontWeight = FontWeight.SemiBold, color = Ink.White, letterSpacing = (-0.2).sp),
-            h2 = body.copy(fontSize = 19.sp, lineHeight = 25.sp, fontWeight = FontWeight.SemiBold, color = Ink.White),
-            h3 = body.copy(fontSize = 16.sp, lineHeight = 22.sp, fontWeight = FontWeight.SemiBold, color = Ink.White),
-            h4 = body.copy(fontSize = 15.sp, lineHeight = 21.sp, fontWeight = FontWeight.SemiBold, color = Ink.I100),
-            h5 = body.copy(fontWeight = FontWeight.SemiBold, color = Ink.White),
-            h6 = body.copy(fontWeight = FontWeight.Medium, color = Ink.I300),
-            text = body,
-            code = MonoBody.copy(color = Ink.I100),
-            inlineCode = MonoBody.copy(color = Ink.White, fontSize = 13.sp),
-            quote = body.copy(color = Ink.I300),
-            paragraph = body,
-            ordered = body,
-            bullet = body,
-            list = body,
-            textLink = TextLinkStyles(
-                style = SpanStyle(color = Ink.White, textDecoration = TextDecoration.Underline),
-                pressedStyle = SpanStyle(color = Ink.I300, textDecoration = TextDecoration.Underline),
+private fun MarkdownChunkView(chunk: String, textColor: Color, selectable: Boolean) {
+    if (SafeMathMarkdown.containsMath(chunk)) {
+        val uriHandler = LocalUriHandler.current
+        val style = remember(textColor) {
+            MarkdownTheme.style.merge {
+                paragraph {
+                    color = textColor
+                    fontSize = 16.sp
+                    lineHeight = 23.sp
+                    marginBottom = 8.dp
+                }
+                h1 { color = Ink.White; fontSize = 22.sp; lineHeight = 28.sp }
+                h2 { color = Ink.White; fontSize = 19.sp; lineHeight = 25.sp }
+                h3 { color = Ink.White; fontSize = 16.sp; lineHeight = 22.sp }
+                h4 { color = Ink.I100; fontSize = 15.sp; lineHeight = 21.sp }
+                h5 { color = Ink.White; fontWeight = FontWeight.SemiBold }
+                h6 { color = Ink.I300; fontWeight = FontWeight.Medium }
+                code {
+                    fontFamily = MonoBody.fontFamily
+                    fontSize = 13.sp
+                    color = Ink.White
+                    backgroundColor = whiteA(0.10f)
+                }
+                codeBlock {
+                    fontFamily = MonoBody.fontFamily
+                    fontSize = 13.sp
+                    lineHeight = 19.sp
+                    color = Ink.I100
+                    backgroundColor = Ink.I900
+                    borderColor = whiteA(0.08f)
+                    cornerRadius = Radii.row
+                    padding = 14.dp
+                }
+                link { color = Ink.White }
+                math {
+                    fontSize = 20.sp
+                    color = textColor
+                    backgroundColor = Ink.I900
+                    padding = 12.dp
+                    marginBottom = 8.dp
+                    alignment = Alignment.Start
+                }
+                inlineMath { color = textColor }
+            }
+        }
+        LatexMathPlugin {
+            EnrichedMarkdownText(
+                markdown = SafeMathMarkdown.normalize(chunk),
+                modifier = Modifier.fillMaxWidth(),
+                style = style,
+                selectable = selectable,
+                codeBlockLayout = CodeBlockLayout.Wrapping,
+                onLinkClick = { uri -> runCatching { uriHandler.openUri(uri) } },
+            )
+        }
+    } else {
+        val body = Typography.bodyLarge.copy(color = textColor, textDirection = TextDirection.Content)
+        // Parse synchronously and retain the last good tree: no blank placeholder flash while streaming.
+        val state = rememberMarkdownState(content = chunk, retainState = true, immediate = true)
+        Markdown(
+            markdownState = state,
+            colors = markdownColor(
+                text = textColor,
+                codeBackground = Ink.I900,
+                inlineCodeBackground = whiteA(0.10f),
+                dividerColor = whiteA(0.10f),
+                tableBackground = whiteA(0.03f),
             ),
-            table = body.copy(fontSize = 14.sp, lineHeight = 20.sp),
-        ),
-        // Cells at the library's 160 dp would push a 3-column table past a phone's width into a horizontal scroll
-        // with no affordance (the last column looked clipped); 110 dp keeps three columns on screen and the wrapping
-        // rows below make long descriptions readable instead of ellipsised.
-        dimens = markdownDimens(codeBackgroundCornerSize = Radii.row, tableCellWidth = 110.dp, tableCellPadding = 12.dp),
-        components = markdownComponents(
-            codeFence = { model ->
-                MarkdownCodeFence(model.content, model.node) { code, language, _ -> MonoCodeBlock(code, language) }
-            },
-            codeBlock = { model ->
-                MarkdownCodeBlock(model.content, model.node) { code, language, _ -> MonoCodeBlock(code, language) }
-            },
-            table = { model ->
-                MarkdownTable(
-                    model.content, model.node, model.typography.table,
-                    headerBlock = { content, header, width, style -> MarkdownTableHeader(content, header, width, style, maxLines = 3) },
-                    rowBlock = { content, row, width, style -> MarkdownTableRow(content, row, width, style, verticalAlignment = Alignment.Top, maxLines = Int.MAX_VALUE) },
-                )
-            },
-        ),
-        modifier = Modifier.fillMaxWidth(),
-    )
+            typography = markdownTypography(
+                h1 = body.copy(fontSize = 22.sp, lineHeight = 28.sp, fontWeight = FontWeight.SemiBold, color = Ink.White, letterSpacing = (-0.2).sp),
+                h2 = body.copy(fontSize = 19.sp, lineHeight = 25.sp, fontWeight = FontWeight.SemiBold, color = Ink.White),
+                h3 = body.copy(fontSize = 16.sp, lineHeight = 22.sp, fontWeight = FontWeight.SemiBold, color = Ink.White),
+                h4 = body.copy(fontSize = 15.sp, lineHeight = 21.sp, fontWeight = FontWeight.SemiBold, color = Ink.I100),
+                h5 = body.copy(fontWeight = FontWeight.SemiBold, color = Ink.White),
+                h6 = body.copy(fontWeight = FontWeight.Medium, color = Ink.I300),
+                text = body,
+                code = MonoBody.copy(color = Ink.I100),
+                inlineCode = MonoBody.copy(color = Ink.White, fontSize = 13.sp),
+                quote = body.copy(color = Ink.I300),
+                paragraph = body,
+                ordered = body,
+                bullet = body,
+                list = body,
+                textLink = TextLinkStyles(
+                    style = SpanStyle(color = Ink.White, textDecoration = TextDecoration.Underline),
+                    pressedStyle = SpanStyle(color = Ink.I300, textDecoration = TextDecoration.Underline),
+                ),
+                table = body.copy(fontSize = 14.sp, lineHeight = 20.sp),
+            ),
+            dimens = markdownDimens(codeBackgroundCornerSize = Radii.row, tableCellWidth = 110.dp, tableCellPadding = 12.dp),
+            components = markdownComponents(
+                codeFence = { model ->
+                    MarkdownCodeFence(model.content, model.node) { code, language, _ -> MonoCodeBlock(code, language) }
+                },
+                codeBlock = { model ->
+                    MarkdownCodeBlock(model.content, model.node) { code, language, _ -> MonoCodeBlock(code, language) }
+                },
+                table = { model ->
+                    MarkdownTable(
+                        model.content, model.node, model.typography.table,
+                        headerBlock = { content, header, width, style -> MarkdownTableHeader(content, header, width, style, maxLines = 3) },
+                        rowBlock = { content, row, width, style -> MarkdownTableRow(content, row, width, style, verticalAlignment = Alignment.Top, maxLines = Int.MAX_VALUE) },
+                    )
+                },
+            ),
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
 }
 
 /** Code card: language bar with a copy action, hairline seam, horizontally scrolling mono code. */
 @Composable
-fun MonoCodeBlock(code: String, language: String?, modifier: Modifier = Modifier) {
+fun MonoCodeBlock(code: String, language: String?, modifier: Modifier = Modifier, streaming: Boolean = false) {
     val shape = RoundedCornerShape(Radii.row)
     val context = LocalContext.current
     val trimmed = code.trimEnd('\n')
@@ -191,7 +332,11 @@ fun MonoCodeBlock(code: String, language: String?, modifier: Modifier = Modifier
         }
         Hairline()
         Box(Modifier.horizontalScroll(rememberScrollState())) {
-            Text(highlightCode(trimmed, language), style = MonoBody.copy(color = CodePalette.Text), softWrap = false, modifier = Modifier.padding(14.dp))
+            if (streaming) {
+                StreamingRevealText(trimmed, MonoBody.copy(color = Ink.I100), Ink.I100, Modifier.padding(14.dp))
+            } else {
+                Text(highlightCode(trimmed, language), style = MonoBody.copy(color = CodePalette.Text), softWrap = false, modifier = Modifier.padding(14.dp))
+            }
         }
     }
 }
