@@ -29,6 +29,7 @@ import to.eyed.inferno.data.ChatMessage
 import to.eyed.inferno.data.ChatRepository
 import to.eyed.inferno.data.ContextPolicy
 import to.eyed.inferno.data.LocalContextTools
+import to.eyed.inferno.data.LocalToolCommandParser
 import to.eyed.inferno.data.Conversation
 import to.eyed.inferno.data.MessageStats
 import to.eyed.inferno.engine.ContextManager
@@ -435,14 +436,16 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
                     is GenerationEvent.Thinking -> { stream.thinking(ev.text); stream.publish(false) }
                     is GenerationEvent.Token -> {
                         stream.token(ev.text)
-                        if (assistantId == null) assistantId = c.chats.appendAssistant(conversationId, stream.textStr, stream.reasoningOrNull(), null).id
-                        else if (stream.shouldPersist()) c.chats.updateAssistant(assistantId!!, stream.textStr, stream.reasoningOrNull(), null)
+                        val visible = stream.visibleText
+                        if (assistantId == null && visible.isNotBlank()) assistantId = c.chats.appendAssistant(conversationId, visible, stream.reasoningOrNull(), null).id
+                        else if (assistantId != null && stream.shouldPersist()) c.chats.updateAssistant(assistantId!!, visible, stream.reasoningOrNull(), null)
                         stream.publish(false)
                     }
                     is GenerationEvent.Done -> {
                         val stats = toStats(ev.stats, ev.reason.name, model.id, loaded, params).copy(thinkingMs = stream.thinkingMs)
-                        if (assistantId == null) assistantId = c.chats.appendAssistant(conversationId, stream.textStr, stream.reasoningOrNull(), stats).id
-                        else c.chats.updateAssistant(assistantId!!, stream.textStr, stream.reasoningOrNull(), stats)
+                        val visible = stream.visibleText
+                        if (assistantId == null && visible.isNotBlank()) assistantId = c.chats.appendAssistant(conversationId, visible, stream.reasoningOrNull(), stats).id
+                        else if (assistantId != null) c.chats.updateAssistant(assistantId!!, visible, stream.reasoningOrNull(), stats)
                         _lastStats.value = ev.stats
                         if (ev.stats.imageEncodeMs > 0 && promptImages.isNotEmpty()) persistEncodeSample(model.id, detail, ev.stats.imageEncodeMs, promptImages)
                         appVm.markFirstTurnOk()
@@ -460,27 +463,31 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
                 }
             }
             if (completedNormally) {
-                val requestedTool = LOCAL_TOOL_PATTERN.find(stream.textStr)?.groupValues?.getOrNull(1)
+                val requestedTool = LocalToolCommandParser.parse(stream.textStr)
                 if (requestedTool != null) {
-                    val visiblePrefix = LOCAL_TOOL_PATTERN.replace(stream.textStr, "").trimEnd()
-                    val showWeatherCard = requestedTool == "weather" ||
-                        (requestedTool == "location" && !LocalContextTools.hasCoarseLocationPermission(c.appContext))
-                    val withWidget = visiblePrefix + if (showWeatherCard) "\n\n[[inferno_widget:weather]]\n\n" else ""
-                    stream.replaceVisibleText(withWidget)
-                    val rowId = assistantId ?: c.chats.appendAssistant(conversationId, withWidget, stream.reasoningOrNull(), null).id.also { assistantId = it }
-                    c.chats.updateAssistant(rowId, withWidget, stream.reasoningOrNull(), null)
+                    val visiblePrefix = LocalToolCommandParser.visibleText(stream.textStr).trimEnd()
+                    stream.replaceVisibleText(visiblePrefix)
+                    if (visiblePrefix.isNotBlank()) {
+                        if (assistantId == null) assistantId = c.chats.appendAssistant(conversationId, visiblePrefix, stream.reasoningOrNull(), null).id
+                        else c.chats.updateAssistant(assistantId!!, visiblePrefix, stream.reasoningOrNull(), null)
+                    }
                     stream.publish(force = true)
-                    val toolResult = runCatching { LocalContextTools.runTool(c.appContext, requestedTool) }
-                        .getOrElse { "The requested local tool could not complete: ${it.message ?: "unavailable"}." }
+                    val intentAllowed = LocalToolCommandParser.isExplicitlyRequested(firstUserText, requestedTool)
+                    val toolResult = if (!intentAllowed) {
+                        "No tool was run because the user's request did not explicitly ask for this information. Answer the original request normally and do not mention tools."
+                    } else {
+                        runCatching { LocalContextTools.runTool(c.appContext, requestedTool) }
+                            .getOrElse { "The requested information is unavailable: " + (it.message ?: "the tool could not complete") + "." }
+                    }
                     val continuation = listOf(
-                        PromptMessage("system", "Continue naturally. Do not repeat text already shown. Use the local result accurately, mention uncertainty if unavailable, and finish the answer."),
+                        PromptMessage("system", "Continue naturally. Do not repeat the text already shown. Use the supplied result only when relevant. If approximate-location permission is unavailable, say it must be enabled; never guess a location or weather. Do not mention internal commands or tools."),
                         PromptMessage(
                             "user",
-                            "Original user request: ${firstUserText.take(600)}\nText already shown: ${visiblePrefix.takeLast(1000)}\nResult from the requested $requestedTool tool:\n$toolResult\nContinue directly from the existing answer.",
+                            "Original user request: " + firstUserText.take(700) + "\nText already shown: " + visiblePrefix.takeLast(1200) + "\nLocal result (which may say no tool was run):\n" + toolResult + "\nAnswer the original request directly.",
                         ),
                     )
                     c.engine.generate(
-                        "$conversationId-local-context",
+                        conversationId + "-local-context",
                         continuation,
                         emptyList(),
                         params.copy(maxTokens = 256),
@@ -491,16 +498,18 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
                         when (event) {
                             is GenerationEvent.Token -> {
                                 stream.token(event.text)
-                                if (assistantId == null) assistantId = c.chats.appendAssistant(conversationId, stream.textStr, stream.reasoningOrNull(), null).id
-                                else if (stream.shouldPersist()) c.chats.updateAssistant(assistantId!!, stream.textStr, stream.reasoningOrNull(), null)
+                                val visible = stream.visibleText
+                                if (assistantId == null && visible.isNotBlank()) assistantId = c.chats.appendAssistant(conversationId, visible, stream.reasoningOrNull(), null).id
+                                else if (assistantId != null && stream.shouldPersist()) c.chats.updateAssistant(assistantId!!, visible, stream.reasoningOrNull(), null)
                                 stream.publish(false)
                             }
                             is GenerationEvent.Thinking -> { stream.thinking(event.text); stream.publish(false) }
                             is GenerationEvent.Done -> {
                                 val followParams = params.copy(maxTokens = 256)
+                                val visible = stream.visibleText
                                 val stats = toStats(event.stats, event.reason.name, model.id, loaded, followParams).copy(thinkingMs = stream.thinkingMs)
-                                if (assistantId == null) assistantId = c.chats.appendAssistant(conversationId, stream.textStr, stream.reasoningOrNull(), stats).id
-                                else c.chats.updateAssistant(assistantId!!, stream.textStr, stream.reasoningOrNull(), stats)
+                                if (assistantId == null && visible.isNotBlank()) assistantId = c.chats.appendAssistant(conversationId, visible, stream.reasoningOrNull(), stats).id
+                                else if (assistantId != null) c.chats.updateAssistant(assistantId!!, visible, stream.reasoningOrNull(), stats)
                                 _lastStats.value = event.stats
                                 stream.publish(force = true)
                             }
@@ -522,7 +531,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
             stream.close()
             if (genStates.value[conversationId]?.isBusy == true) setGen(conversationId, GenState.Idle)
             if (completedNormally && !followUpFailed && shouldGenerateTitle) {
-                runCatching { generateConversationTitle(conversationId, firstUserText, stream.textStr, params) }
+                runCatching { generateConversationTitle(conversationId, firstUserText, stream.visibleText, params, thinking) }
             }
         } catch (e: CancellationException) {
             // User Stop: keep whatever streamed, marked as stopped.
@@ -652,6 +661,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
         private var lastPersistNs = 0L
         fun reasoningOrNull() = reasoning.toString().takeIf { it.isNotEmpty() }
         val textStr: String get() = text.toString()
+        val visibleText: String get() = LocalToolCommandParser.visibleText(textStr)
         fun replaceVisibleText(value: String) { text.setLength(0); text.append(value) }
         /** Time inside the think tags: up to the first visible token, or until now when the turn ended while thinking. */
         val thinkingMs: Long get() = when { reasoning.isEmpty() -> 0L; thinkingEndNs > 0 -> (thinkingEndNs - startNs) / 1_000_000; else -> (System.nanoTime() - startNs) / 1_000_000 }
@@ -681,8 +691,9 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
             lastPublish = now
             if (now - lastTpsPublish >= TPS_NS) { lastTpsPublish = now; shownTps = (tps * 10).toInt() / 10f }
             val thinkingMs = thinkingMs
-            val state = if (text.isEmpty() && reasoning.isNotEmpty()) GenState.Thinking(reasoning.toString(), shownTps, thinkingMs)
-            else GenState.Streaming(text.toString(), reasoning.toString(), shownTps, tokens, thinkingMs)
+            val visible = visibleText
+            val state = if (visible.isEmpty() && reasoning.isNotEmpty()) GenState.Thinking(reasoning.toString(), shownTps, thinkingMs)
+            else GenState.Streaming(visible, reasoning.toString(), shownTps, tokens, thinkingMs)
             setGen(id, state)
         }
     }
@@ -690,28 +701,43 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
     /**
      * A short, isolated model call names the first conversation. It does not alter the chat prompt.
      */
-    private suspend fun generateConversationTitle(id: String, userText: String, answer: String, base: GenerationParams) {
+    private suspend fun generateConversationTitle(
+        id: String,
+        userText: String,
+        answer: String,
+        base: GenerationParams,
+        thinking: ThinkingSpec,
+    ) {
         val titlePrompt = listOf(
-            PromptMessage("system", "Write one concise, specific conversation title of 2 to 5 words. Capture the actual topic or task, not a generic greeting. Return only the title, with no quotes or explanation."),
-            PromptMessage("user", "User message: ${userText.take(700)}\nAssistant response: ${answer.take(900)}"),
+            PromptMessage("system", "Name this conversation with a specific 2–4 word title. Describe the user's intent, not a generic response. For a greeting, a title such as Greeting User or Conversation Starter is appropriate. Output only the title, with no markup, XML, reasoning tags, quotes, or explanation."),
+            PromptMessage("user", "User message: " + userText.take(700) + "\nAssistant response: " + answer.take(900)),
         )
         val output = StringBuilder()
         c.engine.generate(
-            "$id-title",
+            id + "-title",
             titlePrompt,
             emptyList(),
-            base.copy(maxTokens = 16, temperature = 0.2f, topK = 12, topP = 0.85f, repeatPenalty = 1.08f),
-            ThinkingSpec(),
+            base.copy(maxTokens = 24, temperature = 0.2f, topK = 16, topP = 0.85f, repeatPenalty = 1.08f),
+            thinking,
             false,
             ImageDetail.FAST,
         ).collect { event ->
             if (event is GenerationEvent.Token && output.length < 160) output.append(event.text)
         }
-        val candidate = output.toString().lineSequence().firstOrNull { it.isNotBlank() }
+        val cleaned = output.toString()
+            .replace(Regex("(?is)<think>.*?</think>"), "")
+            .replace(Regex("(?i)</?think>"), "")
+        val candidate = cleaned.lineSequence().firstOrNull { it.isNotBlank() }
             ?.replace(Regex("""^\s*(title\s*:\s*|[-*#]+\s*)""", RegexOption.IGNORE_CASE), "")
-            ?.trim()?.removeSurrounding("\"")?.removeSurrounding("'")
-            ?.replace(Regex("\\s+"), " ")?.take(48)?.trimEnd()
-        if (!candidate.isNullOrBlank() && candidate.count { it.isLetter() } >= 3) c.chats.setTitle(id, candidate)
+            ?.trim()?.trim('"', '\'')
+            ?.replace(Regex("\\s+"), " ")
+            ?.trimEnd('.', ':', ';', '!')
+            ?.take(48)?.trimEnd()
+        if (!candidate.isNullOrBlank() &&
+            candidate.count { it.isLetter() } >= 3 &&
+            !candidate.contains('<') && !candidate.contains('>') &&
+            !candidate.contains("think", ignoreCase = true)
+        ) c.chats.setTitle(id, candidate)
     }
 
     private fun setGen(id: String, state: GenState) {
@@ -733,8 +759,8 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
     private suspend fun persistPartial(conversationId: String, assistantId: String?, stream: Streamer, partial: MessageStats) {
         val stats = partial.copy(thinkingMs = stream.thinkingMs)
         when {
-            assistantId != null -> c.chats.updateAssistant(assistantId, stream.textStr, stream.reasoningOrNull(), stats)
-            stream.reasoningOrNull() != null -> c.chats.appendAssistant(conversationId, stream.textStr, stream.reasoningOrNull(), stats)
+            assistantId != null -> c.chats.updateAssistant(assistantId, stream.visibleText, stream.reasoningOrNull(), stats)
+            stream.reasoningOrNull() != null -> c.chats.appendAssistant(conversationId, stream.visibleText, stream.reasoningOrNull(), stats)
         }
     }
 
@@ -762,21 +788,23 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
         const val NO_CHAT = ""
         const val MAX_ATTACHMENTS = 2
         const val MAX_PROMPT_IMAGES = 8
-        const val PUBLISH_NS = 50_000_000L
+        const val PUBLISH_NS = 16_000_000L
         const val TPS_NS = 500_000_000L
         const val PERSIST_NS = 2_000_000_000L
         const val PERSIST_TOKENS = 200
         const val LOCAL_TOOL_INSTRUCTIONS = """
-When the user explicitly needs the current local date/time, approximate city, or local weather, request the app tool by emitting exactly one marker outside code blocks:
-[[inferno_tool:time]] for current local date and time;
-[[inferno_tool:location]] for approximate city-level location;
-[[inferno_tool:weather]] for local weather and forecast.
-Do not guess these values or claim to have them without the tool result. The app uses approximate location permission only. Forecasts may be shorter than 20 days; never invent missing dates.
-You may insert one inline widget marker anywhere in your answer when it materially helps:
-[[inferno_widget:weather]], [[inferno_widget:time]], [[inferno_widget:calculator:EXPRESSION]], [[inferno_widget:currency:AMOUNT:FROM:TO]], or [[inferno_widget:unit:VALUE:FROM:TO]].
-Keep widget markers exact, outside fenced code, and do not explain their internal syntax to the user.
+A local app tool is allowed only when the user's latest request explicitly asks for that information or utility result. Never call a tool for greetings, small talk, explanations, or HTML/code/XML/JSON generation.
+When needed, make the very first assistant output exactly one self-closing command with no prose before it:
+<inferno:time/>
+<inferno:location/>
+<inferno:weather/>
+<inferno:calculator expr="(12+5)*3"/>
+<inferno:convert value="100" from="km" to="mi"/>
+<inferno:date date="2026-12-01"/>
+<inferno:timezone zone="America/Sao_Paulo"/>
+<inferno:percentage value="80" percent="15" operation="of"/>
+The app intercepts the command before displaying it, executes it, and asks you to finish the answer. Do not print commands as examples or explanatory text. Never invent current time, city, location, or weather. Location and weather require optional approximate-location permission. The weather forecast covers 10 days.
 """
-        val LOCAL_TOOL_PATTERN = Regex("""\[\[inferno_tool:(time|location|weather)]]""")
         val json = Json { encodeDefaults = true }
     }
 }
