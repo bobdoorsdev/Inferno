@@ -437,6 +437,10 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
                         _lastStats.value = ev.stats
                         if (ev.stats.imageEncodeMs > 0 && promptImages.isNotEmpty()) persistEncodeSample(model.id, detail, ev.stats.imageEncodeMs, promptImages)
                         appVm.markFirstTurnOk()
+                        // Publish the final accumulated text while the live tail is still mounted. The
+                        // UI then carries its reveal animation through the Streaming -> Idle handoff.
+                        stream.publish(force = true)
+                        delay(50)
                         stream.close()
                         setGen(conversationId, GenState.Idle)
                     }
