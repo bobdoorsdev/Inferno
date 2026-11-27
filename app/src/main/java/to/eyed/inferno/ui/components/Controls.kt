@@ -90,12 +90,12 @@ fun CopyGlyph(checked: Boolean, size: Dp = 16.dp, tint: Color = Ink.I500) {
             exit = scaleOut(fastSpatialSpec()) + fadeOut(fastEffectsSpec()),
         ) {
             Box(
-                Modifier.size(12.dp)
-                    .background(Ink.White, CircleShape)
-                    .border(1.dp, Ink.Pitch, CircleShape),
+                Modifier.size(10.dp)
+                    .background(Ink.Pitch, CircleShape)
+                    .border(1.dp, Ink.I500, CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Lucide.Check, null, Modifier.size(8.dp), tint = Ink.Pitch)
+                Icon(Lucide.Check, null, Modifier.size(9.dp), tint = Ink.White)
             }
         }
     }
@@ -155,6 +155,7 @@ fun GhostIconButton(
     iconSize: Dp = 17.dp,
     tint: Color = Ink.I300,
     enabled: Boolean = true,
+    shape: androidx.compose.ui.graphics.Shape = CircleShape,
 ) {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
@@ -169,7 +170,7 @@ fun GhostIconButton(
             .minimumInteractiveComponentSize()
             .size(size)
             .pressScale(interaction, 0.92f)
-            .clip(CircleShape)
+            .clip(shape)
             .drawBehind { drawRect(bg) }
             .clickable(
                 interactionSource = interaction,

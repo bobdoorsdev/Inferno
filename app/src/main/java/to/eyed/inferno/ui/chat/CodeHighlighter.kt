@@ -16,10 +16,10 @@ object CodePalette {
     val Number = Color(0xFFE9BE83)
     val Comment = Color(0xFF87939F)
     val Function = Color(0xFF82CDEB)
-    val Tag = Color(0xFFF19AA5)
-    val Attribute = Color(0xFFC8B8F2)
+    val Tag = Color(0xFFFFA6B2)
+    val Attribute = Color(0xFFB9C9E8)
     val Punctuation = Color(0xFFABB5C0)
-    val Entity = Color(0xFFE8C58E)
+    val Entity = Color(0xFFE6C58F)
 }
 
 fun highlightCode(code: String, language: String?): AnnotatedString {

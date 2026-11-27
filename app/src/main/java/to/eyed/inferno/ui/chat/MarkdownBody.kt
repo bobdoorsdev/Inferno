@@ -23,6 +23,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -40,6 +41,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.Role
 import to.eyed.inferno.ui.components.CopyGlyph
+import to.eyed.inferno.ui.components.CopyIconButton
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.TextLayoutResult
@@ -55,8 +58,10 @@ import com.swmansion.enriched.markdown.compose.markdownStyle
 import com.swmansion.enriched.markdown.math.LatexMathPlugin
 import com.swmansion.enriched.markdown.math.compose.inlineMath
 import com.swmansion.enriched.markdown.math.compose.math
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 import java.text.BreakIterator
 import com.mikepenz.markdown.compose.components.markdownComponents
 import com.mikepenz.markdown.compose.elements.MarkdownCodeBlock
@@ -96,49 +101,31 @@ fun MarkdownBody(
     fillWidth: Boolean = true,
 ) {
     val chunks = remember(text) { MarkdownChunker.chunks(text) }
+    // A single reveal cursor runs at a time. Earlier chunks are committed before the next enters the tree.
+    var revealedChunks by remember { mutableIntStateOf(0) }
+    var hasStreamed by remember { mutableStateOf(streaming) }
+    if (streaming) hasStreamed = true
+    val animateTail = hasStreamed && revealedChunks < chunks.size
     val content: @Composable () -> Unit = {
         Column(if (fillWidth) modifier.fillMaxWidth() else modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             chunks.forEachIndexed { index, chunk ->
                 key(index) {
-                    StreamingMarkdownChunk(
-                        chunk = chunk,
-                        isTail = index == chunks.lastIndex,
-                        streamActive = streaming,
-                        textColor = textColor,
-                        selectable = selectable,
-                        fillWidth = fillWidth,
-                    )
+                    when {
+                        !animateTail || index < revealedChunks ->
+                            MarkdownChunkView(chunk, textColor = textColor, selectable = selectable, fillWidth = fillWidth)
+                        index == revealedChunks ->
+                            StreamingMarkdownTail(
+                                chunk = chunk,
+                                completeWhenCaughtUp = !streaming || index < chunks.lastIndex,
+                                onRevealComplete = { revealedChunks = maxOf(revealedChunks, index + 1) },
+                            )
+                        else -> Unit
+                    }
                 }
             }
         }
     }
     if (selectable) SelectionContainer { content() } else content()
-}
-
-/**
- * Keeps each paragraph's reveal animation alive when a later paragraph arrives. A closed block
- * becomes rich Markdown only after its own reveal has caught up, never merely because it stopped
- * being the current streaming tail.
- */
-@Composable
-private fun StreamingMarkdownChunk(
-    chunk: String,
-    isTail: Boolean,
-    streamActive: Boolean,
-    textColor: Color,
-    selectable: Boolean,
-    fillWidth: Boolean,
-) {
-    var revealed by remember { mutableStateOf(!streamActive) }
-    if (revealed) {
-        MarkdownChunkView(chunk, textColor = textColor, selectable = selectable, fillWidth = fillWidth)
-    } else {
-        StreamingMarkdownTail(
-            chunk = chunk,
-            completeWhenCaughtUp = !streamActive || !isTail,
-            onRevealComplete = { revealed = true },
-        )
-    }
 }
 
 /**
@@ -153,6 +140,7 @@ private fun StreamingRevealText(
     modifier: Modifier = Modifier,
     completeWhenCaughtUp: Boolean = false,
     onRevealComplete: () -> Unit = {},
+    annotatedText: AnnotatedString? = null,
 ) {
     val boundaries = remember(text) {
         val iterator = BreakIterator.getCharacterInstance()
@@ -172,15 +160,15 @@ private fun StreamingRevealText(
     val latestCompleteWhenCaughtUp by rememberUpdatedState(completeWhenCaughtUp)
     val latestOnRevealComplete by rememberUpdatedState(onRevealComplete)
     var progress by remember { mutableFloatStateOf(0f) }
-    var layoutResult by remember(text) { mutableStateOf<TextLayoutResult?>(null) }
+    var layoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
 
     LaunchedEffect(Unit) {
         while (true) {
             if (progress < latestTarget) {
                 // Half a grapheme per tick gives the invisible boundary time to cross the middle
                 // of a glyph rather than revealing whole tokens as soon as they arrive.
-                progress = (progress + 0.5f).coerceAtMost(latestTarget.toFloat())
-                delay(8)
+                progress = (progress + 1f).coerceAtMost(latestTarget.toFloat())
+                delay(16)
             } else {
                 if (latestCompleteWhenCaughtUp) {
                     latestOnRevealComplete()
@@ -194,7 +182,7 @@ private fun StreamingRevealText(
     }
 
     Text(
-        text = text,
+        text = annotatedText?.takeIf { it.text == text } ?: AnnotatedString(text),
         modifier = modifier.drawWithContent {
             val layout = layoutResult ?: return@drawWithContent
             val whole = progress.toInt().coerceIn(0, targetCount)
@@ -280,6 +268,9 @@ private fun MarkdownChunkView(chunk: String, textColor: Color, selectable: Boole
                     lineHeight = 23.sp
                     marginBottom = 8.dp
                 }
+                strong { color = textColor }
+                emphasis { color = textColor }
+                list { color = textColor }
                 h1 { color = Ink.White; fontSize = 22.sp; lineHeight = 28.sp }
                 h2 { color = Ink.White; fontSize = 19.sp; lineHeight = 25.sp }
                 h3 { color = Ink.White; fontSize = 16.sp; lineHeight = 22.sp }
@@ -392,6 +383,12 @@ fun MonoCodeBlock(
     val shape = RoundedCornerShape(Radii.row)
     val context = LocalContext.current
     val trimmed = code.trimEnd('\n')
+    var highlighted by remember { mutableStateOf<AnnotatedString?>(null) }
+    LaunchedEffect(trimmed, language) {
+        delay(36)
+        highlighted = withContext(Dispatchers.Default) { highlightCode(trimmed.take(32_000), language) }
+    }
+    val currentHighlight = highlighted?.takeIf { it.text == trimmed }
     Column(
         modifier
             .fillMaxWidth()
@@ -409,49 +406,24 @@ fun MonoCodeBlock(
                 color = Ink.I500,
                 modifier = Modifier.weight(1f),
             )
-            CopyChip(onCopy = { copyToClipboard(context, trimmed, "Code") })
+            CopyIconButton(S.copy, onCopy = { copyToClipboard(context, trimmed, "Code") }, size = 32.dp, iconSize = 15.dp, tint = Ink.I500)
         }
         Hairline()
         Box(Modifier.horizontalScroll(rememberScrollState())) {
             if (streaming) {
                 StreamingRevealText(
                     text = trimmed,
-                    style = MonoBody.copy(color = Ink.I100),
-                    color = Ink.I100,
+                    style = MonoBody.copy(color = CodePalette.Text),
+                    color = CodePalette.Text,
                     modifier = Modifier.padding(14.dp),
                     completeWhenCaughtUp = completeWhenCaughtUp,
                     onRevealComplete = onRevealComplete,
+                    annotatedText = currentHighlight,
                 )
             } else {
-                Text(highlightCode(trimmed, language), style = MonoBody.copy(color = CodePalette.Text), softWrap = false, modifier = Modifier.padding(14.dp))
+                Text(currentHighlight ?: AnnotatedString(trimmed), style = MonoBody.copy(color = CodePalette.Text), softWrap = false, modifier = Modifier.padding(14.dp))
             }
         }
-    }
-}
-
-/** "Copy" -> "Copied" for 1.6 s; the system clipboard overlay on API 33+ is the only other feedback. */
-@Composable
-private fun CopyChip(onCopy: () -> Unit) {
-    var copied by remember { mutableStateOf(false) }
-    val haptics = rememberHaptics()
-    val interaction = remember { MutableInteractionSource() }
-    LaunchedEffect(copied) { if (copied) { delay(1_600); copied = false } }
-    Row(
-        Modifier
-            .clip(RoundedCornerShape(10.dp))
-            .background(whiteA(0.06f))
-            .pressScale(interaction, 0.96f)
-            .clickable(
-                interactionSource = interaction,
-                indication = null,
-                role = Role.Button,
-            ) { haptics.tap(); onCopy(); copied = true }
-            .padding(horizontal = 11.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        CopyGlyph(checked = copied, size = 16.dp, tint = if (copied) Ink.White else Ink.I500)
-        Text(if (copied) S.copied else S.copy, style = RowMeta, color = if (copied) Ink.White else Ink.I500)
     }
 }
 

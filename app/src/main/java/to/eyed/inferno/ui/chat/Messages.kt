@@ -1,5 +1,7 @@
 package to.eyed.inferno.ui.chat
 
+import android.content.Intent
+
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.SharedTransitionScope
@@ -61,6 +63,7 @@ import com.composables.icons.lucide.GitBranch
 import com.composables.icons.lucide.NotebookPen
 import com.composables.icons.lucide.Pencil
 import com.composables.icons.lucide.RefreshCw
+import com.composables.icons.lucide.Share2
 import to.eyed.inferno.data.Attachment
 import to.eyed.inferno.data.ChatMessage
 import to.eyed.inferno.data.ChatRepository
@@ -343,6 +346,16 @@ private fun AssistantMessage(
             Column {
                 Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
                     CopyIconButton(S.copyMessage, onCopy = { copyToClipboard(context, text, "Inferno message") }, size = 32.dp, iconSize = 15.dp, tint = Ink.I500)
+                    GhostIconButton(Lucide.Share2, "Share reply", onClick = {
+                        haptics.tap()
+                        runCatching {
+                            val send = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_TEXT, text)
+                            }
+                            context.startActivity(Intent.createChooser(send, "Share reply"))
+                        }
+                    }, size = 32.dp, iconSize = 15.dp, tint = Ink.I500)
                     GhostIconButton(Lucide.GitBranch, "Branch from this reply", onClick = { haptics.tap(); onBranch() }, size = 32.dp, iconSize = 15.dp, tint = Ink.I500)
                     if (showRegenerate) GhostIconButton(Lucide.RefreshCw, S.regenerate, onClick = { haptics.tap(); onRegenerate() }, size = 32.dp, iconSize = 15.dp, tint = Ink.I500)
                     if (stats != null && showDetails) GhostIconButton(Lucide.Info, S.details, onClick = { haptics.tap(); onDetails() }, size = 32.dp, iconSize = 15.dp, tint = Ink.I500)

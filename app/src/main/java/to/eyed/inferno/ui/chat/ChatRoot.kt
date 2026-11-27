@@ -235,7 +235,7 @@ fun ChatRoot(appVm: AppViewModel, chatVm: ChatViewModel, onBeforeSend: () -> Uni
             if (!scrolling) follow = listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset < listState.layoutInfo.viewportSize.height / 2
         }
     }
-    LaunchedEffect(messages.size, liveKey) { if (follow) listState.scrollToItem(0) }
+    LaunchedEffect(messages.size, liveKey) { if (follow) listState.animateScrollToItem(0) }
     // The pill appears once the latest content is out of reach: the bottom item is fully hidden, or the reader
     // is more than half a screen up inside a long streaming answer (index 0 with a large offset).
     val showJump by remember {

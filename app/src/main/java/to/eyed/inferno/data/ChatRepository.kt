@@ -93,12 +93,8 @@ class ChatRepository(private val dao: ChatDao, private val imageUtil: ImageUtil)
         )
         val rows = attachments.distinctBy { it.id }.mapIndexed { i, a -> MessageImageEntity(m.id, a.id, i, a.width, a.height) }
         dao.insertMessage(m, rows)
-        val conv = dao.conversation(conversationId)
-        if (conv != null && conv.title.isBlank() && text.isNotBlank()) {
-            val promptTitle = titleFrom(text)
-            val title = modelDisplayName?.trim()?.takeIf { it.isNotEmpty() }?.let { "$it · $promptTitle" } ?: promptTitle
-            dao.rename(conversationId, title, now)
-        } else dao.touch(conversationId, now)
+        // The title is generated separately by the selected model after the first answer.
+        dao.touch(conversationId, now)
         flushHeldBack()     // after the insert: ids re-attached by an edit have their reference back
         return MessageWithImages(m, rows).toChatMessage()
     }
