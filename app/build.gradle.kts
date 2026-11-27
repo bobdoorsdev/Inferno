@@ -172,6 +172,8 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.okhttp)
     implementation(libs.markdown.renderer.m3)
+    implementation(libs.enriched.markdown.compose)
+    implementation(libs.enriched.markdown.math)
     implementation(libs.coil.compose)
     implementation(libs.icons.lucide)
     testImplementation(libs.junit)
