@@ -82,6 +82,7 @@ import to.eyed.inferno.ui.components.surfaceRaised
 import to.eyed.inferno.ui.theme.ChipLabel
 import to.eyed.inferno.ui.theme.Ink
 import to.eyed.inferno.ui.theme.Radii
+import to.eyed.inferno.ui.theme.Typography
 import to.eyed.inferno.ui.theme.defaultEffectsSpec
 import to.eyed.inferno.ui.theme.defaultSpatialSpec
 import to.eyed.inferno.ui.theme.fastEffectsSpec
