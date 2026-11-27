@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import to.eyed.inferno.ui.theme.pressScale
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,6 +35,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.Role
+import to.eyed.inferno.ui.components.CopyGlyph
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.TextStyle
@@ -53,9 +55,6 @@ import com.swmansion.enriched.markdown.math.compose.math
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import java.text.BreakIterator
-import com.composables.icons.lucide.Check
-import com.composables.icons.lucide.Copy
-import com.composables.icons.lucide.Lucide
 import com.mikepenz.markdown.compose.components.markdownComponents
 import com.mikepenz.markdown.compose.elements.MarkdownCodeBlock
 import com.mikepenz.markdown.compose.elements.MarkdownCodeFence
@@ -175,7 +174,7 @@ private fun StreamingRevealText(
 @Composable
 private fun StreamingMarkdownTail(chunk: String) {
     val first = chunk.lineSequence().firstOrNull()?.trim().orEmpty()
-    val opener = Regex("""^(\\x60{3,}|~{3,})([A-Za-z0-9_+.-]*)$""").matchEntire(first)
+    val opener = Regex("""^(\x60{3,}|~{3,})([A-Za-z0-9_+.-]*)$""").matchEntire(first)
     if (opener != null) {
         val marker = opener.groupValues[1]
         val closeIndex = chunk.lines().withIndex().firstOrNull { (index, line) ->
@@ -344,13 +343,15 @@ fun MonoCodeBlock(code: String, language: String?, modifier: Modifier = Modifier
 private fun CopyChip(onCopy: () -> Unit) {
     var copied by remember { mutableStateOf(false) }
     val haptics = rememberHaptics()
+    val interaction = remember { MutableInteractionSource() }
     LaunchedEffect(copied) { if (copied) { delay(1_600); copied = false } }
     Row(
         Modifier
             .clip(RoundedCornerShape(10.dp))
             .background(whiteA(0.06f))
+            .pressScale(interaction, 0.96f)
             .clickable(
-                interactionSource = remember { MutableInteractionSource() },
+                interactionSource = interaction,
                 indication = null,
                 role = Role.Button,
             ) { haptics.tap(); onCopy(); copied = true }
@@ -358,12 +359,7 @@ private fun CopyChip(onCopy: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Icon(
-            if (copied) Lucide.Check else Lucide.Copy,
-            contentDescription = S.copyCode,
-            Modifier.size(16.dp),
-            tint = if (copied) Ink.White else Ink.I500,
-        )
+        CopyGlyph(checked = copied, size = 16.dp, tint = if (copied) Ink.White else Ink.I500)
         Text(if (copied) S.copied else S.copy, style = RowMeta, color = if (copied) Ink.White else Ink.I500)
     }
 }
