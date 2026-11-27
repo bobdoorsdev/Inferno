@@ -150,7 +150,13 @@ fun ChatRoot(appVm: AppViewModel, chatVm: ChatViewModel, onBeforeSend: () -> Uni
         else -> loaded?.let { it.hasVision && it.visionAllowed } ?: false
     }
     val noVisionReason = if (loaded != null && loaded.hasVision && !loaded.visionAllowed) S.noMemoryForVision else S.noVision
-    val thinkingAvailable = loaded?.model?.catalog?.thinking?.hasTags == true
+    // The Think control is available to every user when the selected/resident model supports reasoning tags.
+    val thinkingModel = when (val state = engine) {
+        is EngineState.Loading -> state.model
+        is EngineState.Error -> state.model ?: idleModel
+        else -> loaded?.model ?: idleModel
+    }
+    val thinkingAvailable = thinkingModel?.catalog?.thinking?.hasTags == true
     val disabledReason = when {
         engine is EngineState.Idle && !idleLoadable -> S.chooseModelToStart
         engine is EngineState.Error -> S.composerLoadModelToStart
