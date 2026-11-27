@@ -93,12 +93,21 @@ fun MarkdownBody(
     fillWidth: Boolean = true,
 ) {
     val chunks = remember(text) { MarkdownChunker.chunks(text) }
+    // Once generation stops, keep the live tail composable mounted until its reveal catches up.
+    var tailRevealed by remember { mutableStateOf(!streaming) }
+    LaunchedEffect(text, streaming) {
+        if (streaming) tailRevealed = false
+    }
     val content: @Composable () -> Unit = {
         Column(if (fillWidth) modifier.fillMaxWidth() else modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             chunks.forEachIndexed { index, chunk ->
                 key(index) {
-                    if (streaming && index == chunks.lastIndex) {
-                        StreamingMarkdownTail(chunk)
+                    if (index == chunks.lastIndex && (streaming || !tailRevealed)) {
+                        StreamingMarkdownTail(
+                            chunk = chunk,
+                            completeWhenCaughtUp = !streaming,
+                            onRevealComplete = { tailRevealed = true },
+                        )
                     } else {
                         MarkdownChunkView(chunk, textColor = textColor, selectable = selectable, fillWidth = fillWidth)
                     }
@@ -119,6 +128,8 @@ private fun StreamingRevealText(
     style: TextStyle,
     color: Color,
     modifier: Modifier = Modifier,
+    completeWhenCaughtUp: Boolean = false,
+    onRevealComplete: () -> Unit = {},
 ) {
     val boundaries = remember(text) {
         val iterator = BreakIterator.getCharacterInstance()
@@ -135,6 +146,8 @@ private fun StreamingRevealText(
     }
     val targetCount = boundaries.size - 1
     val latestTarget by rememberUpdatedState(targetCount)
+    val latestCompleteWhenCaughtUp by rememberUpdatedState(completeWhenCaughtUp)
+    val latestOnRevealComplete by rememberUpdatedState(onRevealComplete)
     var progress by remember { mutableFloatStateOf(0f) }
 
     LaunchedEffect(Unit) {
@@ -143,7 +156,13 @@ private fun StreamingRevealText(
                 progress = (progress + 0.5f).coerceAtMost(latestTarget.toFloat())
                 delay(8)
             } else {
-                snapshotFlow { latestTarget }.first { it.toFloat() > progress }
+                if (latestCompleteWhenCaughtUp) {
+                    latestOnRevealComplete()
+                    return@LaunchedEffect
+                }
+                snapshotFlow { latestTarget to latestCompleteWhenCaughtUp }.first { (target, finish) ->
+                    target.toFloat() > progress || finish
+                }
             }
         }
     }
@@ -173,7 +192,11 @@ private fun StreamingRevealText(
 
 /** Lightweight live tail: code fences retain their card; prose avoids reparsing incomplete Markdown. */
 @Composable
-private fun StreamingMarkdownTail(chunk: String) {
+private fun StreamingMarkdownTail(
+    chunk: String,
+    completeWhenCaughtUp: Boolean,
+    onRevealComplete: () -> Unit,
+) {
     val first = chunk.lineSequence().firstOrNull()?.trim().orEmpty()
     val opener = Regex("""^(\x60{3,}|~{3,})([A-Za-z0-9_+.-]*)$""").matchEntire(first)
     if (opener != null) {
@@ -182,12 +205,20 @@ private fun StreamingMarkdownTail(chunk: String) {
             index > 0 && line.trim().let { it.length >= marker.length && it.all { c -> c == marker[0] } }
         }?.index ?: -1
         val codeLines = chunk.lines().drop(1).let { lines -> if (closeIndex > 0) lines.take(closeIndex - 1) else lines }
-        MonoCodeBlock(codeLines.joinToString("\n"), opener.groupValues[2], streaming = true)
+        MonoCodeBlock(
+            codeLines.joinToString("\n"),
+            opener.groupValues[2],
+            streaming = true,
+            completeWhenCaughtUp = completeWhenCaughtUp,
+            onRevealComplete = onRevealComplete,
+        )
     } else {
         StreamingRevealText(
             text = chunk,
             style = Typography.bodyLarge.copy(textDirection = TextDirection.Content),
             color = Ink.I100,
+            completeWhenCaughtUp = completeWhenCaughtUp,
+            onRevealComplete = onRevealComplete,
         )
     }
 }
@@ -305,7 +336,14 @@ private fun MarkdownChunkView(chunk: String, textColor: Color, selectable: Boole
 
 /** Code card: language bar with a copy action, hairline seam, horizontally scrolling mono code. */
 @Composable
-fun MonoCodeBlock(code: String, language: String?, modifier: Modifier = Modifier, streaming: Boolean = false) {
+fun MonoCodeBlock(
+    code: String,
+    language: String?,
+    modifier: Modifier = Modifier,
+    streaming: Boolean = false,
+    completeWhenCaughtUp: Boolean = false,
+    onRevealComplete: () -> Unit = {},
+) {
     val shape = RoundedCornerShape(Radii.row)
     val context = LocalContext.current
     val trimmed = code.trimEnd('\n')
@@ -331,7 +369,14 @@ fun MonoCodeBlock(code: String, language: String?, modifier: Modifier = Modifier
         Hairline()
         Box(Modifier.horizontalScroll(rememberScrollState())) {
             if (streaming) {
-                StreamingRevealText(trimmed, MonoBody.copy(color = Ink.I100), Ink.I100, Modifier.padding(14.dp))
+                StreamingRevealText(
+                    text = trimmed,
+                    style = MonoBody.copy(color = Ink.I100),
+                    color = Ink.I100,
+                    modifier = Modifier.padding(14.dp),
+                    completeWhenCaughtUp = completeWhenCaughtUp,
+                    onRevealComplete = onRevealComplete,
+                )
             } else {
                 Text(highlightCode(trimmed, language), style = MonoBody.copy(color = CodePalette.Text), softWrap = false, modifier = Modifier.padding(14.dp))
             }
