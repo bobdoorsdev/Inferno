@@ -66,7 +66,8 @@ object SafeMathMarkdown {
                     else -> {
                         var normalized = inlineParen.replace(line) { "\$" + it.groupValues[1] + "\$" }
                         normalized = inlineBracket.replace(normalized) { "\$" + it.groupValues[1] + "\$" }
-                        if (!inDisplayMath) normalized = wrapBareCommands(normalized)
+                        val incompleteParenMath = line.contains("\\\\(") && !line.contains("\\\\)")
+                        if (!inDisplayMath && !incompleteParenMath) normalized = wrapBareCommands(normalized)
                         output.append(normalized)
                     }
                 }
