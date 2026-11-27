@@ -100,6 +100,43 @@ fun MarkdownBody(
     textColor: Color = Ink.I100,
     fillWidth: Boolean = true,
 ) {
+    val parts = remember(text) { InlineWidgetMarkup.split(text) }
+    if (parts.none { it.widget != null }) {
+        MarkdownTextBody(text, modifier, streaming, selectable, textColor, fillWidth)
+    } else {
+        val lastText = parts.indexOfLast { it.widget == null && it.text.isNotBlank() }
+        Column(
+            if (fillWidth) modifier.fillMaxWidth() else modifier,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            parts.forEachIndexed { index, part ->
+                key(index) {
+                    if (part.widget != null) {
+                        InlineWidget(part.widget, part.arguments)
+                    } else if (part.text.isNotBlank()) {
+                        MarkdownTextBody(
+                            part.text,
+                            streaming = streaming && index == lastText,
+                            selectable = selectable,
+                            textColor = textColor,
+                            fillWidth = fillWidth,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MarkdownTextBody(
+    text: String,
+    modifier: Modifier = Modifier,
+    streaming: Boolean = false,
+    selectable: Boolean = true,
+    textColor: Color = Ink.I100,
+    fillWidth: Boolean = true,
+) {
     val chunks = remember(text) { MarkdownChunker.chunks(text) }
     // A single reveal cursor runs at a time. Earlier chunks are committed before the next enters the tree.
     var revealedChunks by remember { mutableIntStateOf(0) }

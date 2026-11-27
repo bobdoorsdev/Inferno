@@ -38,6 +38,7 @@ import java.util.concurrent.TimeUnit
  * their JNI objects lazily on first use, so an unsupported phone can still render UnsupportedCpuScreen.
  */
 class AppContainer(app: Application) {
+    val appContext: Context = app.applicationContext
     val appScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     val cpu = CpuTopology(app)
