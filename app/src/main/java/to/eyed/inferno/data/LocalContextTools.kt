@@ -55,15 +55,15 @@ object LocalToolCommandParser {
         val prompt = userText.lowercase(Locale.ROOT)
         fun matches(pattern: String) = Regex(pattern, RegexOption.IGNORE_CASE).containsMatchIn(prompt)
         return when (command.name) {
-            "time" -> matches("""\\b(what time|time is it|current time|local time|what's the time|que horas|qual e a hora|horas sao|horario agora|current date|today's date|what date|data de hoje|que dia e hoje)\\b""")
-            "location" -> matches("""\\b(where am i|my location|current location|where do i live|what city am i|where is my phone|minha localizacao|onde estou|onde eu moro|qual cidade estou)\\b""")
-            "weather" -> matches("""\\b(weather|forecast|previsao do tempo|clima|temperatura hoje)\\b""")
-            "calculator" -> matches("""\\b(calculate|calculator|compute|solve this|calcule|calcular|quanto e|quanto da|resolva|resolver|solve)\\b""") ||
-                Regex("""\\d+(?:\\.\\d+)?\\s*[+*/%-]\\s*\\d+""").containsMatchIn(prompt)
-            "convert" -> matches("""\\b(convert|conversion|converta|converter|quanto vale|exchange rate|convertir|converter para)\\b""")
-            "date" -> matches("""\\b(days between|how many days|what day of the week|day of week|date calculation|quantos dias|que dia da semana|calcular datas)\\b""")
-            "timezone" -> matches("""\\b(time in|timezone|time zone|fuso horario|hora em)\\b""")
-            "percentage" -> matches("""\\b(percent|percentage|por cento|porcentagem|percentage of)\\b""")
+            "time" -> matches("""\b(what time|time is it|current time|local time|what's the time|que horas|qual e a hora|horas sao|horario agora|current date|today's date|what date|data de hoje|que dia e hoje)\b""")
+            "location" -> matches("""\b(where am i|my location|current location|where do i live|what city am i|where is my phone|minha localizacao|onde estou|onde eu moro|qual cidade estou)\b""")
+            "weather" -> matches("""\b(weather|forecast|previsao do tempo|clima|temperatura hoje)\b""")
+            "calculator" -> matches("""\b(calculate|calculator|compute|solve this|calcule|calcular|quanto e|quanto da|resolva|resolver|solve)\b""") ||
+                Regex("""\d+(?:\.\d+)?\s*[+*/%-]\s*\d+""").containsMatchIn(prompt)
+            "convert" -> matches("""\b(convert|conversion|converta|converter|quanto vale|exchange rate|convertir|converter para)\b""")
+            "date" -> matches("""\b(days between|how many days|what day of the week|day of week|date calculation|quantos dias|que dia da semana|calcular datas)\b""")
+            "timezone" -> matches("""\b(time in|timezone|time zone|fuso horario|hora em)\b""")
+            "percentage" -> matches("""\b(percent|percentage|por cento|porcentagem|percentage of)\b""")
             else -> false
         }
     }
