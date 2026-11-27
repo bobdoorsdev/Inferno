@@ -463,7 +463,9 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
                 val requestedTool = LOCAL_TOOL_PATTERN.find(stream.textStr)?.groupValues?.getOrNull(1)
                 if (requestedTool != null) {
                     val visiblePrefix = LOCAL_TOOL_PATTERN.replace(stream.textStr, "").trimEnd()
-                    val withWidget = visiblePrefix + if (requestedTool == "weather") "\n\n[[inferno_widget:weather]]\n\n" else ""
+                    val showWeatherCard = requestedTool == "weather" ||
+                        (requestedTool == "location" && !LocalContextTools.hasCoarseLocationPermission(c.appContext))
+                    val withWidget = visiblePrefix + if (showWeatherCard) "\n\n[[inferno_widget:weather]]\n\n" else ""
                     stream.replaceVisibleText(withWidget)
                     val rowId = assistantId ?: c.chats.appendAssistant(conversationId, withWidget, stream.reasoningOrNull(), null).id.also { assistantId = it }
                     c.chats.updateAssistant(rowId, withWidget, stream.reasoningOrNull(), null)

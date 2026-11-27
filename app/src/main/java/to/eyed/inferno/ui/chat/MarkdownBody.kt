@@ -100,9 +100,16 @@ fun MarkdownBody(
     textColor: Color = Ink.I100,
     fillWidth: Boolean = true,
 ) {
-    val parts = remember(text) { InlineWidgetMarkup.split(text) }
+    // Tool control tags are transport syntax, never user-facing text. Hide complete and partially
+    // streamed markers so they cannot flash in the conversation while the model is deciding to call a tool.
+    val displayText = remember(text) {
+        val complete = text.replace(Regex("""\[\[inferno_tool:(time|location|weather)]]"""), "")
+        val partialStart = complete.lastIndexOf("[[inferno_tool:")
+        if (partialStart >= 0 && !complete.substring(partialStart).contains("]]")) complete.substring(0, partialStart) else complete
+    }
+    val parts = remember(displayText) { InlineWidgetMarkup.split(displayText) }
     if (parts.none { it.widget != null }) {
-        MarkdownTextBody(text, modifier, streaming, selectable, textColor, fillWidth)
+        MarkdownTextBody(displayText, modifier, streaming, selectable, textColor, fillWidth)
     } else {
         val lastText = parts.indexOfLast { it.widget == null && it.text.isNotBlank() }
         Column(
