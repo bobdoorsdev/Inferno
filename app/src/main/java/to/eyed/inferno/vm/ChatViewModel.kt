@@ -442,7 +442,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
                     is GenerationEvent.Done -> {
                         val stats = toStats(ev.stats, ev.reason.name, model.id, loaded, params).copy(thinkingMs = stream.thinkingMs)
                         if (assistantId == null) assistantId = c.chats.appendAssistant(conversationId, stream.textStr, stream.reasoningOrNull(), stats).id
-                        else c.chats.updateAssistant(assistantId, stream.textStr, stream.reasoningOrNull(), stats)
+                        else c.chats.updateAssistant(assistantId!!, stream.textStr, stream.reasoningOrNull(), stats)
                         _lastStats.value = ev.stats
                         if (ev.stats.imageEncodeMs > 0 && promptImages.isNotEmpty()) persistEncodeSample(model.id, detail, ev.stats.imageEncodeMs, promptImages)
                         appVm.markFirstTurnOk()
