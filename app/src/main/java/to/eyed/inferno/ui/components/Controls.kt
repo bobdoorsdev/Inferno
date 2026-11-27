@@ -11,6 +11,7 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -87,8 +88,8 @@ fun CopyGlyph(checked: Boolean, size: Dp = 16.dp, tint: Color = Ink.I500) {
         AnimatedContent(
             targetState = checked,
             transitionSpec = {
-                (fadeIn(fastEffectsSpec()) + scaleIn(initialScale = 0.92f, animationSpec = fastSpatialSpec())) togetherWith
-                    (fadeOut(fastEffectsSpec()) + scaleOut(targetScale = 0.92f, animationSpec = fastSpatialSpec()))
+                (fadeIn(tween(110)) + scaleIn(initialScale = 0.94f, animationSpec = tween(130))) togetherWith
+                    (fadeOut(tween(90)) + scaleOut(targetScale = 0.94f, animationSpec = tween(110)))
             },
             label = "copyToCheck",
         ) { copied ->
