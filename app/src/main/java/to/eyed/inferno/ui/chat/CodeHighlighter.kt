@@ -149,3 +149,62 @@ fun highlightCode(code: String, language: String?): AnnotatedString {
     }
     return out.toAnnotatedString()
 }
+
+/**
+ * Incremental streaming highlighter. When the source is append-only, completed lines keep their
+ * existing AnnotatedString spans; only the current (possibly unfinished) line is lexed again.
+ * If a multiline string/comment crosses the line boundary, it falls back to a full parse so
+ * lexical state is never guessed.
+ */
+fun highlightCodeIncremental(
+    previousCode: String,
+    previous: AnnotatedString?,
+    nextCode: String,
+    language: String?,
+): AnnotatedString {
+    if (previous == null || previousCode.isEmpty() || !nextCode.startsWith(previousCode)) {
+        return highlightCode(nextCode, language)
+    }
+    val stableEnd = previousCode.lastIndexOf('\n') + 1
+    if (stableEnd <= 0 || !hasClosedMultilineContext(previousCode.substring(0, stableEnd), language)) {
+        return highlightCode(nextCode, language)
+    }
+
+    val builder = AnnotatedString.Builder()
+    builder.append(previousCode, 0, stableEnd)
+    previous.spanStyles.forEach { range ->
+        val start = range.start.coerceIn(0, stableEnd)
+        val end = range.end.coerceIn(0, stableEnd)
+        if (start < end) builder.addStyle(range.item, start, end)
+    }
+
+    val suffix = highlightCode(nextCode.substring(stableEnd), language)
+    val offset = builder.length
+    builder.append(suffix)
+    suffix.spanStyles.forEach { range ->
+        builder.addStyle(range.item, range.start + offset, range.end + offset)
+    }
+    return builder.toAnnotatedString()
+}
+
+private fun hasClosedMultilineContext(prefix: String, language: String?): Boolean {
+    val lang = language.orEmpty().trim().lowercase().substringBefore(' ')
+    fun balanced(open: String, close: String): Boolean = prefix.lastIndexOf(open) <= prefix.lastIndexOf(close)
+    return when (lang) {
+        "html", "htm", "xml", "xhtml", "svg" -> balanced("<!--", "-->")
+        "lua", "luau" -> balanced("--[[", "]]")
+        "python", "py", "python3" ->
+            listOf("\"\"\"", "'''").all { marker ->
+                var count = 0
+                var from = 0
+                while (true) {
+                    val at = prefix.indexOf(marker, from)
+                    if (at < 0) break
+                    count++
+                    from = at + marker.length
+                }
+                count % 2 == 0
+            }
+        else -> balanced("/*", "*/") && prefix.count { it == '`' } % 2 == 0
+    }
+}
