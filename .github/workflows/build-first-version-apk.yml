@@ -5,6 +5,7 @@ on:
     branches:
       - chatgpt/inferno-first-version-streaming-math-20261127
       - chatgpt/inferno-streaming-widgets-20261127
+      - chatgpt/inferno-streaming-tools-fix-20261127
   workflow_dispatch:
 
 permissions:

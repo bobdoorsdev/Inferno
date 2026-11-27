@@ -33,4 +33,18 @@ class CodeHighlighterTest {
         val result = highlightCode(source, "unknown")
         assertTrue(result.spanStyles.all { it.item.color == CodePalette.Text })
     }
+    @Test fun incrementalHighlightPreservesCompletedLinesAndHighlightsTheChangedTail() {
+        val previousCode = "local first = 1\nlocal current"
+        val previous = highlightCode(previousCode, "luau")
+        val nextCode = "local first = 1\nlocal current = 2\nlocal third = 3"
+        val next = highlightCodeIncremental(previousCode, previous, nextCode, "luau")
+
+        assertEquals(nextCode, next.text)
+        assertEquals(CodePalette.Keyword, colorAt(nextCode, next, "local"))
+        val currentIndex = nextCode.indexOf("current")
+        assertEquals(CodePalette.Text, next.spanStyles.first { currentIndex >= it.start && currentIndex < it.end }.item.color)
+        val thirdIndex = nextCode.indexOf("third")
+        assertEquals(CodePalette.Text, next.spanStyles.first { thirdIndex >= it.start && thirdIndex < it.end }.item.color)
+    }
+
 }
