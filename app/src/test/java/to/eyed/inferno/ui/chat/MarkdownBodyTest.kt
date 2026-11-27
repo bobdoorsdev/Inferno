@@ -47,4 +47,12 @@ class MarkdownBodyTest {
         assertEquals(104, nextTypingRevealLength(100, 140))
         assertEquals(140, nextTypingRevealLength(140, 140))
     }
+
+    @Test fun incompleteCodeFenceIsRenderedAsLiveCodeUntilTheStreamFinishes() {
+        val partial = "```html\n<h1>World Cup</h1>"
+        val live = normalizeMarkdownForRenderer(partial, streaming = true)
+        val final = normalizeMarkdownForRenderer(partial, streaming = false)
+        assertTrue(live.endsWith("\n```"))
+        assertTrue(!final.endsWith("\n```"))
+    }
 }

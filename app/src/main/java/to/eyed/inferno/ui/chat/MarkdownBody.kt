@@ -124,9 +124,9 @@ fun MarkdownBody(text: String, modifier: Modifier = Modifier, streaming: Boolean
             blockSpacing = 8.dp,
         )
     }
-    val components = remember(context) {
+    val components = remember(context, streaming) {
         MarkdownComponents(
-            codeBlock = { block -> MonoCodeBlock(block.code, block.language, streaming = !block.closed) },
+            codeBlock = { block -> MonoCodeBlock(block.code, block.language, streaming = streaming || !block.closed) },
             inlineMath = { formula -> LatexInline.cached(formula, context) },
             mathBlock = { formula ->
                 val style = LocalMarkdownTextStyle.current
@@ -193,6 +193,7 @@ internal fun normalizeMarkdownForRenderer(source: String, streaming: Boolean = f
         val fixedHeading = if (heading != null) heading.groupValues[1] + heading.groupValues[2] + " " + heading.groupValues[3] else line
         output.append(escapeCurrencyOutsideCode(fixedHeading)).append('\n')
     }
+    if (streaming && fenceChar != null) output.append(fenceChar.toString().repeat(fenceLength))
     return output.toString().trimEnd('\n')
 }
 
