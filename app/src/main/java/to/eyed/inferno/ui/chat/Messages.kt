@@ -336,10 +336,8 @@ private fun AssistantMessage(
             Spacer(Modifier.height(10.dp))
         }
         if (text.isNotBlank()) MarkdownBody(text, streaming = streaming)
-        if (streaming) Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            BlinkingCaret()
-            if (liveMeta != null) Text(liveMeta, style = Meta, color = Ink.I500)
-        }
+        // No fake typing pipe/caret under the response. Developer token telemetry remains available.
+        if (streaming && liveMeta != null) Text(liveMeta, style = Meta, color = Ink.I500, modifier = Modifier.padding(top = 4.dp))
         // TalkBack hears "Answer complete" exactly once, on the Done transition - never per token.
         if (announce) Box(Modifier.size(1.dp).semantics { liveRegion = LiveRegionMode.Polite; contentDescription = S.answerComplete })
         AnimatedVisibility(showActions, enter = fadeIn(defaultEffectsSpec()), exit = fadeOut(defaultEffectsSpec())) {

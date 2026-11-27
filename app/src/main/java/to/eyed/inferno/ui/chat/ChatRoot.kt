@@ -1,5 +1,6 @@
 package to.eyed.inferno.ui.chat
 
+import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -69,6 +70,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import to.eyed.inferno.data.ChatRepository
+import to.eyed.inferno.data.LocalContextTools
 import to.eyed.inferno.data.devBenchmark
 import to.eyed.inferno.data.devContextMeter
 import to.eyed.inferno.data.devGenerationStats
@@ -124,6 +126,13 @@ fun ChatRoot(appVm: AppViewModel, chatVm: ChatViewModel, onBeforeSend: () -> Uni
 
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
+    // Ask once as Chat opens. Android exposes only approximate access here; weather/location tools stay disabled without it.
+    val approximateLocationLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    LaunchedEffect(Unit) {
+        if (!LocalContextTools.hasCoarseLocationPermission(context)) {
+            approximateLocationLauncher.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
+        }
+    }
     val haptics = rememberHaptics()
     val scope = rememberCoroutineScope()
 

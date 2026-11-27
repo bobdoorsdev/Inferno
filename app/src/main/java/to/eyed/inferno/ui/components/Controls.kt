@@ -2,11 +2,13 @@
 
 package to.eyed.inferno.ui.components
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateDpAsState
@@ -81,22 +83,21 @@ import to.eyed.inferno.ui.theme.whiteA
 /** Persistent copy glyph with a lower-right confirmation badge; the copy artwork is never replaced. */
 @Composable
 fun CopyGlyph(checked: Boolean, size: Dp = 16.dp, tint: Color = Ink.I500) {
-    Box(Modifier.size(size + 2.dp)) {
-        Icon(Lucide.Copy, null, Modifier.align(Alignment.Center).size(size), tint = tint)
-        AnimatedVisibility(
-            visible = checked,
-            modifier = Modifier.align(Alignment.BottomEnd).offset(x = 1.dp, y = 1.dp),
-            enter = scaleIn(fastSpatialSpec()) + fadeIn(fastEffectsSpec()),
-            exit = scaleOut(fastSpatialSpec()) + fadeOut(fastEffectsSpec()),
-        ) {
-            Box(
-                Modifier.size(10.dp)
-                    .background(Ink.Pitch, CircleShape)
-                    .border(1.dp, Ink.I500, CircleShape),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(Lucide.Check, null, Modifier.size(9.dp), tint = Ink.White)
-            }
+    Box(Modifier.size(size + 2.dp), contentAlignment = Alignment.Center) {
+        AnimatedContent(
+            targetState = checked,
+            transitionSpec = {
+                (fadeIn(fastEffectsSpec()) + scaleIn(initialScale = 0.92f, animationSpec = fastSpatialSpec())) togetherWith
+                    (fadeOut(fastEffectsSpec()) + scaleOut(targetScale = 0.92f, animationSpec = fastSpatialSpec()))
+            },
+            label = "copyToCheck",
+        ) { copied ->
+            Icon(
+                if (copied) Lucide.Check else Lucide.Copy,
+                null,
+                Modifier.size(if (copied) size * 0.96f else size),
+                tint = if (copied) Ink.White else tint,
+            )
         }
     }
 }
