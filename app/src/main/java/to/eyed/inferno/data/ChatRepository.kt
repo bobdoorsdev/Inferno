@@ -85,7 +85,7 @@ class ChatRepository(private val dao: ChatDao, private val imageUtil: ImageUtil)
         return fork.toConversation()
     }
 
-    suspend fun appendUser(conversationId: String, text: String, attachments: List<Attachment>): ChatMessage {
+    suspend fun appendUser(conversationId: String, text: String, attachments: List<Attachment>, modelDisplayName: String? = null): ChatMessage {
         val now = System.currentTimeMillis()
         val m = MessageEntity(
             id = UUID.randomUUID().toString(), conversationId = conversationId, orderIndex = dao.maxOrderIndex(conversationId) + 1,
@@ -94,8 +94,11 @@ class ChatRepository(private val dao: ChatDao, private val imageUtil: ImageUtil)
         val rows = attachments.distinctBy { it.id }.mapIndexed { i, a -> MessageImageEntity(m.id, a.id, i, a.width, a.height) }
         dao.insertMessage(m, rows)
         val conv = dao.conversation(conversationId)
-        if (conv != null && conv.title.isBlank() && text.isNotBlank()) dao.rename(conversationId, titleFrom(text), now)
-        else dao.touch(conversationId, now)
+        if (conv != null && conv.title.isBlank() && text.isNotBlank()) {
+            val promptTitle = titleFrom(text)
+            val title = modelDisplayName?.trim()?.takeIf { it.isNotEmpty() }?.let { "$it · $promptTitle" } ?: promptTitle
+            dao.rename(conversationId, title, now)
+        } else dao.touch(conversationId, now)
         flushHeldBack()     // after the insert: ids re-attached by an edit have their reference back
         return MessageWithImages(m, rows).toChatMessage()
     }
