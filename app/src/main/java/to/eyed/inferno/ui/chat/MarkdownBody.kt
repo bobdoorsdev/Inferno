@@ -93,29 +93,49 @@ fun MarkdownBody(
     fillWidth: Boolean = true,
 ) {
     val chunks = remember(text) { MarkdownChunker.chunks(text) }
-    // Once generation stops, keep the live tail composable mounted until its reveal catches up.
-    var tailRevealed by remember { mutableStateOf(!streaming) }
-    LaunchedEffect(text, streaming) {
-        if (streaming) tailRevealed = false
-    }
     val content: @Composable () -> Unit = {
         Column(if (fillWidth) modifier.fillMaxWidth() else modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             chunks.forEachIndexed { index, chunk ->
                 key(index) {
-                    if (index == chunks.lastIndex && (streaming || !tailRevealed)) {
-                        StreamingMarkdownTail(
-                            chunk = chunk,
-                            completeWhenCaughtUp = !streaming,
-                            onRevealComplete = { tailRevealed = true },
-                        )
-                    } else {
-                        MarkdownChunkView(chunk, textColor = textColor, selectable = selectable, fillWidth = fillWidth)
-                    }
+                    StreamingMarkdownChunk(
+                        chunk = chunk,
+                        isTail = index == chunks.lastIndex,
+                        streamActive = streaming,
+                        textColor = textColor,
+                        selectable = selectable,
+                        fillWidth = fillWidth,
+                    )
                 }
             }
         }
     }
     if (selectable) SelectionContainer { content() } else content()
+}
+
+/**
+ * Keeps each paragraph's reveal animation alive when a later paragraph arrives. A closed block
+ * becomes rich Markdown only after its own reveal has caught up, never merely because it stopped
+ * being the current streaming tail.
+ */
+@Composable
+private fun StreamingMarkdownChunk(
+    chunk: String,
+    isTail: Boolean,
+    streamActive: Boolean,
+    textColor: Color,
+    selectable: Boolean,
+    fillWidth: Boolean,
+) {
+    var revealed by remember { mutableStateOf(!streamActive) }
+    if (revealed) {
+        MarkdownChunkView(chunk, textColor = textColor, selectable = selectable, fillWidth = fillWidth)
+    } else {
+        StreamingMarkdownTail(
+            chunk = chunk,
+            completeWhenCaughtUp = !streamActive || !isTail,
+            onRevealComplete = { revealed = true },
+        )
+    }
 }
 
 /**
