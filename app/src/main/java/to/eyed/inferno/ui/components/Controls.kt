@@ -2,10 +2,16 @@
 
 package to.eyed.inferno.ui.components
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -39,6 +45,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.offset
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -52,6 +59,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.composables.icons.lucide.Check
+import com.composables.icons.lucide.Copy
+import com.composables.icons.lucide.Lucide
+import kotlinx.coroutines.delay
 import to.eyed.inferno.ui.theme.ChipLabel
 import to.eyed.inferno.ui.theme.Eyebrow as EyebrowStyle
 import to.eyed.inferno.ui.theme.Ink
@@ -66,6 +77,72 @@ import to.eyed.inferno.ui.theme.whiteA
 // Every control: indication = null (no ripple), press feedback through Modifier.pressScale
 // (graphicsLayer, no recomposition per frame), a Role for TalkBack, and a 40 dp touch target
 // through minimumInteractiveComponentSize() even when the visual is 36/32 dp.
+
+/** Persistent copy glyph with a lower-right confirmation badge; the copy artwork is never replaced. */
+@Composable
+fun CopyGlyph(checked: Boolean, size: Dp = 16.dp, tint: Color = Ink.I500) {
+    Box(Modifier.size(size + 2.dp)) {
+        Icon(Lucide.Copy, null, Modifier.align(Alignment.Center).size(size), tint = tint)
+        AnimatedVisibility(
+            visible = checked,
+            modifier = Modifier.align(Alignment.BottomEnd).offset(x = 1.dp, y = 1.dp),
+            enter = scaleIn(fastSpatialSpec()) + fadeIn(fastEffectsSpec()),
+            exit = scaleOut(fastSpatialSpec()) + fadeOut(fastEffectsSpec()),
+        ) {
+            Box(
+                Modifier.size(12.dp)
+                    .background(Ink.White, CircleShape)
+                    .border(1.dp, Ink.Pitch, CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Lucide.Check, null, Modifier.size(8.dp), tint = Ink.Pitch)
+            }
+        }
+    }
+}
+
+/** Animated copy action used by message rows. */
+@Composable
+fun CopyIconButton(
+    contentDescription: String,
+    onCopy: () -> Unit,
+    modifier: Modifier = Modifier,
+    size: Dp = 32.dp,
+    iconSize: Dp = 16.dp,
+    tint: Color = Ink.I500,
+) {
+    var copied by remember { mutableStateOf(false) }
+    val haptics = rememberHaptics()
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val background by animateColorAsState(
+        if (pressed) Ink.SurfaceHigh else Color.Transparent,
+        fastEffectsSpec(),
+        label = "copyButtonBg",
+    )
+    LaunchedEffect(copied) {
+        if (copied) {
+            delay(1_400)
+            copied = false
+        }
+    }
+    Box(
+        modifier.minimumInteractiveComponentSize()
+            .size(size)
+            .pressScale(interaction, 0.92f)
+            .clip(CircleShape)
+            .drawBehind { drawRect(background) }
+            .clickable(
+                interactionSource = interaction,
+                indication = null,
+                role = Role.Button,
+                onClick = { haptics.tap(); onCopy(); copied = true },
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        CopyGlyph(checked = copied, size = iconSize, tint = tint)
+    }
+}
 
 /** Circular ghost icon button: transparent at rest, subtle fill on press. */
 @Composable
