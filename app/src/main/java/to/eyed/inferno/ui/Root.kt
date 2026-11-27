@@ -104,7 +104,7 @@ fun InfernoRoot(container: AppContainer, appVm: AppViewModel, chatVm: ChatViewMo
     val noticeScope = rememberCoroutineScope()
     var readyNoticeJob by remember { mutableStateOf<Job?>(null) }
 
-    CompositionLocalProvider(LocalAnimations provides settings.streamingAnimations, LocalHaptics provides settings.haptics) {
+    CompositionLocalProvider(LocalAnimations provides true, LocalHaptics provides settings.haptics) {
         val haptics = rememberHaptics()
 
         // Notifications permission, the single rule: asked once before the first download or send, never again.
