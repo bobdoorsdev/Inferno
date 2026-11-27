@@ -1,19 +1,21 @@
 package to.eyed.inferno.ui.chat
 
 /**
- * Normalizes the two common LaTeX delimiter styles for the native math renderer.
- * Fenced and inline code are deliberately opaque: a command in code is never math.
+ * Normalizes LaTeX delimiters for the native math renderer. Fenced and inline code are opaque:
+ * a command inside code is never interpreted as math.
  */
 object SafeMathMarkdown {
-    private val fenceStart = Regex("""^\\s*(`{3,}|~{3,}).*$""")
-    private val inlineParen = Regex("""\\\\\\((.+?)\\\\\\)""")
-    private val inlineBracket = Regex("""\\\\\\[(.+?)\\\\\\]""")
-    private val bareCommand = Regex("""\\\\(alpha|beta|gamma|delta|epsilon|varepsilon|theta|vartheta|lambda|mu|pi|rho|sigma|tau|phi|varphi|omega|Gamma|Delta|Theta|Lambda|Pi|Sigma|Phi|Omega|frac|dfrac|tfrac|sqrt|sum|prod|int|oint|cdot|times|div|pm|mp|leq|geq|neq|approx|infty|partial|nabla|degree)(?:\\\\\{[^{}\\n]*})(?:\\\\\{[^{}\\n]*})?""")
+    private val fenceStart = Regex("""^\s*(\x60{3,}|~{3,}).*$""")
+    private val inlineParen = Regex("""\\\((.+?)\\\)""")
+    private val inlineBracket = Regex("""\\\[(.+?)\\\]""")
+    private val bareCommand = Regex(
+        """\\(alpha|beta|gamma|delta|epsilon|varepsilon|theta|vartheta|lambda|mu|pi|rho|sigma|tau|phi|varphi|omega|Gamma|Delta|Theta|Lambda|Pi|Sigma|Phi|Omega|frac|dfrac|tfrac|sqrt|sum|prod|int|oint|cdot|times|div|pm|mp|leq|geq|neq|approx|infty|partial|nabla|degree)(?:\{[^{}\n]*\}){0,2}"""
+    )
 
     fun containsMath(source: String): Boolean {
         var fenceChar: Char? = null
         var fenceSize = 0
-        for (line in source.split('\\n')) {
+        for (line in source.split('\n')) {
             val marker = fenceStart.matchEntire(line)
             if (marker != null) {
                 val token = marker.groupValues[1]
@@ -28,8 +30,8 @@ object SafeMathMarkdown {
             }
             if (fenceChar != null) continue
             val prose = stripInlineCode(line)
-            if (prose.trim() == "$$" || prose.trim() == "\\\\[" || prose.trim() == "\\\\]") return true
-            if (Regex("""(?<!\\\\)\\$[^\\$\\n]+\\$""").containsMatchIn(prose)) return true
+            if (prose.trim() == "$$" || prose.trim() == "\\[" || prose.trim() == "\\]") return true
+            if (Regex("""(?<!\\)\$[^$\n]+\$""").containsMatchIn(prose)) return true
             if (inlineParen.containsMatchIn(prose) || inlineBracket.containsMatchIn(prose)) return true
             if (bareCommand.containsMatchIn(prose)) return true
         }
@@ -38,10 +40,11 @@ object SafeMathMarkdown {
 
     fun normalize(source: String): String {
         val output = StringBuilder(source.length + 16)
+        val lines = source.split('\n')
         var fenceChar: Char? = null
         var fenceSize = 0
         var inDisplayMath = false
-        for ((index, line) in source.split('\\n').withIndex()) {
+        for ((index, line) in lines.withIndex()) {
             val marker = fenceStart.matchEntire(line)
             if (marker != null) {
                 val token = marker.groupValues[1]
@@ -56,25 +59,24 @@ object SafeMathMarkdown {
             } else if (fenceChar != null) {
                 output.append(line)
             } else {
-                val trimmed = line.trim()
-                when (trimmed) {
-                    "\\\\[" -> { output.append("$$"); inDisplayMath = true }
-                    "\\\\]" -> { output.append("$$"); inDisplayMath = false }
+                when (line.trim()) {
+                    "\\[" -> { output.append("$$"); inDisplayMath = true }
+                    "\\]" -> { output.append("$$"); inDisplayMath = false }
                     "$$" -> { output.append(line); inDisplayMath = !inDisplayMath }
                     else -> {
-                        var normalized = inlineParen.replace(line) { "\\$" + it.groupValues[1] + "\\$" }
-                        normalized = inlineBracket.replace(normalized) { "\\$" + it.groupValues[1] + "\\$" }
+                        var normalized = inlineParen.replace(line) { "\$" + it.groupValues[1] + "\$" }
+                        normalized = inlineBracket.replace(normalized) { "\$" + it.groupValues[1] + "\$" }
                         if (!inDisplayMath) normalized = wrapBareCommands(normalized)
                         output.append(normalized)
                     }
                 }
             }
-            if (index != source.count { it == '\\n' }) output.append('\\n')
+            if (index != lines.lastIndex) output.append('\n')
         }
         return output.toString()
     }
 
-    /** Wrap un-delimited LaTeX commands (for example \\delta) as inline math. */
+    /** Wrap un-delimited LaTeX commands (for example \delta) as inline math. */
     private fun wrapBareCommands(line: String): String {
         val out = StringBuilder(line.length + 8)
         var i = 0
@@ -83,16 +85,16 @@ object SafeMathMarkdown {
         var codeTicks = 0
         while (i < line.length) {
             val c = line[i]
-            if (c == '`') {
+            if (c == '\x60') {
                 var end = i
-                while (end < line.length && line[end] == '`') end++
+                while (end < line.length && line[end] == '\x60') end++
                 val count = end - i
                 if (codeTicks == 0) codeTicks = count else if (codeTicks == count) codeTicks = 0
                 out.append(line, i, end)
                 i = end
                 continue
             }
-            if (codeTicks == 0 && c == '$' && (i == 0 || line[i - 1] != '\\\\')) {
+            if (codeTicks == 0 && c == '$' && (i == 0 || line[i - 1] != '\\')) {
                 var end = i
                 while (end < line.length && line[end] == '$') end++
                 val count = end - i
@@ -102,7 +104,7 @@ object SafeMathMarkdown {
                 i = end
                 continue
             }
-            if (codeTicks == 0 && !inMath && c == '\\\\') {
+            if (codeTicks == 0 && !inMath && c == '\\' && (i == 0 || line[i - 1] != '\\')) {
                 val match = bareCommand.find(line, i)
                 if (match != null && match.range.first == i) {
                     out.append('$').append(match.value).append('$')
@@ -117,5 +119,5 @@ object SafeMathMarkdown {
     }
 
     private fun stripInlineCode(line: String): String =
-        Regex("""(`+).*?\\1""").replace(line, "")
+        Regex("""(\x60+).*?\1""").replace(line, "")
 }
