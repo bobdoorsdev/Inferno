@@ -46,7 +46,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.swmansion.enriched.markdown.compose.CodeBlockLayout
 import com.swmansion.enriched.markdown.compose.EnrichedMarkdownText
-import com.swmansion.enriched.markdown.compose.MarkdownTheme
 import com.swmansion.enriched.markdown.compose.markdownStyle
 import com.swmansion.enriched.markdown.math.LatexMathPlugin
 import com.swmansion.enriched.markdown.math.compose.inlineMath
@@ -68,7 +67,6 @@ import com.mikepenz.markdown.m3.markdownColor
 import com.mikepenz.markdown.m3.markdownTypography
 import com.mikepenz.markdown.model.markdownDimens
 import com.mikepenz.markdown.model.rememberMarkdownState
-import kotlinx.coroutines.delay
 import to.eyed.inferno.ui.S
 import to.eyed.inferno.ui.components.Hairline
 import to.eyed.inferno.ui.components.copyToClipboard
@@ -177,7 +175,7 @@ private fun StreamingRevealText(
 @Composable
 private fun StreamingMarkdownTail(chunk: String) {
     val first = chunk.lineSequence().firstOrNull()?.trim().orEmpty()
-    val opener = Regex("^(\\\\u0060{3,}|~{3,})([A-Za-z0-9_+.-]*)$").matchEntire(first)
+    val opener = Regex("""^(\\x60{3,}|~{3,})([A-Za-z0-9_+.-]*)$""").matchEntire(first)
     if (opener != null) {
         val marker = opener.groupValues[1]
         val closeIndex = chunk.lines().withIndex().firstOrNull { (index, line) ->
@@ -199,7 +197,7 @@ private fun MarkdownChunkView(chunk: String, textColor: Color, selectable: Boole
     if (SafeMathMarkdown.containsMath(chunk)) {
         val uriHandler = LocalUriHandler.current
         val style = remember(textColor) {
-            MarkdownTheme.style.merge {
+            markdownStyle {
                 paragraph {
                     color = textColor
                     fontSize = 16.sp
