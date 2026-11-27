@@ -177,8 +177,6 @@ private fun SettingsBody(appVm: AppViewModel, chatVm: ChatViewModel, onOpenBench
     SettingsCard {
         ToggleRow(S.stayReady, s.keepModelLoaded, appVm::setKeepModelLoaded, description = S.stayReadyDesc)
         CardDivider()
-        ToggleRow(S.streamingAnimations, s.streamingAnimations, appVm::setStreamingAnimations, description = S.streamingAnimationsDesc)
-        CardDivider()
         ToggleRow(S.haptics, s.haptics, appVm::setHaptics, description = S.hapticsDesc)
         CardDivider()
         val n = models.count { it.isDownloaded }
