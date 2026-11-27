@@ -54,16 +54,19 @@ object LocalToolCommandParser {
     fun isExplicitlyRequested(userText: String, command: LocalToolCommand): Boolean {
         val prompt = userText.lowercase(Locale.ROOT)
         fun matches(pattern: String) = Regex(pattern, RegexOption.IGNORE_CASE).containsMatchIn(prompt)
-        // Code-generation requests must never invoke local context tools, even when they mention time/weather.
-        val codeGeneration = matches("""\b(html|code|script|website|webpage|javascript|python|luau|programming|program|app|xml|json)\b""")
+        // A request for HTML/scripts/programming must never invoke local context tools,
+        // but merely mentioning an app must not suppress a normal time/weather question.
+        val codeGeneration = matches("""\b(html|javascript|python|luau|programming|xml|json)\b""") ||
+            matches("""\b(write|create|make|generate|build|draft|asked|request|show|give)\b.{0,80}\b(code|script|website|webpage|program|app)\b""")
         if (codeGeneration) return false
         return when (command.name) {
-            "time" -> matches("""\b(what time|time is it|current time|local time|what's the time|que horas|qual e a hora|horas sao|horario agora|current date|today's date|what date|data de hoje|que dia e hoje)\b""")
+            "time" -> matches("""\b(what time|what is the time|time is it|current time|local time|what's the time|que horas|qual e a hora|horas sao|horario agora|current date|today's date|what date|data de hoje|que dia e hoje)\b""")
             "location" -> matches("""\b(where am i|my location|current location|where do i live|what city am i|where is my phone|minha localizacao|onde estou|onde eu moro|qual cidade estou)\b""")
             "weather" -> matches("""\b(weather|forecast|previsao do tempo|clima|temperatura hoje)\b""")
             "calculator" -> matches("""\b(calculate|calculator|compute|solve this|calcule|calcular|quanto e|quanto da|resolva|resolver|solve)\b""") ||
                 Regex("""\d+(?:\.\d+)?\s*[+*/%-]\s*\d+""").containsMatchIn(prompt)
-            "convert" -> matches("""\b(convert|conversion|converta|converter|quanto vale|exchange rate|convertir|converter para)\b""")
+            "convert" -> matches("""\b(convert|conversion|converta|converter|quanto vale|exchange rate|convertir|converter para)\b""") ||
+                matches("""\b\d+(?:\.\d+)?\s*(?:km|mi|m|ft|cm|in|kg|lb|g|oz|l|gal)\s+(?:to|in)\s+[a-z]{2,8}\b""")
             "date" -> matches("""\b(days between|how many days|what day of the week|day of week|date calculation|quantos dias|que dia da semana|calcular datas)\b""")
             "timezone" -> matches("""\b(time in|timezone|time zone|fuso horario|hora em)\b""")
             "percentage" -> matches("""\b(percent|percentage|por cento|porcentagem|percentage of)\b""")

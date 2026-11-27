@@ -171,7 +171,7 @@ fun highlightCodeIncremental(
     }
 
     val builder = AnnotatedString.Builder()
-    builder.append(previousCode, 0, stableEnd)
+    builder.append(previousCode.substring(0, stableEnd))
     previous.spanStyles.forEach { range ->
         val start = range.start.coerceIn(0, stableEnd)
         val end = range.end.coerceIn(0, stableEnd)
