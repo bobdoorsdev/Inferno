@@ -74,7 +74,6 @@ data class SettingsState(
     val thinking: Boolean = false,
     val imageDetail: ImageDetail = ImageDetail.HIGH,
     // chat
-    val streamingAnimations: Boolean = true,
     val haptics: Boolean = true,
     // downloads
     val allowMeteredDownloads: Boolean = false, // Settings > Storage; when false a metered network requires a per-download confirm
@@ -156,7 +155,6 @@ class AppPrefs(
     suspend fun setSystemPrompt(s: String) = update { it.copy(systemPrompt = s) }
     suspend fun setThinking(v: Boolean) = update { it.copy(thinking = v) }
     suspend fun setImageDetail(d: ImageDetail) = update { it.copy(imageDetail = d) }
-    suspend fun setStreamingAnimations(v: Boolean) = update { it.copy(streamingAnimations = v) }
     suspend fun setHaptics(v: Boolean) = update { it.copy(haptics = v) }
     override suspend fun setAllowMeteredDownloads(allow: Boolean) = update { it.copy(allowMeteredDownloads = allow) }
     suspend fun setNotificationsAsked(v: Boolean) = update { it.copy(notificationsAsked = v) }
@@ -203,7 +201,6 @@ private object K {
     val thinking = booleanPreferencesKey("thinking")
     val imageDetail = stringPreferencesKey("imageDetail")
     val autoTrim = booleanPreferencesKey("autoTrim")
-    val streamingAnimations = booleanPreferencesKey("streamingAnimations")
     val haptics = booleanPreferencesKey("haptics")
     val allowMeteredDownloads = booleanPreferencesKey("allowMeteredDownloads")
     val notificationsAsked = booleanPreferencesKey("notificationsAsked")
@@ -248,7 +245,6 @@ internal fun Preferences.toState(): SettingsState {
         systemPrompt = this[K.systemPrompt] ?: d.systemPrompt,
         thinking = this[K.thinking] ?: d.thinking,
         imageDetail = ImageDetail.HIGH,
-        streamingAnimations = this[K.streamingAnimations] ?: d.streamingAnimations,
         haptics = this[K.haptics] ?: d.haptics,
         allowMeteredDownloads = this[K.allowMeteredDownloads] ?: d.allowMeteredDownloads,
         notificationsAsked = this[K.notificationsAsked] ?: d.notificationsAsked,
@@ -293,7 +289,6 @@ internal fun MutablePreferences.write(s: SettingsState) {
     this[K.systemPrompt] = s.systemPrompt
     this[K.thinking] = s.thinking
     this[K.imageDetail] = s.imageDetail.name
-    this[K.streamingAnimations] = s.streamingAnimations
     this[K.haptics] = s.haptics
     this[K.allowMeteredDownloads] = s.allowMeteredDownloads
     this[K.notificationsAsked] = s.notificationsAsked
