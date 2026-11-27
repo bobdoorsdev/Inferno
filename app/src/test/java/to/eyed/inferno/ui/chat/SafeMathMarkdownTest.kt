@@ -1,25 +1,32 @@
 package to.eyed.inferno.ui.chat
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SafeMathMarkdownTest {
-    @Test fun convertsInlineAndDisplayMathOutsideCodeFences() {
-        val source = "Value \\(x^2 + 1\\)\n\n$$\ny = mx + b\n$$"
-        val safe = SafeMathMarkdown.sanitize(source)
-        assertTrue(safe.contains("\u0060x^2 + 1\u0060"))
-        assertTrue(safe.contains("\u0060\u0060\u0060math"))
-        assertFalse(safe.contains("\\("))
+    @Test fun normalizesInlineAndDisplayMathDelimiters() {
+        val source = "Value \\\\(x^2 + 1\\\\)\\n\\\\[\\ny = mx + b\\n\\\\]"
+        val normalized = SafeMathMarkdown.normalize(source)
+        assertTrue(normalized.contains("Value $" + "x^2 + 1$")) 
+        assertTrue(normalized.contains("$$\\ny = mx + b\\n$$"))
+        assertTrue(SafeMathMarkdown.containsMath(source))
     }
 
     @Test fun leavesFencedCodeUntouched() {
-        val source = "\u0060\u0060\u0060tex\n\\\\(x+1\\\\)\n\u0060\u0060\u0060"
-        assertTrue(SafeMathMarkdown.sanitize(source).contains("\\\\(x+1\\\\)"))
+        val source = "```tex\\n\\\\(x+1\\\\)\\n```"
+        assertEquals(source, SafeMathMarkdown.normalize(source))
+        assertFalse(SafeMathMarkdown.containsMath(source))
     }
 
-    @Test fun safelyDisplaysAnUnclosedInlineFormulaDuringStreaming() {
-        val safe = SafeMathMarkdown.sanitize("Estimate: \\\\(\\\\frac{1}{2}")
-        assertTrue(safe.contains("\u0060\\\\frac{1}{2}\u0060"))
+    @Test fun wrapsBareLatexCommandsAsInlineMath() {
+        assertEquals("Angle: $" + "\\\\delta$", SafeMathMarkdown.normalize("Angle: \\\\delta"))
+        assertTrue(SafeMathMarkdown.containsMath("\\\\delta"))
+    }
+
+    @Test fun leavesAnIncompleteStreamingDelimiterUntouched() {
+        val source = "Estimate: \\\\(\\\\frac{1}{2}"
+        assertEquals(source, SafeMathMarkdown.normalize(source))
     }
 }
