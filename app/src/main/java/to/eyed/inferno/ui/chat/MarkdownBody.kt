@@ -90,16 +90,17 @@ fun MarkdownBody(
     streaming: Boolean = false,
     selectable: Boolean = true,
     textColor: Color = Ink.I100,
+    fillWidth: Boolean = true,
 ) {
     val chunks = remember(text) { MarkdownChunker.chunks(text) }
     val content: @Composable () -> Unit = {
-        Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(if (fillWidth) modifier.fillMaxWidth() else modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             chunks.forEachIndexed { index, chunk ->
                 key(index) {
                     if (streaming && index == chunks.lastIndex) {
                         StreamingMarkdownTail(chunk)
                     } else {
-                        MarkdownChunkView(chunk, textColor = textColor, selectable = selectable)
+                        MarkdownChunkView(chunk, textColor = textColor, selectable = selectable, fillWidth = fillWidth)
                     }
                 }
             }
@@ -192,7 +193,7 @@ private fun StreamingMarkdownTail(chunk: String) {
 }
 
 @Composable
-private fun MarkdownChunkView(chunk: String, textColor: Color, selectable: Boolean) {
+private fun MarkdownChunkView(chunk: String, textColor: Color, selectable: Boolean, fillWidth: Boolean) {
     if (SafeMathMarkdown.containsMath(chunk)) {
         val uriHandler = LocalUriHandler.current
         val style = remember(textColor) {
@@ -240,7 +241,7 @@ private fun MarkdownChunkView(chunk: String, textColor: Color, selectable: Boole
         LatexMathPlugin {
             EnrichedMarkdownText(
                 markdown = SafeMathMarkdown.normalize(chunk),
-                modifier = Modifier.fillMaxWidth(),
+                modifier = if (fillWidth) Modifier.fillMaxWidth() else Modifier,
                 style = style,
                 selectable = selectable,
                 codeBlockLayout = CodeBlockLayout.Wrapping,
@@ -297,7 +298,7 @@ private fun MarkdownChunkView(chunk: String, textColor: Color, selectable: Boole
                     )
                 },
             ),
-            modifier = Modifier.fillMaxWidth(),
+            modifier = if (fillWidth) Modifier.fillMaxWidth() else Modifier,
         )
     }
 }
