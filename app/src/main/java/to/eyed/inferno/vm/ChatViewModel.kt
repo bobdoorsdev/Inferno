@@ -471,6 +471,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
             // No keyword gate can suppress the planner for a current or unfamiliar fact.
             val webIntent = settings.webSearchEnabled && c.network.wifiConnected.value
             val imageIntent = AssistantToolRouter.shouldConsiderImageGeneration(latestUserText)
+            val explicitImageQuery = AssistantToolRouter.explicitImageSearchQuery(latestUserText)
             val shouldRoute = latestUserText.isNotBlank() &&
                 (webIntent || imageIntent || AssistantToolRouter.shouldRouteLocally(latestUserText))
             _toolStatus.value = null
@@ -485,7 +486,10 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
                     AssistantToolPlan()
                 }
                 Log.d("InfernoTiming", "stage=initial_tool_planner ms=${SystemClock.elapsedRealtime() - plannerStartedAt}")
-                AssistantToolRouter.validateForRequest(planned, latestUserText)
+                val validated = AssistantToolRouter.validateForRequest(planned, latestUserText)
+                if (webIntent && explicitImageQuery != null) {
+                    validated.copy(imageQueries = (listOf(explicitImageQuery) + validated.imageQueries).distinct().take(2))
+                } else validated
             } else AssistantToolPlan()
             val imagePrompt = toolPlan.imagePrompt
             if (imageIntent && !imagePrompt.isNullOrBlank()) {
@@ -959,7 +963,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
         }
     }
 
-    /** Accumulates the turn and publishes GenState at <= 8 Hz; token speed is refreshed at 2 Hz. */
+    /** Accumulates the turn and publishes text at display-refresh pace (about 60 Hz); token speed is refreshed at 2 Hz. */
     private inner class Streamer(private val id: String) {
         val text = StringBuilder()
         val reasoning = StringBuilder()
@@ -1066,7 +1070,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
         const val MAX_PENDING_FILE_BYTES = 64L * 1024 * 1024
         const val MAX_PROMPT_IMAGES = 8
         const val MAX_TOOL_ROUNDS = 24
-        const val PUBLISH_NS = 66_000_000L
+        const val PUBLISH_NS = 16_000_000L
         const val TPS_NS = 500_000_000L
         const val PERSIST_NS = 2_000_000_000L
         const val PERSIST_TOKENS = 200

@@ -47,22 +47,57 @@ object AssistantToolRouter {
     val EMPTY = AssistantToolPlan()
 
     /** Keep the answer in the user's language, never the Android/device locale. */
+    /** The latest request controls response language, including text emitted inside HTML/SVG/code. */
     fun responseLanguageInstruction(userText: String): String {
         val words = userText.lowercase(Locale.ROOT).split(Regex("[^\\p{L}]+")).filter { it.isNotBlank() }
-        val english = setOf("the", "and", "you", "what", "how", "why", "is", "are", "for", "with", "please", "can", "make", "fix", "search", "best", "not", "instead", "this", "that", "it", "there", "did", "dont", "does", "your", "hello", "hi", "remember", "update", "move", "add", "remove", "show", "find", "need", "want")
-        val portuguese = setOf("que", "não", "uma", "para", "com", "você", "como", "por", "favor", "isso", "está", "melhor", "onde", "quando", "pesquise", "faça", "agora", "meu", "minha", "oi", "quero", "preciso", "mas", "também", "porque", "então", "pode", "mais")
+        val english = setOf(
+            "the", "and", "you", "what", "how", "why", "is", "are", "for", "with", "please", "can",
+            "make", "fix", "search", "best", "not", "instead", "this", "that", "it", "there", "did",
+            "dont", "does", "your", "hello", "hi", "remember", "update", "move", "add", "remove",
+            "show", "find", "need", "want", "create", "generate", "build", "write", "code", "html",
+            "svg", "website", "page", "english", "explain", "button", "text", "css", "javascript"
+        )
+        val portuguese = setOf(
+            "que", "não", "nao", "uma", "para", "com", "você", "voce", "como", "por", "favor", "isso",
+            "está", "esta", "melhor", "onde", "quando", "pesquise", "faça", "faca", "agora", "meu",
+            "minha", "oi", "quero", "preciso", "mas", "também", "tambem", "porque", "então", "entao",
+            "pode", "mais", "crie", "gere", "coloque", "adicione", "remova", "escreva", "pagina"
+        )
+        val explicitEnglish = Regex(
+            """\b(?:in|written\s+in|using|as|language(?:\s+should\s+be)?\s*[:=]?)\s*english\b|\benglish[- ]language\b""",
+            RegexOption.IGNORE_CASE,
+        ).containsMatchIn(userText)
         val englishScore = words.count { it in english }
         val portugueseScore = words.count { it in portuguese }
-        return when {
-            Regex("""\b(?:respond|reply|answer)\s+in\s+english\b""", RegexOption.IGNORE_CASE).containsMatchIn(userText) ->
-                "LANGUAGE REQUIREMENT: Answer exclusively in English. Do not use Brazilian Portuguese."
-            portugueseScore >= 2 && portugueseScore > englishScore ->
-                "LANGUAGE REQUIREMENT: Answer in Brazilian Portuguese (pt-BR), matching the user's language."
-            englishScore > 0 && englishScore >= portugueseScore ->
-                "LANGUAGE REQUIREMENT: Answer exclusively in English. The device language and previous conversation language must not override the language of this user message."
-            else ->
-                "LANGUAGE REQUIREMENT: Answer in the same language as the latest user message. Do not default to Portuguese or to the Android device language."
+        val language = when {
+            explicitEnglish -> "English"
+            portugueseScore >= 2 && portugueseScore > englishScore -> "Brazilian Portuguese (pt-BR)"
+            englishScore > 0 && englishScore >= portugueseScore -> "English"
+            else -> "the same language as the latest user message"
         }
+        return "LANGUAGE REQUIREMENT: Respond exclusively in " + language +
+            ". The latest user message overrides the Android device locale and all earlier conversation language. " +
+            "For generated HTML, SVG, CSS, JavaScript, or other code, write every user-facing string " +
+            "(page title, headings, labels, buttons, placeholders, alt text, and comments) in " + language +
+            " too. Never translate an English request into Brazilian Portuguese."
+    }
+
+    /** Direct picture-search requests must not depend on a small model's planner guess. */
+    fun explicitImageSearchQuery(userText: String): String? {
+        val asksForImages = Regex(
+            """\b(?:search|find|look\s+(?:for|up)|show(?:\s+me)?|get)\b.{0,90}\b(?:images?|photos?|pictures?|photographs?)\b""",
+            RegexOption.IGNORE_CASE,
+        ).containsMatchIn(userText)
+        if (!asksForImages) return null
+        val subject = Regex(
+            """\b(?:images?|photos?|pictures?|photographs?)\s+(?:of|for|about|from|featuring|showing)\s+(.+)$""",
+            RegexOption.IGNORE_CASE,
+        ).find(userText)?.groupValues?.get(1)
+        val query = (subject?.takeIf { it.isNotBlank() } ?: userText)
+            .trim()
+            .trimEnd('.', '?', '!', ' ')
+            .take(160)
+        return query.takeIf { it.length >= 2 }
     }
 
     /**
@@ -158,7 +193,8 @@ object AssistantToolRouter {
             - date_calculation/current_time: only for an explicit date-arithmetic or current-time/date request.
             - json_action, regex_* and color_value: only for the exact operation explicitly requested by the user.
             Never infer a utility task from a passing mention, quoted text, example, or unrelated question.
-            Image search: use image_queries only when real pictures materially improve an answer.
+            Image search: when the user explicitly asks to search, find, or show images/photos/pictures, MUST set image_queries to a focused subject query, even if a normal text search is not needed. Never replace requested pictures with links to stock-photo search pages.
+            Otherwise use image_queries only when real pictures materially improve an answer.
             Image generation: set image_prompt only when the user explicitly asks to create or generate an image.
             Calculator: use only a numeric expression with + - * / % ^. Never guess changing rates.
             Clock: request current_time only when current local time/date is relevant or explicitly asked.
@@ -470,6 +506,7 @@ object AssistantToolRouter {
     }
 
     /** Safe fallback: display the real returned sources rather than allowing fabricated tool output. */
+    @Suppress("UNUSED_PARAMETER")
     fun rawSearchFallback(
         results: List<WebSearchResult>,
         queries: List<String>,
@@ -479,35 +516,30 @@ object AssistantToolRouter {
         if (results.isEmpty()) {
             append(feedback?.takeIf { it.isNotBlank() }
                 ?: "The real web search returned no usable results, so I could not verify the answer.")
-            if (queries.isNotEmpty()) append("\n\nQueries run: ").append(queries.joinToString("; "))
         } else {
             append("Here are the real search results returned by the web search tool:\n\n")
-            results.forEachIndexed { index, result ->
-                append("[").append(index + 1).append("] [").append(result.title.ifBlank { result.url }).append("](")
-                    .append(result.url).append(")")
+            results.forEach { result ->
+                append("**[").append(result.title.ifBlank { result.url }).append("](")
+                    .append(result.url).append(")**")
                 if (result.snippet.isNotBlank()) append("\n").append(result.snippet)
                 append("\n\n")
             }
         }
     }
 
-    /** Search evidence and local tools are stored separately so the UI can reopen their own tabs later. */
+    /** Search UI notes contain real sources and image thumbnails, never the internal planner queries. */
+    @Suppress("UNUSED_PARAMETER")
     fun searchNotes(results: List<WebSearchResult>, searchQueries: List<String>, images: List<WebImageResult> = emptyList()): String? {
-        if (results.isEmpty() && searchQueries.isEmpty() && images.isEmpty()) return null
+        if (results.isEmpty() && images.isEmpty()) return null
         return buildString {
-            if (searchQueries.isNotEmpty()) {
-                append("**Web search**\n")
-                searchQueries.forEach { append("- ").append(it.replace(96.toChar().toString(), "")).append('\n') }
-                append('\n')
-            }
             if (results.isNotEmpty()) {
                 append("**Web sources**\n")
-                results.forEachIndexed { index, result ->
+                results.forEach { result ->
                     val title = result.title.replace("[", "").replace("]", "").replace("\n", " ").take(120)
                     val host = runCatching { java.net.URI(result.url).host?.removePrefix("www.") }.getOrNull().orEmpty()
-                    append(index + 1).append(". **[").append(title).append("](").append(result.url).append(")**")
+                    append("**[").append(title).append("](").append(markdownUrl(result.url)).append(")**")
                     if (host.isNotBlank()) append(" · ").append(host)
-                    if (result.snippet.isNotBlank()) append("\n   ").append(result.snippet)
+                    if (result.snippet.isNotBlank()) append("\n   ").append(result.snippet.take(260))
                     append('\n')
                 }
             }
@@ -515,10 +547,12 @@ object AssistantToolRouter {
                 append("\n**Images**\n")
                 images.forEach { image ->
                     val title = image.title.replace("[", " ").replace("]", " ").replace("\n", " ").take(100)
-                    append("![").append(title).append("](").append(image.imageUrl)
-                    image.fallbackImageUrl?.takeIf { it.isNotBlank() && it != image.imageUrl }?.let { append(" \"").append(it).append("\"") }
+                    append("![").append(title).append("](").append(markdownUrl(image.imageUrl))
+                    image.fallbackImageUrl?.takeIf { it.isNotBlank() && it != image.imageUrl }?.let {
+                        append(" \"").append(markdownUrl(it)).append("\"")
+                    }
                     append(")\n")
-                    append("[Source page](").append(image.sourceUrl).append(")\n")
+                    append("[Source page](").append(markdownUrl(image.sourceUrl)).append(")\n")
                 }
             }
         }.trim()

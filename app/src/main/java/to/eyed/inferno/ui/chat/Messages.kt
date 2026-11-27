@@ -40,11 +40,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -78,7 +75,6 @@ import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.GitBranch
 import com.composables.icons.lucide.Wand
 import com.composables.icons.lucide.NotebookPen
-import com.composables.icons.lucide.Pencil
 import com.composables.icons.lucide.RefreshCw
 import com.composables.icons.lucide.Share2
 import com.composables.icons.lucide.Volume2
@@ -161,7 +157,6 @@ fun SharedTransitionScope.MessagesList(
     toolStatus: String? = null,
     toolSearchNotes: String? = null,
     streamingAnimations: Boolean = true,
-    onFollowUp: (String) -> Unit = {},
 ) {
     val context = LocalContext.current
     val live = liveFor(messages, gen)
@@ -228,7 +223,6 @@ fun SharedTransitionScope.MessagesList(
                             onRegenerate = onRegenerate,
                             onBranch = { onBranch(m) },
                             onDetails = { onOpenTurnDetails(m) },
-                            onFollowUp = onFollowUp,
                             // Do not fade the live assistant row on insertion; text itself uses Compose TextMotion.
                             modifier = Modifier.animateItem(fadeInSpec = null, fadeOutSpec = null, placementSpec = placement),
                             showDetails = dev.turnDetails,
@@ -409,12 +403,9 @@ private fun AssistantMessage(
     liveMeta: String? = null,
     searchNotes: String? = null,
     toolStatus: String? = null,
-    onFollowUp: (String) -> Unit = {},
 ) {
     val context = LocalContext.current
     val haptics = rememberHaptics()
-    var followUpDialog by rememberSaveable { mutableStateOf(false) }
-    var followUpDraft by rememberSaveable { mutableStateOf("") }
     Column(modifier.fillMaxWidth()) {
         val activityContent = reasoning.isNotBlank() || !searchNotes.isNullOrBlank() || toolStatus != null
         if (activityContent) {
@@ -436,7 +427,7 @@ private fun AssistantMessage(
         AnimatedVisibility(showActions, enter = fadeIn(defaultEffectsSpec()), exit = fadeOut(defaultEffectsSpec())) {
             Row(
                 Modifier.padding(top = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(3.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 AnimatedCopyButton(S.copyMessage) { copyToClipboard(context, text, "Inferno message") }
@@ -450,11 +441,6 @@ private fun AssistantMessage(
                 }
                 AnimatedActionIcon(Lucide.GitBranch, "Branch from this reply") { haptics.tap(); onBranch() }
                 if (showRegenerate) AnimatedActionIcon(Lucide.RefreshCw, S.regenerate) { haptics.tap(); onRegenerate() }
-                AnimatedActionIcon(Lucide.Pencil, "Ask a follow-up") {
-                    haptics.tap()
-                    followUpDraft = ""
-                    followUpDialog = true
-                }
                 if (stats != null && showDetails) GhostIconButton(Lucide.Info, S.details, onClick = { haptics.tap(); onDetails() }, size = 32.dp, iconSize = 15.dp, tint = Ink.I500)
                 if (showMeta && stats != null) metaLine(stats, techMeta)?.let { meta ->
                     Spacer(Modifier.size(6.dp))
@@ -462,37 +448,7 @@ private fun AssistantMessage(
                 }
             }
         }
-        if (followUpDialog) {
-            AlertDialog(
-                onDismissRequest = { followUpDialog = false },
-                title = { Text("Ask a follow-up", color = Ink.White) },
-                text = {
-                    OutlinedTextField(
-                        value = followUpDraft,
-                        onValueChange = { followUpDraft = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("Write your question…") },
-                        minLines = 2,
-                        maxLines = 5,
-                    )
-                },
-                confirmButton = {
-                    TextButton(
-                        enabled = followUpDraft.isNotBlank(),
-                        onClick = {
-                            val question = followUpDraft.trim()
-                            followUpDialog = false
-                            followUpDraft = ""
-                            if (question.isNotEmpty()) onFollowUp(question)
-                        },
-                    ) { Text("Send", color = Ink.White) }
-                },
-                dismissButton = {
-                    TextButton(onClick = { followUpDialog = false }) { Text("Cancel", color = Ink.I300) }
-                },
-                containerColor = Ink.SurfaceHigh,
-            )
-        }
+
     }
 }
 
@@ -538,7 +494,7 @@ private fun AnimatedActionIcon(icon: androidx.compose.ui.graphics.vector.ImageVe
     val alpha by animateFloatAsState(if (pressed) 0.62f else 1f, fastSpatialSpec(), label = "messageActionAlpha")
     val rotation by animateFloatAsState(if (pressed) 7f else 0f, fastSpatialSpec(), label = "messageActionRotation")
     Box(
-        Modifier.size(36.dp).graphicsLayer { scaleX = scale; scaleY = scale; this.alpha = alpha; rotationZ = rotation }
+        Modifier.size(34.dp).graphicsLayer { scaleX = scale; scaleY = scale; this.alpha = alpha; rotationZ = rotation }
             .clip(CircleShape).background(Ink.SurfaceHigh.copy(alpha = if (pressed) 0.85f else 0f))
             .clickable(interactionSource = interaction, indication = null,
                 role = Role.Button) { onClick() },

@@ -122,9 +122,19 @@ class AssistantToolRouterTest {
         assertFalse(explicit.currentTime)
     }
 
-    @Test fun responseLanguageFollowsTheLatestUserMessageNotTheDeviceLocale() {
+    @Test fun responseLanguageFollowsTheLatestUserMessageAndExplicitCodeLanguage() {
         assertTrue(AssistantToolRouter.responseLanguageInstruction("Please fix this code and explain what changed.").contains("exclusively in English"))
+        val htmlPrompt = AssistantToolRouter.responseLanguageInstruction("Create an HTML page in English")
+        assertTrue(htmlPrompt.contains("English"))
+        assertTrue(htmlPrompt.contains("every user-facing string"))
         assertTrue(AssistantToolRouter.responseLanguageInstruction("Por favor, explique como isso funciona para mim.").contains("Brazilian Portuguese"))
+    }
+
+    @Test fun explicitImageSearchIsForcedForDirectPictureRequests() {
+        assertEquals("2026 FIFA World Cup", AssistantToolRouter.explicitImageSearchQuery("Please search images of 2026 FIFA World Cup"))
+        assertEquals("the 2026 World Cup final", AssistantToolRouter.explicitImageSearchQuery("Find photos of the 2026 World Cup final"))
+        assertNull(AssistantToolRouter.explicitImageSearchQuery("Generate an image of the 2026 World Cup"))
+        assertNull(AssistantToolRouter.explicitImageSearchQuery("Explain how image search works"))
     }
 
     @Test fun localUnitConverterHandlesTemperatureLengthAndStorage() {
@@ -194,6 +204,7 @@ class AssistantToolRouterTest {
         )
         assertTrue(notes!!.contains("https://thumb.example/image.jpg"))
         assertTrue(notes.contains("\"https://cdn.example/full.jpg\""))
+        assertFalse(notes.contains("gaming PCs"))
     }
 
     @Test fun weatherLocationIsParsedForThePrivateWeatherTool() {
@@ -226,11 +237,12 @@ class AssistantToolRouterTest {
             listOf("best gaming PCs"),
             "Search completed",
         )
-        assertTrue(fallback.contains("[1] [Real source](https://example.com/real)"))
+        assertTrue(fallback.contains("**[Real source](https://example.com/real)**"))
+        assertFalse(fallback.contains("[1]"))
         assertTrue(fallback.contains("A verified excerpt."))
     }
 
-    @Test fun toolNotesKeepSourceLinksSeparateFromTheVisibleAnswer() {
+    @Test fun toolNotesKeepSourceLinksSeparateFromTheVisibleAnswerAndHidePlannerQueries() {
         val notes = AssistantToolRouter.notes(
             listOf(WebSearchResult("Example", "https://example.com", "A useful result")),
             AssistantToolRouter.calculate("2 + 2"),
@@ -238,8 +250,9 @@ class AssistantToolRouterTest {
             listOf("latest release"),
         )
         assertTrue(notes!!.startsWith(AssistantToolRouter.NOTES_MARKER))
-        assertTrue(notes.contains("**Web search**"))
-        assertTrue(notes.contains("latest release"))
+        assertFalse(notes.contains("**Web search**"))
+        assertFalse(notes.contains("latest release"))
+        assertFalse(Regex("""(?m)^\d+\.""").containsMatchIn(notes))
         assertTrue(notes.contains("**[Example](https://example.com)** · example.com"))
         assertTrue(notes.contains("2 + 2 = 4"))
         assertFalse(notes.contains("Wednesday, 25 November 2026"))

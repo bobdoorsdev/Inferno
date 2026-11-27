@@ -33,6 +33,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -84,7 +85,27 @@ import to.eyed.inferno.ui.theme.whiteA
 @Composable
 fun MarkdownBody(text: String, modifier: Modifier = Modifier, streaming: Boolean = false, animateStreaming: Boolean = true) {
     val context = LocalContext.current
-    val source = remember(text, streaming) { normalizeMarkdownForRenderer(text, streaming) }
+    val latestText by rememberUpdatedState(text)
+    val latestStreaming by rememberUpdatedState(streaming && animateStreaming)
+    var revealedText by remember { mutableStateOf(if (streaming && animateStreaming) "" else text) }
+    LaunchedEffect(streaming, animateStreaming) {
+        if (!streaming || !animateStreaming) {
+            revealedText = latestText
+        } else {
+            while (true) {
+                val target = latestText
+                if (!target.startsWith(revealedText)) revealedText = ""
+                val nextLength = nextTypingRevealLength(revealedText.length, target.length)
+                if (nextLength > revealedText.length) revealedText = target.substring(0, nextLength)
+                if (!latestStreaming) {
+                    revealedText = latestText
+                    break
+                }
+                delay(12)
+            }
+        }
+    }
+    val source = remember(revealedText, streaming) { normalizeMarkdownForRenderer(revealedText, streaming) }
     val theme = remember {
         val body = Typography.bodyLarge.copy(color = Ink.I100, textDirection = TextDirection.Content)
         MarkdownTheme(
@@ -131,6 +152,18 @@ fun MarkdownBody(text: String, modifier: Modifier = Modifier, streaming: Boolean
             streaming = streaming,
         )
     }
+}
+
+/** Adaptive reveal cadence: smooth at normal output speed, catch up quickly after slow frames. */
+internal fun nextTypingRevealLength(currentLength: Int, targetLength: Int): Int {
+    val remaining = (targetLength - currentLength).coerceAtLeast(0)
+    val step = when {
+        remaining > 96 -> 8
+        remaining > 32 -> 4
+        remaining > 12 -> 2
+        else -> 1
+    }
+    return (currentLength + step).coerceAtMost(targetLength)
 }
 
 /** Repair common heading syntax and escape currency tokens without touching fenced/inline code. */
@@ -298,13 +331,17 @@ fun MonoCodeBlock(code: String, language: String?, modifier: Modifier = Modifier
             Modifier.fillMaxWidth().background(whiteA(0.03f)).padding(start = 18.dp, end = 10.dp, top = 3.dp, bottom = 3.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            if (runnable && !streaming) {
+                CodePreviewControl(showingPreview = showPreview) { showPreview = it }
+                Spacer(Modifier.size(8.dp))
+            }
             Text(
                 language?.trim()?.takeIf { it.isNotBlank() } ?: "text",
                 style = RowMeta.copy(fontFamily = MonoBody.fontFamily),
                 color = Ink.I500,
                 modifier = Modifier.weight(1f),
+                maxLines = 1,
             )
-            if (runnable && !streaming) CodeRunChip(showingPreview = showPreview) { showPreview = it }
             CopyChip(onCopy = { copyToClipboard(context, trimmed, "Code") })
         }
         Hairline()
@@ -326,33 +363,35 @@ fun MonoCodeBlock(code: String, language: String?, modifier: Modifier = Modifier
     }
 }
 
-/** Compact two-icon code/preview switch with a moving selected surface. */
+/** Labeled segmented switch for source and live preview, anchored at the left of the code toolbar. */
 @Composable
-private fun CodeRunChip(showingPreview: Boolean, onSelect: (Boolean) -> Unit) {
+private fun CodePreviewControl(showingPreview: Boolean, onSelect: (Boolean) -> Unit) {
     val activeOffset by androidx.compose.animation.core.animateDpAsState(
-        targetValue = if (showingPreview) 28.dp else 0.dp,
-        animationSpec = tween(180),
+        targetValue = if (showingPreview) 75.dp else 2.dp,
+        animationSpec = tween(190),
         label = "codePreviewToggle",
     )
     Box(
-        Modifier.padding(end = 5.dp).size(width = 56.dp, height = 31.dp)
-            .clip(RoundedCornerShape(9.dp)).background(whiteA(0.10f)),
+        Modifier.padding(end = 2.dp).size(width = 146.dp, height = 34.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(whiteA(0.09f))
+            .border(1.dp, whiteA(0.10f), RoundedCornerShape(10.dp)),
     ) {
         Box(
-            Modifier.offset(x = activeOffset + 2.dp, y = 3.dp).size(24.dp, 25.dp)
-                .clip(RoundedCornerShape(7.dp)).background(whiteA(0.22f)),
+            Modifier.offset(x = activeOffset, y = 3.dp).size(width = 69.dp, height = 27.dp)
+                .clip(RoundedCornerShape(8.dp)).background(whiteA(0.20f)),
         )
         Row(Modifier.fillMaxWidth().fillMaxHeight(), verticalAlignment = Alignment.CenterVertically) {
-            CodeToggleIcon(Lucide.Braces, "Show code", !showingPreview, Modifier.weight(1f).fillMaxHeight()) { onSelect(false) }
-            CodeToggleIcon(Lucide.Play, "Preview code", showingPreview, Modifier.weight(1f).fillMaxHeight()) { onSelect(true) }
+            CodePreviewOption("Code", Lucide.Braces, !showingPreview, Modifier.weight(1f)) { onSelect(false) }
+            CodePreviewOption("Preview", Lucide.Play, showingPreview, Modifier.weight(1f)) { onSelect(true) }
         }
     }
 }
 
 @Composable
-private fun CodeToggleIcon(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+private fun CodePreviewOption(
     label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
     selected: Boolean,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
@@ -360,17 +399,24 @@ private fun CodeToggleIcon(
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.80f else 1f,
-        animationSpec = tween(150),
-        label = "codeTogglePress",
+        targetValue = if (pressed) 0.94f else 1f,
+        animationSpec = tween(120),
+        label = "codePreviewPress",
     )
-    Box(
-        modifier.graphicsLayer { scaleX = scale; scaleY = scale; rotationZ = if (pressed) -5f else 0f }
-            .clip(RoundedCornerShape(7.dp)).background(whiteA(if (pressed) 0.16f else 0f))
-            .clickable(interactionSource = interaction, indication = null, role = Role.Button, onClick = onClick),
-        contentAlignment = Alignment.Center,
+    Row(
+        modifier.fillMaxHeight()
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(interactionSource = interaction, indication = null, role = Role.Button, onClick = onClick)
+            .padding(horizontal = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
     ) {
-        Icon(icon, contentDescription = label, Modifier.size(15.dp), tint = if (selected) Ink.White else Ink.I500)
+        Icon(icon, contentDescription = label, Modifier.size(13.dp),
+            tint = if (selected) Ink.White else Ink.I500)
+        Spacer(Modifier.size(4.dp))
+        Text(label, style = Typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+            color = if (selected) Ink.White else Ink.I500, maxLines = 1)
     }
 }
 

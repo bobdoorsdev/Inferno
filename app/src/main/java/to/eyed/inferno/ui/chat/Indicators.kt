@@ -1,5 +1,6 @@
 package to.eyed.inferno.ui.chat
 
+import android.net.Uri
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.togetherWith
@@ -185,29 +186,28 @@ fun AssistantActivityPanel(
     }
 }
 
-private data class SearchSourceCard(val number: String, val title: String, val url: String, val host: String, val snippet: String = "")
+private data class SearchSourceCard(val title: String, val url: String, val host: String, val snippet: String = "")
 private data class SearchImageCard(val title: String, val url: String, val sourceUrl: String)
-private data class SearchPanelData(val queries: List<String>, val sources: List<SearchSourceCard>, val images: List<SearchImageCard>)
+private data class SearchPanelData(val sources: List<SearchSourceCard>, val images: List<SearchImageCard>)
 
 private fun parseSearchPanel(notes: String): SearchPanelData {
-    val queries = mutableListOf<String>()
     val sources = mutableListOf<SearchSourceCard>()
     val images = mutableListOf<SearchImageCard>()
-    val sourceLine = Regex("""^(\d+)\.\s+\*\*\[([^\]]+)]\((https?://[^)]+)\)\*\*(?:\s+·\s+(.+))?$""")
+    // Accept old saved numbered notes as well as the new clean, unnumbered format.
+    val sourceLine = Regex("""^(?:\d+\.\s+)?\*\*\[([^\]]+)]\((https?://[^)]+)\)\*\*(?:\s+·\s+(.+))?$""")
     val imageLine = Regex("""^!\[([^\]]*)]\((https?://[^\s)]+)(?:\s+"([^"]*)")?\)$""")
     var section = ""
     for (line in notes.lines()) {
         when (line.trim()) {
-            "**Web search**" -> { section = "queries"; continue }
+            "**Web search**" -> { section = "ignored"; continue }
             "**Web sources**" -> { section = "sources"; continue }
             "**Images**" -> { section = "images"; continue }
         }
         when (section) {
-            "queries" -> if (line.trimStart().startsWith("- ")) queries += line.trim().removePrefix("- ").take(100)
             "sources" -> {
                 val match = sourceLine.matchEntire(line.trim())
                 if (match != null) {
-                    sources += SearchSourceCard(match.groupValues[1], match.groupValues[2], match.groupValues[3], match.groupValues[4])
+                    sources += SearchSourceCard(match.groupValues[1], match.groupValues[2], match.groupValues[3])
                 } else if (line.startsWith("   ") && sources.isNotEmpty()) {
                     val previous = sources.removeAt(sources.lastIndex)
                     sources += previous.copy(snippet = line.trim().take(260))
@@ -224,7 +224,12 @@ private fun parseSearchPanel(notes: String): SearchPanelData {
             }
         }
     }
-    return SearchPanelData(queries.distinct().take(4), sources.take(8), images.take(3))
+    return SearchPanelData(sources.take(8), images.take(3))
+}
+
+private fun sourceFaviconUrl(url: String): String? {
+    val host = runCatching { Uri.parse(url).host }.getOrNull()?.takeIf { it.isNotBlank() } ?: return null
+    return "https://www.google.com/s2/favicons?domain=" + Uri.encode(host) + "&sz=64"
 }
 
 @Composable
@@ -256,22 +261,6 @@ private fun SearchResultsView(notes: String, status: String?, modifier: Modifier
                 Text(detail, style = Typography.labelSmall, color = Ink.I500)
             }
         }
-        if (data.queries.isNotEmpty()) {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("SEARCH QUERIES", style = Typography.labelSmall.copy(fontWeight = FontWeight.SemiBold), color = Ink.I500)
-                Row(
-                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    data.queries.forEach { query ->
-                        Box(
-                            Modifier.clip(RoundedCornerShape(9.dp)).background(Ink.SurfaceHigh)
-                                .padding(horizontal = 9.dp, vertical = 6.dp),
-                        ) { Text(query, style = Typography.labelSmall, color = Ink.I300, maxLines = 1) }
-                    }
-                }
-            }
-        }
         if (data.sources.isNotEmpty()) {
             Text("SOURCES", style = Typography.labelSmall.copy(fontWeight = FontWeight.SemiBold), color = Ink.I500)
             Row(
@@ -290,14 +279,21 @@ private fun SearchResultsView(notes: String, status: String?, modifier: Modifier
                         verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                            Box(Modifier.size(22.dp).clip(CircleShape).background(Ink.I800), contentAlignment = Alignment.Center) {
-                                Text(source.host.take(1).uppercase(Locale.ROOT).ifBlank { "W" }, style = Typography.labelSmall.copy(fontWeight = FontWeight.SemiBold), color = Ink.I300)
+                            Box(Modifier.size(24.dp).clip(CircleShape).background(Ink.I800), contentAlignment = Alignment.Center) {
+                                Icon(Lucide.Search, null, Modifier.size(13.dp), tint = Ink.I500)
+                                val favicon = remember(source.url) { sourceFaviconUrl(source.url) }
+                                if (favicon != null) {
+                                    AsyncImage(
+                                        model = favicon,
+                                        contentDescription = source.host + " site icon",
+                                        contentScale = ContentScale.Fit,
+                                        modifier = Modifier.size(22.dp).clip(CircleShape),
+                                    )
+                                }
                             }
                             Text(source.host.ifBlank { "Web source" }, style = Typography.labelSmall, color = Ink.I500, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Spacer(Modifier.weight(1f))
-                            Text(source.number, style = Typography.labelSmall, color = Ink.I500)
                         }
-                        Text(source.title, style = Typography.bodySmall.copy(fontWeight = FontWeight.Medium), color = Ink.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        Text(source.title, style = Typography.bodySmall.copy(fontWeight = FontWeight.Medium), color = Ink.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         if (source.snippet.isNotBlank()) {
                             Text(source.snippet, style = Typography.labelSmall.copy(lineHeight = 16.sp), color = Ink.I300, maxLines = 3, overflow = TextOverflow.Ellipsis)
                         }
@@ -332,8 +328,8 @@ private fun SearchResultsView(notes: String, status: String?, modifier: Modifier
         }
         if (status != null && resultCount == 0) {
             Text("Waiting for the first results…", style = Typography.bodySmall, color = Ink.I500)
-        } else if (notes.isNotBlank() && data.sources.isEmpty() && data.images.isEmpty() && data.queries.isEmpty()) {
-            MarkdownBody(notes)
+        } else if (status == null && notes.isNotBlank() && data.sources.isEmpty() && data.images.isEmpty()) {
+            Text("No previewable results were returned.", style = Typography.bodySmall, color = Ink.I500)
         }
     }
 }

@@ -346,7 +346,6 @@ fun ChatRoot(appVm: AppViewModel, chatVm: ChatViewModel, onBeforeSend: () -> Uni
                                 dev = ChatDevFlags(generationStats = settings.devGenerationStats, turnDetails = settings.devTurnDetails, tokenCounter = settings.devTokenCounter, tokenWords = settings.powerUser),
                                 toolStatus = toolStatus, toolSearchNotes = toolSearchNotes,
                                 streamingAnimations = settings.streamingAnimations,
-                                onFollowUp = { prompt -> onBeforeSend(); haptics.gestureEnd(); chatVm.send(prompt) },
                             )
                         }
                         Column(Modifier.align(Alignment.BottomCenter).widthIn(max = ChatContentMaxWidth), horizontalAlignment = Alignment.CenterHorizontally) {
