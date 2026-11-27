@@ -66,6 +66,7 @@ import to.eyed.inferno.data.ChatMessage
 import to.eyed.inferno.data.ChatRepository
 import to.eyed.inferno.data.MessageStats
 import to.eyed.inferno.ui.S
+import to.eyed.inferno.ui.components.CopyIconButton
 import to.eyed.inferno.ui.components.GhostIconButton
 import to.eyed.inferno.ui.components.GlassMenu
 import to.eyed.inferno.ui.components.Hairline
@@ -290,7 +291,7 @@ private fun SharedTransitionScope.UserBubble(
                     .padding(horizontal = 16.dp, vertical = 11.dp),
             ) {
                 // No SelectionContainer here: its long-press would fight the bubble menu (Copy lives in the menu).
-                Text(msg.content, style = Typography.bodyLarge.copy(textDirection = TextDirection.Content), color = Ink.White)
+                MarkdownBody(msg.content, selectable = false, textColor = Ink.White, fillWidth = false)
             }
             GlassMenu(expanded = menu, onDismiss = { menu = false }, minWidth = 160.dp) {
                 MenuActionRow(Lucide.Pencil, S.edit) { menu = false; onEdit(msg) }
@@ -331,7 +332,7 @@ private fun AssistantMessage(
             ReasoningPanel(reasoning, live = false, thinkingMs = thinkingMs.takeIf { it > 0 } ?: 0L)
             Spacer(Modifier.height(10.dp))
         }
-        if (text.isNotBlank()) MarkdownBody(text)
+        if (text.isNotBlank()) MarkdownBody(text, streaming = streaming)
         if (streaming) Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             BlinkingCaret()
             if (liveMeta != null) Text(liveMeta, style = Meta, color = Ink.I500)
@@ -341,7 +342,7 @@ private fun AssistantMessage(
         AnimatedVisibility(showActions, enter = fadeIn(defaultEffectsSpec()), exit = fadeOut(defaultEffectsSpec())) {
             Column {
                 Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
-                    GhostIconButton(Lucide.Copy, S.copyMessage, onClick = { haptics.tap(); copyToClipboard(context, text, "Inferno message") }, size = 32.dp, iconSize = 15.dp, tint = Ink.I500)
+                    CopyIconButton(S.copyMessage, onCopy = { copyToClipboard(context, text, "Inferno message") }, size = 32.dp, iconSize = 15.dp, tint = Ink.I500)
                     GhostIconButton(Lucide.GitBranch, "Branch from this reply", onClick = { haptics.tap(); onBranch() }, size = 32.dp, iconSize = 15.dp, tint = Ink.I500)
                     if (showRegenerate) GhostIconButton(Lucide.RefreshCw, S.regenerate, onClick = { haptics.tap(); onRegenerate() }, size = 32.dp, iconSize = 15.dp, tint = Ink.I500)
                     if (stats != null && showDetails) GhostIconButton(Lucide.Info, S.details, onClick = { haptics.tap(); onDetails() }, size = 32.dp, iconSize = 15.dp, tint = Ink.I500)
