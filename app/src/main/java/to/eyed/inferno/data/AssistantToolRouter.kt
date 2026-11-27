@@ -637,7 +637,6 @@ object AssistantToolRouter {
                     append(" \"").append(markdownUrl(it)).append("\"")
                 }
                 append(")")
-                append("\n[Image source](").append(markdownUrl(image.sourceUrl)).append(")")
             }
             blocks.add((best + 1).coerceAtMost(blocks.size), imageMarkdown)
         }

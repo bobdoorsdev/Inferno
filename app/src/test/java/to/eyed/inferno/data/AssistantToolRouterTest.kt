@@ -74,7 +74,7 @@ class AssistantToolRouterTest {
         assertTrue(answer.contains("[1](https://one.example/page)"))
         assertTrue(answer.contains("[2](https://two.example/page)"))
         assertTrue(answer.contains("![World Cup](https://images.example/cup.jpg)"))
-        assertTrue(answer.contains("[Image source](https://source.example/cup)"))
+        assertFalse(answer.contains("[Image source]"))
     }
 
     @Test fun removesCitationNumbersWithoutMatchingSources() {
@@ -227,6 +227,7 @@ class AssistantToolRouterTest {
         )
         assertTrue(notes!!.contains("https://thumb.example/image.jpg"))
         assertTrue(notes.contains("\"https://cdn.example/full.jpg\""))
+        assertTrue(notes.contains("[Source page](https://store.example/product)"))
         assertFalse(notes.contains("gaming PCs"))
     }
 
