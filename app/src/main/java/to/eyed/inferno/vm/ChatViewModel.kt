@@ -514,7 +514,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
             handle[KEY_ACTIVE] = fresh.id
             // The answer now belongs to the new chat: re-key so Stop there cancels it.
             genJobs.remove(id)?.let { genJobs[fresh.id] = it }
-            if (pending != null) { c.chats.appendUser(fresh.id, pending.content, pending.images); run(fresh.id) }
+            if (pending != null) { c.chats.appendUser(fresh.id, pending.content, pending.images, c.engine.state.value.modelOrNull?.displayName); run(fresh.id) }
         }
     }
 
