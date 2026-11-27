@@ -118,7 +118,7 @@ object AssistantToolRouter {
     /** Only accept a city/area explicitly named by the user; never fill it from device or account location. */
     fun explicitWeatherLocation(userText: String): String? {
         val match = Regex(
-            """\b(?:in|near|around|at)\s+([\p{L}][\p{L}\p{M}.'’ -]{1,70})""",
+            """\b(?:in|near|around|at|for)\s+([\p{L}][\p{L}\p{M}.'’ -]{1,70})""",
             RegexOption.IGNORE_CASE,
         ).findAll(userText).lastOrNull() ?: return null
         val location = match.groupValues[1]

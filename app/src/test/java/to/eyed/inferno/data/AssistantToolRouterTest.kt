@@ -233,6 +233,7 @@ class AssistantToolRouterTest {
 
     @Test fun weatherLocationComesOnlyFromTheCityTheUserActuallyTyped() {
         assertEquals("Piumhi", AssistantToolRouter.explicitWeatherLocation("What's the current weather in Piumhi?"))
+        assertEquals("London", AssistantToolRouter.explicitWeatherLocation("What's the weather for London?"))
         assertEquals("Rio de Janeiro", AssistantToolRouter.explicitWeatherLocation("Is it raining near Rio de Janeiro right now?"))
         assertNull(AssistantToolRouter.explicitWeatherLocation("What's the weather today?"))
         assertNull(AssistantToolRouter.explicitWeatherLocation("What's the weather like near me?"))

@@ -142,7 +142,6 @@ class WebSearchClient(private val client: OkHttpClient = DEFAULT_CLIENT) {
         val latitude = place["latitude"]?.jsonPrimitive?.doubleOrNull ?: return@withContext null
         val longitude = place["longitude"]?.jsonPrimitive?.doubleOrNull ?: return@withContext null
         val name = place["name"]?.jsonPrimitive?.contentOrNull ?: query
-        val country = place["country"]?.jsonPrimitive?.contentOrNull.orEmpty()
         val forecastUrl = "https://api.open-meteo.com/v1/forecast?latitude=$latitude&longitude=$longitude&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m&timezone=auto"
         val forecastText = client.newCall(Request.Builder().url(forecastUrl).header("User-Agent", USER_AGENT).build())
             .execute().use { response ->
@@ -154,7 +153,7 @@ class WebSearchClient(private val client: OkHttpClient = DEFAULT_CLIENT) {
         }.getOrNull() ?: return@withContext null
         fun value(key: String) = current[key]?.jsonPrimitive?.contentOrNull ?: "unavailable"
         val code = current["weather_code"]?.jsonPrimitive?.intOrNull ?: -1
-        val placeName = listOf(name, country).filter { it.isNotBlank() }.joinToString(", ")
+        val placeName = name.ifBlank { location }
         "$placeName: ${weatherDescription(code)}, ${value("temperature_2m")} °C, feels like ${value("apparent_temperature")} °C, humidity ${value("relative_humidity_2m")}%, precipitation ${value("precipitation")} mm, wind ${value("wind_speed_10m")} km/h. Local observation time: ${value("time")}."
     }
 
