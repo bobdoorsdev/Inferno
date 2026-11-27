@@ -122,12 +122,12 @@ object AssistantToolRouter {
             RegexOption.IGNORE_CASE,
         ).findAll(userText).lastOrNull() ?: return null
         val location = match.groupValues[1]
-            .replace(Regex("""\s+(?:today|tomorrow|tonight|now|right now|this morning|this afternoon|this evening|this week|next week|for|at)$""", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("""\s+(?:(?:for|on)\s+)?(?:today|tomorrow|tonight|now|right now|this morning|this afternoon|this evening|this week|next week|the next)$|\s+(?:for|at)$""", RegexOption.IGNORE_CASE), "")
             .trim()
             .trimEnd(' ', '.', '?', '!', ',')
             .take(100)
         val normalized = location.lowercase(Locale.ROOT)
-        val generic = setOf("me", "here", "there", "home", "my city", "the city", "this city", "my area", "the area")
+        val generic = setOf("me", "here", "there", "home", "my city", "the city", "this city", "my area", "the area", "today", "tomorrow", "tonight", "now", "this week", "next week", "the next")
         if (location.length < 2 || normalized in generic || !location.any { it.isLetter() }) return null
         if (Regex("""^\d+(?:\s*(?:am|pm|h))?$""", RegexOption.IGNORE_CASE).matches(location)) return null
         return location
@@ -674,7 +674,7 @@ object AssistantToolRouter {
                 "location" to JsonPrimitive(location),
             ),
         ).toString()
-        val block = "\${fence}inferno-widget\n$widget\n$fence"
+        val block = fence + "inferno-widget\n" + widget + "\n" + fence
         return if (answer.isBlank()) block else answer.trimEnd() + "\n\n" + block
     }
 
