@@ -88,21 +88,20 @@ fun MarkdownBody(text: String, modifier: Modifier = Modifier, streaming: Boolean
     val latestText by rememberUpdatedState(text)
     val latestStreaming by rememberUpdatedState(streaming && animateStreaming)
     var revealedText by remember { mutableStateOf(if (streaming && animateStreaming) "" else text) }
+    LaunchedEffect(text, streaming, animateStreaming) {
+        if (!streaming || !animateStreaming) revealedText = text
+    }
     LaunchedEffect(streaming, animateStreaming) {
-        if (!streaming || !animateStreaming) {
-            revealedText = latestText
-        } else {
-            while (true) {
+        if (streaming && animateStreaming) {
+            while (latestStreaming) {
                 val target = latestText
                 if (!target.startsWith(revealedText)) revealedText = ""
                 val nextLength = nextTypingRevealLength(revealedText.length, target.length)
                 if (nextLength > revealedText.length) revealedText = target.substring(0, nextLength)
-                if (!latestStreaming) {
-                    revealedText = latestText
-                    break
-                }
                 delay(12)
             }
+        } else {
+            revealedText = latestText
         }
     }
     val source = remember(revealedText, streaming) { normalizeMarkdownForRenderer(revealedText, streaming) }
