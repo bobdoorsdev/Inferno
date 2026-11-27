@@ -2,10 +2,8 @@ package to.eyed.inferno.ui.chat
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import to.eyed.inferno.ui.theme.pressScale
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,34 +20,22 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.drawscope.clipPath
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.AnnotatedString
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.Role
-import to.eyed.inferno.ui.components.CopyGlyph
-import to.eyed.inferno.ui.components.CopyIconButton
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
-import androidx.compose.ui.text.TextLayoutResult
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextDirection
+import androidx.compose.ui.text.style.TextMotion
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.swmansion.enriched.markdown.compose.CodeBlockLayout
@@ -58,11 +44,6 @@ import com.swmansion.enriched.markdown.compose.markdownStyle
 import com.swmansion.enriched.markdown.math.LatexMathPlugin
 import com.swmansion.enriched.markdown.math.compose.inlineMath
 import com.swmansion.enriched.markdown.math.compose.math
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.withContext
-import java.text.BreakIterator
 import com.mikepenz.markdown.compose.components.markdownComponents
 import com.mikepenz.markdown.compose.elements.MarkdownCodeBlock
 import com.mikepenz.markdown.compose.elements.MarkdownCodeFence
@@ -74,7 +55,11 @@ import com.mikepenz.markdown.m3.markdownColor
 import com.mikepenz.markdown.m3.markdownTypography
 import com.mikepenz.markdown.model.markdownDimens
 import com.mikepenz.markdown.model.rememberMarkdownState
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import to.eyed.inferno.data.LocalToolCommandParser
 import to.eyed.inferno.ui.S
+import to.eyed.inferno.ui.components.CopyIconButton
 import to.eyed.inferno.ui.components.Hairline
 import to.eyed.inferno.ui.components.copyToClipboard
 import to.eyed.inferno.ui.theme.Ink
@@ -82,14 +67,11 @@ import to.eyed.inferno.ui.theme.MonoBody
 import to.eyed.inferno.ui.theme.Radii
 import to.eyed.inferno.ui.theme.RowMeta
 import to.eyed.inferno.ui.theme.Typography
-import to.eyed.inferno.ui.theme.rememberHaptics
 import to.eyed.inferno.ui.theme.whiteA
 
 /**
- * Assistant markdown in the monochrome language: white headings, I100 body, mono code on I900 cards,
- * white underlined links (never blue). Streaming strategy: the source is split into stable block-level
- * chunks so only the growing last chunk re-parses while tokens arrive; `key(index)` keeps every earlier
- * chunk's parse alive. `TextDirection.Content` keeps RTL answers readable inside the LTR chrome.
+ * Render every incoming chunk as real Markdown immediately. Streaming uses Compose's text-motion
+ * interpolation, not a timer-driven reveal cursor; new tokens never wait behind an animation queue.
  */
 @Composable
 fun MarkdownBody(
@@ -97,74 +79,25 @@ fun MarkdownBody(
     modifier: Modifier = Modifier,
     streaming: Boolean = false,
     selectable: Boolean = true,
-    textColor: Color = Ink.I100,
+    textColor: androidx.compose.ui.graphics.Color = Ink.I100,
     fillWidth: Boolean = true,
 ) {
-    // Tool control tags are transport syntax, never user-facing text. Hide complete and partially
-    // streamed markers so they cannot flash in the conversation while the model is deciding to call a tool.
-    val displayText = remember(text) {
-        val complete = text.replace(Regex("""\[\[inferno_tool:(time|location|weather)]]"""), "")
-        val partialStart = complete.lastIndexOf("[[inferno_tool:")
-        if (partialStart >= 0 && !complete.substring(partialStart).contains("]]")) complete.substring(0, partialStart) else complete
-    }
-    val parts = remember(displayText) { InlineWidgetMarkup.split(displayText) }
-    if (parts.none { it.widget != null }) {
-        MarkdownTextBody(displayText, modifier, streaming, selectable, textColor, fillWidth)
-    } else {
-        val lastText = parts.indexOfLast { it.widget == null && it.text.isNotBlank() }
+    val visibleText = remember(text) { LocalToolCommandParser.visibleText(text) }
+    val chunks = remember(visibleText) { MarkdownChunker.chunks(visibleText) }
+    val content: @Composable () -> Unit = {
         Column(
             if (fillWidth) modifier.fillMaxWidth() else modifier,
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            parts.forEachIndexed { index, part ->
-                key(index) {
-                    if (part.widget != null) {
-                        InlineWidget(part.widget, part.arguments)
-                    } else if (part.text.isNotBlank()) {
-                        MarkdownTextBody(
-                            part.text,
-                            streaming = streaming && index == lastText,
-                            selectable = selectable,
-                            textColor = textColor,
-                            fillWidth = fillWidth,
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun MarkdownTextBody(
-    text: String,
-    modifier: Modifier = Modifier,
-    streaming: Boolean = false,
-    selectable: Boolean = true,
-    textColor: Color = Ink.I100,
-    fillWidth: Boolean = true,
-) {
-    val chunks = remember(text) { MarkdownChunker.chunks(text) }
-    // A single reveal cursor runs at a time. Earlier chunks are committed before the next enters the tree.
-    var revealedChunks by remember { mutableIntStateOf(0) }
-    var hasStreamed by remember { mutableStateOf(streaming) }
-    if (streaming) hasStreamed = true
-    val animateTail = hasStreamed && revealedChunks < chunks.size
-    val content: @Composable () -> Unit = {
-        Column(if (fillWidth) modifier.fillMaxWidth() else modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             chunks.forEachIndexed { index, chunk ->
                 key(index) {
-                    when {
-                        !animateTail || index < revealedChunks ->
-                            MarkdownChunkView(chunk, textColor = textColor, selectable = selectable, fillWidth = fillWidth)
-                        index == revealedChunks ->
-                            StreamingMarkdownTail(
-                                chunk = chunk,
-                                completeWhenCaughtUp = !streaming || index < chunks.lastIndex,
-                                onRevealComplete = { revealedChunks = maxOf(revealedChunks, index + 1) },
-                            )
-                        else -> Unit
-                    }
+                    MarkdownChunkView(
+                        chunk = chunk,
+                        textColor = textColor,
+                        selectable = selectable,
+                        fillWidth = fillWidth,
+                        streaming = streaming,
+                    )
                 }
             }
         }
@@ -172,136 +105,14 @@ private fun MarkdownTextBody(
     if (selectable) SelectionContainer { content() } else content()
 }
 
-/**
- * The live tail is revealed at a fixed cadence, independently of native token arrival and markdown
- * parsing. A fractional final grapheme creates the soft scan boundary; no visible scan-line is drawn.
- */
 @Composable
-private fun StreamingRevealText(
-    text: String,
-    style: TextStyle,
-    color: Color,
-    modifier: Modifier = Modifier,
-    completeWhenCaughtUp: Boolean = false,
-    onRevealComplete: () -> Unit = {},
-    annotatedText: AnnotatedString? = null,
-) {
-    val boundaries = remember(text) {
-        val iterator = BreakIterator.getCharacterInstance()
-        iterator.setText(text)
-        buildList {
-            var boundary = iterator.first()
-            add(boundary)
-            boundary = iterator.next()
-            while (boundary != BreakIterator.DONE) {
-                add(boundary)
-                boundary = iterator.next()
-            }
-        }.ifEmpty { listOf(0) }
-    }
-    val targetCount = boundaries.size - 1
-    val latestTarget by rememberUpdatedState(targetCount)
-    val latestCompleteWhenCaughtUp by rememberUpdatedState(completeWhenCaughtUp)
-    val latestOnRevealComplete by rememberUpdatedState(onRevealComplete)
-    var progress by remember { mutableFloatStateOf(0f) }
-    var layoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
-
-    LaunchedEffect(Unit) {
-        while (true) {
-            if (progress < latestTarget) {
-                // Half a grapheme per tick gives the invisible boundary time to cross the middle
-                // of a glyph rather than revealing whole tokens as soon as they arrive.
-                progress = (progress + 1f).coerceAtMost(latestTarget.toFloat())
-                delay(16)
-            } else {
-                if (latestCompleteWhenCaughtUp) {
-                    latestOnRevealComplete()
-                    return@LaunchedEffect
-                }
-                snapshotFlow { latestTarget to latestCompleteWhenCaughtUp }.first { (target, finish) ->
-                    target.toFloat() > progress || finish
-                }
-            }
-        }
-    }
-
-    Text(
-        text = annotatedText?.takeIf { it.text == text } ?: AnnotatedString(text),
-        modifier = modifier.drawWithContent {
-            val layout = layoutResult ?: return@drawWithContent
-            val whole = progress.toInt().coerceIn(0, targetCount)
-            val fraction = (progress - whole).coerceIn(0f, 1f)
-            val startOffset = boundaries.getOrElse(whole) { text.length }.coerceIn(0, text.length)
-            val endOffset = boundaries.getOrElse(whole + 1) { text.length }.coerceIn(0, text.length)
-            val currentLine = layout.getLineForOffset(startOffset)
-            val endLine = layout.getLineForOffset(endOffset)
-            val revealPath = Path()
-
-            for (line in 0..currentLine) {
-                val top = layout.getLineTop(line)
-                val bottom = layout.getLineBottom(line)
-                when {
-                    line < currentLine || endLine > currentLine || startOffset == endOffset -> {
-                        // Earlier lines are fully revealed. A line-break/wrap has no visible glyph
-                        // to sweep through, so finish the current line before advancing.
-                        revealPath.addRect(Rect(0f, top, size.width, bottom))
-                    }
-                    else -> {
-                        val fromX = layout.getHorizontalPosition(startOffset, usePrimaryDirection = true)
-                        val toX = layout.getHorizontalPosition(endOffset, usePrimaryDirection = true)
-                        val boundaryX = (fromX + (toX - fromX) * fraction).coerceIn(0f, size.width)
-                        // Respect the paragraph's visual direction: left-to-right or right-to-left.
-                        if (toX >= fromX) {
-                            revealPath.addRect(Rect(0f, top, boundaryX, bottom))
-                        } else {
-                            revealPath.addRect(Rect(boundaryX, top, size.width, bottom))
-                        }
-                    }
-                }
-            }
-            clipPath(revealPath) { this@drawWithContent.drawContent() }
-        },
-        style = style.copy(color = color),
-        color = color,
-        onTextLayout = { layoutResult = it },
-    )
-}
-
-/** Lightweight live tail: code fences retain their card; prose avoids reparsing incomplete Markdown. */
-@Composable
-private fun StreamingMarkdownTail(
+private fun MarkdownChunkView(
     chunk: String,
-    completeWhenCaughtUp: Boolean,
-    onRevealComplete: () -> Unit,
+    textColor: androidx.compose.ui.graphics.Color,
+    selectable: Boolean,
+    fillWidth: Boolean,
+    streaming: Boolean,
 ) {
-    val first = chunk.lineSequence().firstOrNull()?.trim().orEmpty()
-    val opener = Regex("""^(\x60{3,}|~{3,})([A-Za-z0-9_+.-]*)$""").matchEntire(first)
-    if (opener != null) {
-        val marker = opener.groupValues[1]
-        val closeIndex = chunk.lines().withIndex().firstOrNull { (index, line) ->
-            index > 0 && line.trim().let { it.length >= marker.length && it.all { c -> c == marker[0] } }
-        }?.index ?: -1
-        val codeLines = chunk.lines().drop(1).let { lines -> if (closeIndex > 0) lines.take(closeIndex - 1) else lines }
-        MonoCodeBlock(
-            codeLines.joinToString("\n"),
-            opener.groupValues[2],
-            streaming = true,
-            completeWhenCaughtUp = completeWhenCaughtUp,
-            onRevealComplete = onRevealComplete,
-        )
-    } else {
-        StreamingRevealText(
-            text = chunk,
-            style = Typography.bodyLarge.copy(textDirection = TextDirection.Content),
-            color = Ink.I100,
-            completeWhenCaughtUp = completeWhenCaughtUp,
-            onRevealComplete = onRevealComplete,
-        )
-    }
-}
-
-@Composable
-private fun MarkdownChunkView(chunk: String, textColor: Color, selectable: Boolean, fillWidth: Boolean) {
     if (SafeMathMarkdown.containsMath(chunk)) {
         val uriHandler = LocalUriHandler.current
         val style = remember(textColor) {
@@ -360,8 +171,12 @@ private fun MarkdownChunkView(chunk: String, textColor: Color, selectable: Boole
             )
         }
     } else {
-        val body = Typography.bodyLarge.copy(color = textColor, textDirection = TextDirection.Content)
-        // Parse synchronously and retain the last good tree: no blank placeholder flash while streaming.
+        val body = Typography.bodyLarge.copy(
+            color = textColor,
+            textDirection = TextDirection.Content,
+            textMotion = if (streaming) TextMotion.Animated else TextMotion.Static,
+        )
+        // Immediate first parse + retained prior tree avoid placeholder flashes as the tail grows.
         val state = rememberMarkdownState(content = chunk, retainState = true, immediate = true)
         Markdown(
             markdownState = state,
@@ -414,25 +229,42 @@ private fun MarkdownChunkView(chunk: String, textColor: Color, selectable: Boole
     }
 }
 
-/** Code card: language bar with a copy action, hairline seam, horizontally scrolling mono code. */
+/** The code card keeps its previous syntax spans while only the unfinished line is re-highlighted. */
 @Composable
 fun MonoCodeBlock(
     code: String,
     language: String?,
     modifier: Modifier = Modifier,
-    streaming: Boolean = false,
-    completeWhenCaughtUp: Boolean = false,
-    onRevealComplete: () -> Unit = {},
 ) {
     val shape = RoundedCornerShape(Radii.row)
     val context = LocalContext.current
-    val trimmed = code.trimEnd('\n')
+    val trimmed = code.trimEnd('\n').take(32_000)
+    var highlightedSource by remember { mutableStateOf("") }
     var highlighted by remember { mutableStateOf<AnnotatedString?>(null) }
+
     LaunchedEffect(trimmed, language) {
-        delay(36)
-        highlighted = withContext(Dispatchers.Default) { highlightCode(trimmed.take(32_000), language) }
+        val previousSource = highlightedSource
+        val previousHighlight = highlighted
+        val result = withContext(Dispatchers.Default) {
+            highlightCodeIncremental(previousSource, previousHighlight, trimmed, language)
+        }
+        highlightedSource = trimmed
+        highlighted = result
     }
-    val currentHighlight = highlighted?.takeIf { it.text == trimmed }
+
+    val displayed = remember(trimmed, highlightedSource, highlighted) {
+        val current = highlighted
+        when {
+            current == null -> AnnotatedString(trimmed)
+            current.text == trimmed -> current
+            trimmed.startsWith(highlightedSource) -> AnnotatedString.Builder().apply {
+                append(current)
+                append(trimmed.substring(highlightedSource.length))
+            }.toAnnotatedString()
+            else -> AnnotatedString(trimmed)
+        }
+    }
+
     Column(
         modifier
             .fillMaxWidth()
@@ -441,7 +273,7 @@ fun MonoCodeBlock(
             .border(1.dp, whiteA(0.08f), shape),
     ) {
         Row(
-            Modifier.fillMaxWidth().background(whiteA(0.03f)).padding(start = 14.dp, end = 6.dp, top = 3.dp, bottom = 3.dp),
+            Modifier.fillMaxWidth().background(whiteA(0.03f)).padding(start = 14.dp, end = 6.dp, top = 2.dp, bottom = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
@@ -454,19 +286,7 @@ fun MonoCodeBlock(
         }
         Hairline()
         Box(Modifier.horizontalScroll(rememberScrollState())) {
-            if (streaming) {
-                StreamingRevealText(
-                    text = trimmed,
-                    style = MonoBody.copy(color = CodePalette.Text),
-                    color = CodePalette.Text,
-                    modifier = Modifier.padding(14.dp),
-                    completeWhenCaughtUp = completeWhenCaughtUp,
-                    onRevealComplete = onRevealComplete,
-                    annotatedText = currentHighlight,
-                )
-            } else {
-                Text(currentHighlight ?: AnnotatedString(trimmed), style = MonoBody.copy(color = CodePalette.Text), softWrap = false, modifier = Modifier.padding(14.dp))
-            }
+            Text(displayed, style = MonoBody.copy(color = CodePalette.Text), softWrap = false, modifier = Modifier.padding(14.dp))
         }
     }
 }
