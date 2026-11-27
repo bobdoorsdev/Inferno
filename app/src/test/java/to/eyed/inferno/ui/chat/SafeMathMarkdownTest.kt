@@ -12,7 +12,7 @@ class SafeMathMarkdownTest {
 y = mx + b
 \]"""
         val normalized = SafeMathMarkdown.normalize(source)
-        assertTrue(normalized.contains("""Value $x^2 + 1$"""))
+        assertTrue(normalized.contains("Value $" + "x^2 + 1$"))
         assertTrue(normalized.contains("$$\ny = mx + b\n$$"))
         assertTrue(SafeMathMarkdown.containsMath(source))
     }
