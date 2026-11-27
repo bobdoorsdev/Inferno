@@ -31,6 +31,10 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.clipPath
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
@@ -38,12 +42,11 @@ import androidx.compose.ui.semantics.Role
 import to.eyed.inferno.ui.components.CopyGlyph
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextDirection
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.swmansion.enriched.markdown.compose.CodeBlockLayout
@@ -169,10 +172,13 @@ private fun StreamingRevealText(
     val latestCompleteWhenCaughtUp by rememberUpdatedState(completeWhenCaughtUp)
     val latestOnRevealComplete by rememberUpdatedState(onRevealComplete)
     var progress by remember { mutableFloatStateOf(0f) }
+    var layoutResult by remember(text) { mutableStateOf<TextLayoutResult?>(null) }
 
     LaunchedEffect(Unit) {
         while (true) {
             if (progress < latestTarget) {
+                // Half a grapheme per tick gives the invisible boundary time to cross the middle
+                // of a glyph rather than revealing whole tokens as soon as they arrive.
                 progress = (progress + 0.5f).coerceAtMost(latestTarget.toFloat())
                 delay(8)
             } else {
@@ -187,27 +193,46 @@ private fun StreamingRevealText(
         }
     }
 
-    val whole = progress.toInt().coerceIn(0, targetCount)
-    val fraction = (progress - whole).coerceIn(0f, 1f)
-    val shownEnd = boundaries.getOrElse(whole) { text.length }
-    val nextEnd = boundaries.getOrElse(whole + 1) { text.length }
-    val revealed = remember(text, shownEnd, nextEnd, fraction, color) {
-        buildAnnotatedString {
-            if (shownEnd > 0) append(text.substring(0, shownEnd))
-            if (shownEnd < text.length) {
-                withStyle(SpanStyle(color = color.copy(alpha = fraction))) {
-                    append(text.substring(shownEnd, nextEnd))
-                }
-                if (nextEnd < text.length) {
-                    withStyle(SpanStyle(color = color.copy(alpha = 0f))) {
-                        append(text.substring(nextEnd))
+    Text(
+        text = text,
+        modifier = modifier.drawWithContent {
+            val layout = layoutResult ?: return@drawWithContent
+            val whole = progress.toInt().coerceIn(0, targetCount)
+            val fraction = (progress - whole).coerceIn(0f, 1f)
+            val startOffset = boundaries.getOrElse(whole) { text.length }.coerceIn(0, text.length)
+            val endOffset = boundaries.getOrElse(whole + 1) { text.length }.coerceIn(0, text.length)
+            val currentLine = layout.getLineForOffset(startOffset)
+            val endLine = layout.getLineForOffset(endOffset)
+            val revealPath = Path()
+
+            for (line in 0..currentLine) {
+                val top = layout.getLineTop(line)
+                val bottom = layout.getLineBottom(line)
+                when {
+                    line < currentLine || endLine > currentLine || startOffset == endOffset -> {
+                        // Earlier lines are fully revealed. A line-break/wrap has no visible glyph
+                        // to sweep through, so finish the current line before advancing.
+                        revealPath.addRect(Rect(0f, top, size.width, bottom))
+                    }
+                    else -> {
+                        val fromX = layout.getHorizontalPosition(startOffset, usePrimaryDirection = true)
+                        val toX = layout.getHorizontalPosition(endOffset, usePrimaryDirection = true)
+                        val boundaryX = (fromX + (toX - fromX) * fraction).coerceIn(0f, size.width)
+                        // Respect the paragraph's visual direction: left-to-right or right-to-left.
+                        if (toX >= fromX) {
+                            revealPath.addRect(Rect(0f, top, boundaryX, bottom))
+                        } else {
+                            revealPath.addRect(Rect(boundaryX, top, size.width, bottom))
+                        }
                     }
                 }
             }
-        }
-    }
-
-    Text(revealed, modifier = modifier, style = style.copy(color = color), color = color)
+            clipPath(revealPath) { this@drawWithContent.drawContent() }
+        },
+        style = style.copy(color = color),
+        color = color,
+        onTextLayout = { layoutResult = it },
+    )
 }
 
 /** Lightweight live tail: code fences retain their card; prose avoids reparsing incomplete Markdown. */
