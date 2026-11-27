@@ -449,9 +449,8 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
                         _lastStats.value = ev.stats
                         if (ev.stats.imageEncodeMs > 0 && promptImages.isNotEmpty()) persistEncodeSample(model.id, detail, ev.stats.imageEncodeMs, promptImages)
                         appVm.markFirstTurnOk()
-                        // Keep the reveal mounted until an explicit local-tool continuation also finishes.
+                        // Keep the live message mounted until any explicit local-tool continuation also finishes.
                         stream.publish(force = true)
-                        delay(50)
                         completedNormally = true
                     }
                     GenerationEvent.NeedsTruncation -> { stream.close(); setGen(conversationId, GenState.Error(S.messageExceedsContext)) }
@@ -641,7 +640,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
         }
     }
 
-    /** Accumulates the turn and publishes GenState at <= 20 Hz with a tok/s figure refreshed at 2 Hz. */
+    /** Accumulates the turn and publishes GenState at roughly 60 Hz with tok/s refreshed at 2 Hz. */
     private inner class Streamer(private val id: String) {
         val text = StringBuilder()
         val reasoning = StringBuilder()

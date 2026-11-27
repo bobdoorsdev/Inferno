@@ -54,6 +54,8 @@ object LocalToolCommandParser {
     fun isExplicitlyRequested(userText: String, command: LocalToolCommand): Boolean {
         val prompt = userText.lowercase(Locale.ROOT)
         fun matches(pattern: String) = Regex(pattern, RegexOption.IGNORE_CASE).containsMatchIn(prompt)
+        val codeGeneration = matches("""\\b(write|create|make|generate|build|draft)\\b.{0,100}\\b(html|code|script|website|webpage|javascript|python|luau|program|app)\\b""")
+        if (codeGeneration) return false
         return when (command.name) {
             "time" -> matches("""\b(what time|time is it|current time|local time|what's the time|que horas|qual e a hora|horas sao|horario agora|current date|today's date|what date|data de hoje|que dia e hoje)\b""")
             "location" -> matches("""\b(where am i|my location|current location|where do i live|what city am i|where is my phone|minha localizacao|onde estou|onde eu moro|qual cidade estou)\b""")
