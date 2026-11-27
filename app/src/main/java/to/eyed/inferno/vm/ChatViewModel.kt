@@ -291,7 +291,7 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
                     genJobs.remove(NO_CHAT)?.let { genJobs[newId] = it }   // re-key so Stop in the new chat finds it
                 }
             genStates.update { it - target }
-            c.chats.appendUser(id, text, atts)
+            c.chats.appendUser(id, text, atts, c.engine.state.value.modelOrNull?.displayName)
             if (_pending.value == atts) { _pending.value = emptyList(); savePending() }
             run(id)
         }
