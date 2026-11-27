@@ -115,6 +115,24 @@ object AssistantToolRouter {
         return (userText.trim().take(150) + " product photos").take(180)
     }
 
+    /** Only accept a city/area explicitly named by the user; never fill it from device or account location. */
+    fun explicitWeatherLocation(userText: String): String? {
+        val match = Regex(
+            """\b(?:in|near|around|at)\s+([\p{L}][\p{L}\p{M}.'’ -]{1,70})""",
+            RegexOption.IGNORE_CASE,
+        ).findAll(userText).lastOrNull() ?: return null
+        val location = match.groupValues[1]
+            .replace(Regex("""\s+(?:today|tomorrow|tonight|now|right now|this morning|this afternoon|this evening|this week|next week|for|at)$""", RegexOption.IGNORE_CASE), "")
+            .trim()
+            .trimEnd(' ', '.', '?', '!', ',')
+            .take(100)
+        val normalized = location.lowercase(Locale.ROOT)
+        val generic = setOf("me", "here", "there", "home", "my city", "the city", "this city", "my area", "the area")
+        if (location.length < 2 || normalized in generic || !location.any { it.isLetter() }) return null
+        if (Regex("""^\d+(?:\s*(?:am|pm|h))?$""", RegexOption.IGNORE_CASE).matches(location)) return null
+        return location
+    }
+
     /**
      * Rejects tool fields that do not correspond to an actual request in the latest user message.
      * The planner may suggest tools, but it cannot create a conversion/calculation request on its own.
@@ -141,7 +159,7 @@ object AssistantToolRouter {
             regexText = plan.regexText.takeIf { regexRequest },
             regexFlags = plan.regexFlags.takeIf { regexRequest },
             colorValue = plan.colorValue.takeIf { colorRequest },
-            weatherLocation = plan.weatherLocation.takeIf { weatherRequest },
+            weatherLocation = explicitWeatherLocation(userText).takeIf { weatherRequest },
             imagePrompt = plan.imagePrompt.takeIf { shouldConsiderImageGeneration(userText) },
         )
     }
@@ -183,7 +201,7 @@ object AssistantToolRouter {
         ```inferno-widget
         {"type":"weather","location":"Piumhi, Minas Gerais"}
         ```
-        Multiple widget blocks are allowed. Place each beside its relevant explanation. Do not describe live weather conditions in prose when a weather widget is requested; show the widget instead.
+        Multiple widget blocks are allowed. Place each beside its relevant explanation. For any current-weather request with a city explicitly written by the user, you MUST show a weather widget block; for a weather-only request, output the widget without a prose weather description. Do not infer the city from device or account metadata.
         Supported types:
         - weather: {"type":"weather","location":"city, region","title":"optional"} — current conditions auto-refresh about every two minutes.
         - clock: {"type":"clock","timezone":"America/Sao_Paulo"} — live world clock.
@@ -641,6 +659,23 @@ object AssistantToolRouter {
             blocks.add((best + 1).coerceAtMost(blocks.size), imageMarkdown)
         }
         return blocks.joinToString("\n\n").trimEnd()
+    }
+
+    /** Adds a live weather card after an explicit city lookup, even if a small model omits widget syntax. */
+    fun ensureWeatherWidget(answer: String, explicitLocation: String?): String {
+        val location = explicitLocation?.trim()?.takeIf { it.length >= 2 } ?: return answer
+        val fence = 96.toChar().toString().repeat(3)
+        val fenceRegex = Regex.escape(fence) + """(?:inferno-widget|widget)\s*[\r\n]+.*?["']type["']\s*:\s*["']weather["'].*?""" + Regex.escape(fence)
+        val alreadyIncluded = Regex(fenceRegex, setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)).containsMatchIn(answer)
+        if (alreadyIncluded) return answer
+        val widget = JsonObject(
+            mapOf(
+                "type" to JsonPrimitive("weather"),
+                "location" to JsonPrimitive(location),
+            ),
+        ).toString()
+        val block = "\${fence}inferno-widget\n$widget\n$fence"
+        return if (answer.isBlank()) block else answer.trimEnd() + "\n\n" + block
     }
 
     private fun markdownUrl(url: String): String =

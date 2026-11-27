@@ -231,12 +231,24 @@ class AssistantToolRouterTest {
         assertFalse(notes.contains("gaming PCs"))
     }
 
-    @Test fun weatherLocationIsParsedForThePrivateWeatherTool() {
-        val plan = AssistantToolRouter.parse(
-            """{"decision":"answer","weather_location":"Piumhi, Minas Gerais, Brazil","current_time":true}"""
-        )
-        assertEquals("Piumhi, Minas Gerais, Brazil", plan.weatherLocation)
-        assertTrue(plan.currentTime)
+    @Test fun weatherLocationComesOnlyFromTheCityTheUserActuallyTyped() {
+        assertEquals("Piumhi", AssistantToolRouter.explicitWeatherLocation("What's the current weather in Piumhi?"))
+        assertEquals("Rio de Janeiro", AssistantToolRouter.explicitWeatherLocation("Is it raining near Rio de Janeiro right now?"))
+        assertNull(AssistantToolRouter.explicitWeatherLocation("What's the weather today?"))
+        assertNull(AssistantToolRouter.explicitWeatherLocation("What's the weather like near me?"))
+
+        val guessed = AssistantToolPlan(weatherLocation = "Piumhi")
+        assertNull(AssistantToolRouter.validateForRequest(guessed, "What's the weather today?").weatherLocation)
+        assertEquals("Piumhi", AssistantToolRouter.validateForRequest(guessed, "What's the weather in Piumhi?").weatherLocation)
+    }
+
+    @Test fun currentWeatherAlwaysGetsALiveWidgetInsteadOfDependingOnModelFormatting() {
+        val answer = AssistantToolRouter.ensureWeatherWidget("Current conditions are available.", "Piumhi")
+        assertTrue(answer.contains(96.toChar().toString().repeat(3) + "inferno-widget"))
+        assertTrue(answer.contains("type"))
+        assertTrue(answer.contains("Piumhi"))
+        assertEquals(answer, AssistantToolRouter.ensureWeatherWidget(answer, "Piumhi"))
+        assertEquals("No location required.", AssistantToolRouter.ensureWeatherWidget("No location required.", null))
     }
 
     @Test fun calculatorUsesOperatorPrecedenceAndParentheses() {

@@ -745,7 +745,8 @@ class ChatViewModel(private val c: AppContainer, private val handle: SavedStateH
                             Log.w("InfernoSearch", "Rejected simulated tool output; falling back to actual search results.")
                             AssistantToolRouter.rawSearchFallback(finalResults, visibleSearchQueries.toList(), searchFeedback)
                         } else stream.textStr
-                        val finalAnswer = AssistantToolRouter.enrichAnswer(safeText, finalResults, finalImages)
+                        val withImages = AssistantToolRouter.enrichAnswer(safeText, finalResults, finalImages)
+                        val finalAnswer = AssistantToolRouter.ensureWeatherWidget(withImages, usedWeatherLocations.lastOrNull())
                         if (assistantId == null) assistantId = c.chats.appendAssistant(conversationId, finalAnswer, finalThinking, stats).id
                         else c.chats.updateAssistant(assistantId, finalAnswer, finalThinking, stats)
                         _lastStats.value = ev.stats
