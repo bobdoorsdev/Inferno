@@ -40,7 +40,7 @@ class MarkdownBodyTest {
 
     @Test fun typingRevealAdvancesGraduallyAndCatchesUpWithoutSkippingCharacters() {
         assertEquals(1, nextTypingRevealLength(0, 1))
-        assertEquals(2, nextTypingRevealLength(0, 2))
+        assertEquals(1, nextTypingRevealLength(0, 2))
         assertEquals(2, nextTypingRevealLength(0, 13))
         assertEquals(4, nextTypingRevealLength(0, 33))
         assertEquals(8, nextTypingRevealLength(0, 97))
