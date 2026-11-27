@@ -24,7 +24,7 @@ class LocalToolCommandParserTest {
 
     @Test fun partialCommandIsHiddenUntilItCanBeParsed() {
         assertEquals("", LocalToolCommandParser.visibleText("<inferno:wea"))
-        assertEquals("The forecast is sunny.", LocalToolCommandParser.visibleText("<inferno:weather/>The forecast is sunny."))
+        assertEquals("", LocalToolCommandParser.visibleText("<inferno:weather/>The forecast is sunny."))
     }
 
     @Test fun removesLegacyWidgetSyntaxWithoutRenderingAWidget() {

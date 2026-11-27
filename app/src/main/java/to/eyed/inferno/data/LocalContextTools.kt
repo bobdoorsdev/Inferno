@@ -81,9 +81,10 @@ object LocalToolCommandParser {
         if ((tail.length < PREFIX.length && PREFIX.startsWith(tail)) ||
             (tail.startsWith(PREFIX) && !tail.contains("/>"))
         ) return ""
-        val match = command.find(source)
-        val withoutCommand = if (match != null) source.substring(match.range.last + 1).trimStart() else source
-        return stripLeadingThought(withoutCommand)
+        // Hold all text behind an intercepted command until the tool result is available.
+        // This prevents an unverified guessed time/weather sentence from appearing before the tool runs.
+        if (command.find(source) != null) return ""
+        return stripLeadingThought(source)
             .replace(Regex("""\[\[inferno_widget:[^\]]*]]"""), "")
     }
 
