@@ -38,10 +38,17 @@ object LocalToolCommandParser {
     private val command = Regex(
         """^\s*<inferno:(time|location|weather|calculator|convert|date|timezone|percentage)(?:\s+([^>]*?))?\s*/>"""
     )
+    // Compatibility with the older assistant markers, but only at response start and still intent-gated.
+    private val legacyCommand = Regex("""^\s*\[\[(?:inferno_tool:|inferno_widget:)?(time|location|weather)]]""")
+    private val legacyPrefixes = listOf("[[time]]", "[[location]]", "[[weather]]", "[[inferno_widget:weather]]")
     private val attribute = Regex("""([A-Za-z][A-Za-z0-9_-]*)\s*=\s*"([^"]*)"""")
 
     fun parse(source: String): LocalToolCommand? {
-        val match = command.find(source) ?: return null
+        val match = command.find(source)
+        if (match == null) {
+            val legacy = legacyCommand.find(source) ?: return null
+            return LocalToolCommand(legacy.groupValues[1], emptyMap())
+        }
         val args = linkedMapOf<String, String>()
         attribute.findAll(match.groupValues.getOrElse(2) { "" }).forEach { item ->
             args[item.groupValues[1]] = item.groupValues[2]
@@ -79,12 +86,14 @@ object LocalToolCommandParser {
         if (first < 0) return ""
         val tail = source.substring(first)
         if ((tail.length < PREFIX.length && PREFIX.startsWith(tail)) ||
-            (tail.startsWith(PREFIX) && !tail.contains("/>"))
+            (tail.startsWith(PREFIX) && !tail.contains("/>")) ||
+            (tail.startsWith("[[") && legacyPrefixes.any { it.startsWith(tail) && it != tail })
         ) return ""
         // Hold all text behind an intercepted command until the tool result is available.
         // This prevents an unverified guessed time/weather sentence from appearing before the tool runs.
-        if (command.find(source) != null) return ""
+        if (command.find(source) != null || legacyCommand.find(source) != null) return ""
         return stripLeadingThought(source)
+            .replace(Regex("""\[\[(?:time|location|weather)]]"""), "")
             .replace(Regex("""\[\[inferno_widget:[^\]]*]]"""), "")
     }
 

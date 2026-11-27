@@ -16,6 +16,13 @@ class LocalToolCommandParserTest {
         assertNull(LocalToolCommandParser.parse("""Use <inferno:time/> as an example."""))
     }
 
+    @Test fun interceptsLegacyTimeAndWeatherMarkersOnlyAtTheStart() {
+        assertEquals("time", LocalToolCommandParser.parse("[[time]]")?.name)
+        assertEquals("weather", LocalToolCommandParser.parse("[[inferno_widget:weather]]")?.name)
+        assertNull(LocalToolCommandParser.parse("Use [[time]] as an example."))
+        assertEquals("", LocalToolCommandParser.visibleText("[[time]]The current time is 15:00."))
+    }
+
     @Test fun ordinaryHtmlIsNeverACommand() {
         val html = """<html><body><h1>Hello</h1></body></html>"""
         assertNull(LocalToolCommandParser.parse(html))
