@@ -430,7 +430,6 @@ class AppViewModel(private val c: AppContainer, private val handle: SavedStateHa
     fun setThinking(v: Boolean) = viewModelScope.launch { c.prefs.setThinking(v) }
     fun setImageDetail(d: ImageDetail) = viewModelScope.launch { c.prefs.setImageDetail(d) }
     fun setContextPolicy(p: ContextPolicy) = viewModelScope.launch { c.prefs.setContextPolicy(p) }
-    fun setStreamingAnimations(v: Boolean) = viewModelScope.launch { c.prefs.setStreamingAnimations(v) }
     fun setHaptics(v: Boolean) = viewModelScope.launch { c.prefs.setHaptics(v) }
     fun setAllowMeteredDownloads(v: Boolean) = viewModelScope.launch { c.prefs.setAllowMeteredDownloads(v) }
     fun setMinLogPriority(p: Int) = viewModelScope.launch { c.prefs.setMinLogPriority(p) }
