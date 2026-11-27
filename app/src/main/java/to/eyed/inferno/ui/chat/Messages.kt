@@ -75,6 +75,7 @@ import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.GitBranch
 import com.composables.icons.lucide.Wand
 import com.composables.icons.lucide.NotebookPen
+import com.composables.icons.lucide.Pencil
 import com.composables.icons.lucide.RefreshCw
 import com.composables.icons.lucide.Share2
 import com.composables.icons.lucide.Volume2
